@@ -1,0 +1,16 @@
+{
+  "name": "qa-agent-fixture-site",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local fake marketing-site + contact form for QA-Agent (no CAPTCHA, view submissions)",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

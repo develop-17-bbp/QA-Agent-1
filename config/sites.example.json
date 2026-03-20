@@ -1,0 +1,84 @@
+{
+  "defaultNotify": {
+    "emails": ["product@yourcompany.com"]
+  },
+  "sites": [
+    {
+      "id": "example-contact",
+      "name": "Example — contact form",
+      "enabled": false,
+      "url": "https://example.com/contact",
+      "forms": [
+        {
+          "selector": "form#contact",
+          "fields": [
+            {
+              "name": "name",
+              "selector": "input[name=\"name\"]",
+              "value": "QA Agent Test",
+              "action": "fill"
+            },
+            {
+              "name": "email",
+              "selector": "input[name=\"email\"]",
+              "value": "qa+test@yourcompany.com",
+              "action": "fill"
+            },
+            {
+              "name": "message",
+              "selector": "textarea[name=\"message\"]",
+              "value": "Automated smoke submission.",
+              "action": "fill"
+            }
+          ],
+          "submit": { "selector": "button[type=\"submit\"]" }
+        }
+      ],
+      "success": {
+        "type": "url_contains",
+        "value": "thank"
+      },
+      "notify": {
+        "emails": ["owner@yourcompany.com"]
+      }
+    },
+    {
+      "id": "example-homepage-embed",
+      "name": "Example — contact block on homepage (same URL, form below the fold)",
+      "enabled": false,
+      "url": "https://example.com/",
+      "forms": [
+        {
+          "selector": "section#contact form, .contact-section form, [data-testid=\"contact-form\"]",
+          "fields": [
+            {
+              "name": "name",
+              "selector": "input[name=\"name\"], input[placeholder*=\"Your name\" i]",
+              "value": "QA Agent Test",
+              "action": "fill"
+            },
+            {
+              "name": "email",
+              "selector": "input[type=\"email\"], input[name=\"email\"]",
+              "value": "qa+test@yourcompany.com",
+              "action": "fill"
+            },
+            {
+              "name": "message",
+              "selector": "textarea",
+              "value": "Automated smoke submission.",
+              "action": "fill"
+            }
+          ],
+          "submit": {
+            "selector": "button[type=\"submit\"], button:has-text(\"Submit your request\")"
+          }
+        }
+      ],
+      "success": {
+        "type": "text_visible",
+        "value": "Thank you"
+      }
+    }
+  ]
+}
