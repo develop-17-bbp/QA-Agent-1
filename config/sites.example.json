@@ -1,6 +1,6 @@
 {
   "defaultNotify": {
-    "emails": ["product@yourcompany.com"]
+    "emails": ["product@our-org.com"]
   },
   "sites": [
     {
@@ -21,7 +21,7 @@
             {
               "name": "email",
               "selector": "input[name=\"email\"]",
-              "value": "qa+test@yourcompany.com",
+              "value": "qa+test@our-org.com",
               "action": "fill"
             },
             {
@@ -39,7 +39,7 @@
         "value": "thank"
       },
       "notify": {
-        "emails": ["owner@yourcompany.com"]
+        "emails": ["owner@our-org.com"]
       }
     },
     {
@@ -60,7 +60,7 @@
             {
               "name": "email",
               "selector": "input[type=\"email\"], input[name=\"email\"]",
-              "value": "qa+test@yourcompany.com",
+              "value": "qa+test@our-org.com",
               "action": "fill"
             },
             {

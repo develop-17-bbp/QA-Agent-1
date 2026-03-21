@@ -1,6 +1,6 @@
 {
   "defaultNotify": {
-    "emails": ["product@yourcompany.com"]
+    "emails": ["josh@doctusweb.com"]
   },
   "sites": [
     {
@@ -47,7 +47,7 @@
         "value": "thanks.html"
       },
       "notify": {
-        "emails": ["product@yourcompany.com"]
+        "emails": ["product@doctusweb.com"]
       }
     },
     {
@@ -68,7 +68,7 @@
             {
               "name": "email",
               "selector": "[id=\"name-company.com\"]",
-              "value": "qa+smoke@yourcompany.com",
+              "value": "qa+smoke@doctusweb.com",
               "action": "fill"
             },
             {
@@ -89,7 +89,7 @@
         "timeoutMs": 30000
       },
       "notify": {
-        "emails": ["owner@yourcompany.com"]
+        "emails": ["owner@doctusweb.com"]
       }
     }
   ]
