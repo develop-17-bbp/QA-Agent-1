@@ -14,23 +14,42 @@ const program = new Command();
 program
   .name("qa-agent")
   .description(
-    "Site health: crawl + internal link checks + optional PageSpeed (see `health`). Legacy: `run` for form tests.",
+    "Site health: crawl + internal link checks (see `health`). Legacy: `run` for form tests.",
   )
   .version("0.2.1");
 
 program
   .command("health")
   .description(
-    "Read root URLs from a .txt file, crawl same-origin pages, verify internal links, optional PageSpeed Insights API — write per-site HTML/JSON under --out/<runId>/",
+    "Read root URLs from a .txt file, crawl same-origin pages, verify internal links — write per-site HTML/JSON under --out/<runId>/",
   )
   .requiredOption("--urls <file>", "Text file: one https URL per line (# comments allowed)")
   .option("--out <dir>", "Output root folder (default: artifacts/health)", "artifacts/health")
-  .option("--concurrency <n>", "Max sites in parallel", "3")
-  .option("--max-pages <n>", "Max HTML pages to fetch per site (BFS crawl)", "100")
-  .option("--max-link-checks <n>", "Max extra internal URLs to HEAD-check (not visited in BFS)", "2000")
-  .option("--timeout-ms <n>", "Per-request timeout (ms)", "15000")
-  .option("--skip-pagespeed", "Do not call Google PageSpeed Insights API")
-  .option("--pagespeed-strategy <s>", "mobile or desktop", "mobile")
+  .option(
+    "--concurrency <n>",
+    "How many sites to crawl at once (default 1 = one URL line after another; raise for parallel sites)",
+    "1",
+  )
+  .option(
+    "--max-pages <n>",
+    "Max HTML pages to fetch per site (BFS crawl); default 0 = no limit (full same-origin crawl). Set a positive number to cap.",
+    "0",
+  )
+  .option(
+    "--max-link-checks <n>",
+    "Max extra internal URLs to HEAD-check when not visited in BFS; default 0 = no limit. Set a positive number to cap.",
+    "0",
+  )
+  .option(
+    "--timeout-ms <n>",
+    "Per-request timeout (ms) for crawl and link checks; slow CMS pages often need 45s+ under parallel load",
+    "45000",
+  )
+  .option(
+    "--fetch-concurrency <n>",
+    "Parallel HTTP requests per site while crawling and checking links (lower = fewer timeouts on slow hosts; default 4)",
+    "4",
+  )
   .option(
     "--serve",
     "Start a live dashboard (HTTP + SSE) on localhost while the run executes; open /reports/… in the same origin",
@@ -38,6 +57,19 @@ program
   )
   .option("--port <n>", "Port for --serve (default 3847)", "3847")
   .option("--no-browser", "With --serve, do not open a browser tab", false)
+  .option(
+    "--pagespeed",
+    "After crawl, run Google PageSpeed Insights (Lighthouse lab) on crawled pages; set PAGESPEED_API_KEY",
+    false,
+  )
+  .option("--pagespeed-strategy <mobile|desktop>", "PageSpeed API device strategy", "desktop")
+  .option(
+    "--pagespeed-max-urls <n>",
+    "Max URLs per site to analyze with PageSpeed (0 = up to 500; default 25)",
+    "25",
+  )
+  .option("--pagespeed-concurrency <n>", "Parallel PageSpeed API calls per site", "1")
+  .option("--pagespeed-timeout-ms <n>", "Timeout per PageSpeed API request (ms)", "120000")
   .action(
     async (opts: {
       urls: string;
@@ -46,29 +78,57 @@ program
       maxPages: string;
       maxLinkChecks: string;
       timeoutMs: string;
-      skipPagespeed?: boolean;
-      pagespeedStrategy: string;
+      fetchConcurrency: string;
       serve?: boolean;
       port: string;
       noBrowser?: boolean;
+      pagespeed?: boolean;
+      pagespeedStrategy: string;
+      pagespeedMaxUrls: string;
+      pagespeedConcurrency: string;
+      pagespeedTimeoutMs: string;
     }) => {
-      const apiKey = process.env.GOOGLE_PAGESPEED_API_KEY?.trim() || undefined;
-      const skipPs = opts.skipPagespeed === true;
-      const pageSpeedStrategy: "mobile" | "desktop" =
-        opts.pagespeedStrategy === "desktop" ? "desktop" : "mobile";
       const concurrency = Number.parseInt(opts.concurrency, 10);
       const maxPages = Number.parseInt(opts.maxPages, 10);
       const maxLinkChecks = Number.parseInt(opts.maxLinkChecks, 10);
       const requestTimeoutMs = Number.parseInt(opts.timeoutMs, 10);
+      const fetchConcurrency = Number.parseInt(opts.fetchConcurrency, 10);
       const servePort = Number.parseInt(opts.port, 10);
-      for (const [name, v] of [
-        ["concurrency", concurrency],
-        ["max-pages", maxPages],
-        ["max-link-checks", maxLinkChecks],
-        ["timeout-ms", requestTimeoutMs],
-        ["port", servePort],
-      ] as const) {
-        if (!Number.isFinite(v) || v < 1) throw new Error(`Invalid ${name}`);
+      if (!Number.isFinite(concurrency) || concurrency < 1) {
+        throw new Error(`Invalid concurrency: ${opts.concurrency}`);
+      }
+      if (!Number.isFinite(maxPages) || maxPages < 0) {
+        throw new Error(`Invalid max-pages: ${opts.maxPages} (use 0 for unlimited)`);
+      }
+      if (!Number.isFinite(maxLinkChecks) || maxLinkChecks < 0) {
+        throw new Error(`Invalid max-link-checks: ${opts.maxLinkChecks} (use 0 for unlimited)`);
+      }
+      if (!Number.isFinite(requestTimeoutMs) || requestTimeoutMs < 1) {
+        throw new Error(`Invalid timeout-ms: ${opts.timeoutMs}`);
+      }
+      if (!Number.isFinite(fetchConcurrency) || fetchConcurrency < 1) {
+        throw new Error(`Invalid fetch-concurrency: ${opts.fetchConcurrency}`);
+      }
+      if (!Number.isFinite(servePort) || servePort < 1) {
+        throw new Error(`Invalid port: ${opts.port}`);
+      }
+
+      const pagespeedMaxUrls = Number.parseInt(opts.pagespeedMaxUrls, 10);
+      const pagespeedConcurrency = Number.parseInt(opts.pagespeedConcurrency, 10);
+      const pagespeedTimeoutMs = Number.parseInt(opts.pagespeedTimeoutMs, 10);
+      if (opts.pagespeed) {
+        if (opts.pagespeedStrategy !== "mobile" && opts.pagespeedStrategy !== "desktop") {
+          throw new Error(`Invalid pagespeed-strategy: ${opts.pagespeedStrategy} (use mobile or desktop)`);
+        }
+        if (!Number.isFinite(pagespeedMaxUrls) || pagespeedMaxUrls < 0) {
+          throw new Error(`Invalid pagespeed-max-urls: ${opts.pagespeedMaxUrls}`);
+        }
+        if (!Number.isFinite(pagespeedConcurrency) || pagespeedConcurrency < 1) {
+          throw new Error(`Invalid pagespeed-concurrency: ${opts.pagespeedConcurrency}`);
+        }
+        if (!Number.isFinite(pagespeedTimeoutMs) || pagespeedTimeoutMs < 1) {
+          throw new Error(`Invalid pagespeed-timeout-ms: ${opts.pagespeedTimeoutMs}`);
+        }
       }
 
       const orchestrateBase = {
@@ -77,10 +137,19 @@ program
         maxPages,
         maxLinkChecks,
         concurrency,
+        fetchConcurrency,
         requestTimeoutMs,
-        pageSpeedApiKey: apiKey,
-        pageSpeedStrategy,
-        skipPageSpeed: skipPs || !apiKey,
+        ...(opts.pagespeed
+          ? {
+              pageSpeed: {
+                enabled: true,
+                strategy: opts.pagespeedStrategy as "mobile" | "desktop",
+                maxUrls: pagespeedMaxUrls,
+                concurrency: pagespeedConcurrency,
+                timeoutMs: pagespeedTimeoutMs,
+              },
+            }
+          : {}),
       };
 
       const { runId, runDir, siteFailures } = opts.serve
@@ -91,14 +160,8 @@ program
           })
         : await orchestrateHealthCheck(orchestrateBase);
 
-      if (!skipPs && !apiKey) {
-        console.warn(
-          "[qa-agent] GOOGLE_PAGESPEED_API_KEY not set — PageSpeed skipped. Get a key: https://developers.google.com/speed/docs/insights/v5/get-started",
-        );
-      }
-
       console.log(`\nHealth run ${runId} complete.`);
-      console.log(`Reports: ${runDir}/index.html`);
+      console.log(`Index: ${runDir}/index.html (per-site + combined MASTER-all-sites-… reports)`);
       console.log(`Summary: ${runDir}/summary.txt`);
       if (opts.serve) {
         console.log(`Live UI was on http://127.0.0.1:${servePort}/ (same origin as /reports/…)`);

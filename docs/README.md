@@ -1,46 +1,39 @@
-# QA-Agent documentation
+# Documentation map
 
-This folder describes **what we built**, **for whom**, and **how we operate** it. The **canonical technical entry point** for day-to-day use is the repository **[README](../README.md)**.
-
----
-
-## Who should read what
-
-| Audience | Start here | Then |
-|----------|------------|------|
-| **Engineers / QA** who run or change the tool | [README](../README.md) | [Implementation plan](./IMPLEMENTATION_PLAN.md), `qa-agent health --help` |
-| **DevOps** (scheduling, VM, secrets) | [Implementation plan](./IMPLEMENTATION_PLAN.md) | [README](../README.md) § deployment & env |
-| **Product, AM, leadership** (why & rollout) | [PRD](./PRD.md) | [Plan of action](./PLAN.md) |
-| **Non-technical teammates** (what happens each run) | [Non-technical guide](./NON_TECHNICAL_GUIDE.md) | [README](../README.md) § “What gets checked” (plain summary) |
+Everything here explains **QA-Agent** in **plain language** (written so a young teen can follow the ideas). The **[main README](../README.md)** is still the place to go for **copy-paste commands** and flags.
 
 ---
 
-## Documents in this folder
+## Pick what to read
 
-| File | Purpose |
-|------|---------|
-| [PRD.md](./PRD.md) | **Product requirements** — goals, scope, health vs legacy `run`, risks. |
-| [PLAN.md](./PLAN.md) | **Plan of action** — phased rollout, ownership placeholders, milestones. |
-| [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) | **Where and how it runs** — laptop vs VM, cron, secrets, live dashboard (`--serve`). |
-| [NON_TECHNICAL_GUIDE.md](./NON_TECHNICAL_GUIDE.md) | **Plain language** — what a “run” is, who edits the URL list, FAQs. |
-
----
-
-## Product shape (one paragraph)
-
-**QA-Agent** is primarily a **CLI** (`qa-agent health`) that reads a **text file of root URLs**, **crawls each site** (same-origin links), **flags broken internal links** and bad HTTP statuses, and **optionally** calls the **Google PageSpeed Insights API** for Lighthouse-style scores. It writes **HTML + JSON reports** under `artifacts/health/<runId>/`. An optional **`--serve`** mode opens a **local browser dashboard** with **live progress** (Server-Sent Events); it is **not** a hosted SaaS.
-
-The **`qa-agent run`** command remains for **legacy Playwright form smoke tests** (`config/sites.json`) and is **not** the default product path.
+| You want to… | Read this |
+|--------------|-----------|
+| Install and run the tool | [README](../README.md) |
+| Understand the big picture (goals, what we skip) | [PRD.md](./PRD.md) |
+| See how the parts connect | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| Roll it out step by step at work | [PLAN.md](./PLAN.md) |
+| Run it on a laptop or a server | [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) |
+| Explain it to someone who never uses the terminal | [NON_TECHNICAL_GUIDE.md](./NON_TECHNICAL_GUIDE.md) |
 
 ---
 
-## Suggested reading order (new to the repo)
+## One-sentence summary
 
-1. [README](../README.md) — install, first run, outputs.  
-2. [NON_TECHNICAL_GUIDE.md](./NON_TECHNICAL_GUIDE.md) — if you need to explain the tool to others.  
-3. [PRD.md](./PRD.md) — if you need scope and formal requirements.  
-4. [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) — before putting it on a VM.
+**QA-Agent** reads a text file of website addresses, **walks each site** by following **internal links**, and **writes HTML/JSON reports** about broken links and bad pages — all without opening a browser for the main mode (`health`). **By default** the crawl has **no page cap** (full same-origin reachability); you can set **`--max-pages`** / **`--max-link-checks`** when you need a shorter or bounded run.
+
+The older **`run`** command is different: it uses a **browser** to test **forms**.
+
+## Config files in git
+
+| File in repo (tracked) | Your local file (not committed) |
+|------------------------|-----------------------------------|
+| `config/urls.example.txt` | `config/urls.txt` — copy and edit for **`health`** |
+| `config/sites.example.json` | `config/sites.json` — copy and edit for **`run`** |
+
+This keeps **your URLs and site definitions** out of version control. See the **[main README](../README.md)** for `cp` commands.
 
 ---
 
-*Last aligned with app version **0.2.x** (health + optional `--serve` dashboard + legacy `run`).*
+## App version
+
+Aligned with **0.2.x** in `package.json`.

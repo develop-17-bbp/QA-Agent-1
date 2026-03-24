@@ -1,95 +1,88 @@
-# QA-Agent — guide for non-technical readers
+# QA-Agent for people who don’t use the terminal
 
-**Who this is for:** Teammates who need to understand **what the tool does** and **how to interpret outcomes** without using the command line.  
-**What the product is:** A **batch checker** for **website health**—it visits sites we list, follows **internal links**, flags **broken links** and bad pages, and can optionally add **speed/quality scores** from Google’s systems. It does **not** submit **contact forms** in the main workflow.
-
-**Technical details:** [README](../README.md) · [Documentation index](./README.md)
+**Who this is for:** Anyone who needs to **understand what the tool does** and **what a report means** — without typing commands.  
+**Technical details:** [README](../README.md) · [docs index](./README.md)
 
 ---
 
-## 1. Why we use it
+## What is QA-Agent in one breath?
 
-We look after **many websites** (ours and our customers’). Manually opening every page and every PageSpeed report does not scale. QA-Agent **automates a first pass**: “Do internal links work, do pages return errors, and roughly how do main URLs score?”
+It’s a **program our team runs on a computer we control**. It reads a **short list of website addresses**, visits those sites, **follows links inside each site**, and writes **reports** so we can see **broken links** and **pages that don’t load properly**. It does **not** use Google or other scoring services for the main check — just **normal visits** to the pages you list.
 
 ---
 
-## 2. What happens in one “run” (plain language)
+## Why use it?
 
-1. **Start** — The job runs on **our computer** (usually a **scheduled server** in the cloud, sometimes someone’s laptop for a test).  
-2. **Read the list** — It reads a **short text file** with one **starting web address** per line (for example `https://example.com/`).  
-3. **Visit each site** — For each address, it loads pages by following **normal links that stay on the same website**, up to limits our team configured.  
-4. **Record problems** — Broken links or pages that return errors go into a **report**.  
-5. **Optional scores** — If we enabled Google’s optional service, it may add **scores** for the main address (similar idea to Google’s public PageSpeed tools, but through an API our team configures).  
-6. **Save reports** — It writes a **folder of HTML files** our team can open in a browser or zip and send around.  
-7. **Finish** — The job **stops**; it is **not** running all day in the background.
+We look after **many websites**. Opening every page by hand does not scale. This tool gives a **first automatic pass** and saves **evidence** (HTML files) we can share.
+
+---
+
+## What happens in one “run”?
+
+1. Someone starts the job (or a **scheduled server** starts it).
+2. The program reads a **text file** with one **starting web address** per line.
+3. For each address, it loads pages and follows **internal links** (links that stay on the **same website**). **By default** it keeps going until it has covered the **whole reachable** part of the site (unless the technical team sets a **limit** for very large sites).
+4. It **writes down problems**: broken links, errors, timeouts.
+5. It saves a **folder of reports** we can open in a browser.
+6. The job **ends** — it is **not** a 24/7 always-on service.
 
 **We do not install software on our customers’ websites.** The tool only makes **outbound** requests over the internet, like a visitor.
 
 ---
 
-## 3. Watching a run live (optional)
+## Optional: watching it live
 
-Sometimes our technical team runs the tool with a **“live dashboard”** on their machine. That shows **which site is being checked** and **whether it passed or had issues** as the run progresses. This is **optional** and is meant for **operators**, not a public website.
+Sometimes the technical team runs it with a **small local webpage** that shows **progress** while it runs. That’s **optional** and meant for **our operators**, not a public website.
 
 ---
 
-## 4. Where things “live”
+## Where things live (conceptually)
 
 | Thing | Plain description |
 |-------|-------------------|
-| **The list of sites** | A text file maintained by our technical owners (one starting URL per line). |
-| **The server that runs checks** | Often a **VM** we control, running on a **schedule** (for example once per day). |
-| **The reports** | Saved in a folder structure under **`artifacts/health/`** — each run gets its **own dated folder**. |
-| **Secrets** | Things like API keys stay in **environment files** on the server, **not** in chat or public repos. |
+| **The list of sites** | A **text file** on our machines (`config/urls.txt`), created from a **sample file** in the repo. The real list is **not** checked into git — so customer URLs stay private. |
+| **Form-test settings** | If we use the older **`run`** mode, another **local file** (`config/sites.json`) holds which forms to try — also **not** committed; copied from an example. |
+| **The computer that runs checks** | Often a **VM** on a schedule, sometimes a laptop for a test. |
+| **The reports** | Saved under **`artifacts/health/`** — each run gets its **own folder**. |
+| **Secrets** | Things like SMTP passwords for the **older** `run` mode stay in **private env files**, **not** in chat or public repos. |
 
 ---
 
-## 5. What you might do (no terminal)
+## If you’re not technical, what might you do?
 
 | Situation | Suggested action |
 |-----------|------------------|
-| You receive a **summary** or **report** | If everything looks **passed**, no urgent action. If something **failed**, note **which site** and pass it to **engineering or QA**. |
-| You want a **new site** on the list | Ask the **technical owner** to add its **root URL** to the text file (and confirm we’re allowed to check it). |
-| You want to **pause** checks for a site | Ask the **technical owner** to remove or comment out that line until we resume. |
+| You get a **report** or **summary** | If it says **pass**, relax. If **fail**, note **which site** and tell **engineering / QA**. |
+| You want a **new site** checked | Ask the **technical owner** to add its **root URL** to the list — and confirm we’re **allowed** to check it. |
+| You want checks **paused** for a site | Ask the owner to **remove** or **comment out** that line until we resume. |
 
 ---
 
-## 6. Words we use
+## Words we use
 
-| Term | Meaning |
+| Word | Meaning |
 |------|---------|
-| **Run** | One full execution over all listed roots. |
-| **Root URL** | The starting address we give the tool for each site (we explore **inward** from there). |
+| **Run** | One full check over all listed starting addresses. |
+| **Root URL** | The starting address we give the tool for each site. |
 | **Internal link** | A link to another page **on the same website**. |
-| **Broken link** | A link that leads to an error or a page that does not load successfully. |
-| **PageSpeed-style scores** | Optional numbers about speed and quality (when our team enables the Google API). |
-| **Legacy form testing** | A **separate** older mode that uses a browser to try **forms**; not part of the default health workflow. |
+| **Broken link** | A link that leads to an error or a page that doesn’t load. |
+| **Legacy form testing** | A **different** older mode that uses a **browser** to try **forms** — not the default health workflow. |
 
 ---
 
-## 7. Frequently asked questions
+## Frequently asked questions
 
 **Does it run 24/7?**  
-No. It runs on a **schedule** or when someone **starts it**, finishes, writes reports, and exits.
+No. It runs on a **schedule** or when someone **starts** it, then it finishes and stops.
 
-**Is it the same as typing URLs into Google’s PageSpeed website?**  
-The **idea** of scores is similar when we use Google’s API; our tool does **not** control Google’s public website.
+**Why would a site “fail” if I can open the homepage fine?**  
+Another page or a **footer link** might be broken, or a request might **time out**. The report shows **where** to look.
 
-**Why would a site “fail” if I can open it fine?**  
-A **different page** or **footer link** might be broken, or a **slow** response might time out. The report is meant to list **where** to look.
-
-**Does the client see that we’re testing?**  
-They see **network traffic** like a normal visitor. Policies and contracts about automated access are **our** responsibility.
+**Does it fill out contact forms?**  
+**Not** in the default `health` mode. Form testing is the separate **`run`** mode.
 
 ---
 
-## 8. Related documents
+## Who to ask
 
-- [PRD](./PRD.md) — formal scope and goals.  
-- [Plan of action](./PLAN.md) — rollout phases.  
-- [Implementation plan](./IMPLEMENTATION_PLAN.md) — where the job runs (laptop vs VM).  
-- [README](../README.md) — full technical usage.
-
----
-
-*This guide reflects the **site health** product. Legacy **form** automation is documented separately in the PRD.*
+If you’re unsure what a report means, ask **engineering or QA** — bring the **site name** and **date/time** of the run.

@@ -5,13 +5,61 @@ export interface BrokenLinkRecord {
   target: string;
   status?: number;
   error?: string;
+  /** Wall-clock time for the HTTP request that detected the issue (ms). */
+  durationMs?: number;
+}
+
+/** Lighthouse lab scores/metrics from Google PageSpeed Insights API (optional per page). */
+export interface PageSpeedInsightRecord {
+  url: string;
+  strategy: "mobile" | "desktop";
+  /** Time for the PageSpeed API request (ms). */
+  durationMs: number;
+  scores?: {
+    performance?: number;
+    accessibility?: number;
+    bestPractices?: number;
+    seo?: number;
+  };
+  metrics?: {
+    fcpMs?: number;
+    lcpMs?: number;
+    tbtMs?: number;
+    cls?: number;
+    speedIndexMs?: number;
+    ttiMs?: number;
+  };
+  display?: {
+    fcp?: string;
+    lcp?: string;
+    tbt?: string;
+    cls?: string;
+    speedIndex?: string;
+    tti?: string;
+  };
+  /** Top Lighthouse “opportunities” (savings / issues), when present in API response. */
+  opportunities?: { title: string; displayValue?: string }[];
+  error?: string;
 }
 
 export interface PageFetchRecord {
   url: string;
   status: number;
   ok: boolean;
+  /** Wall-clock time for this page fetch (headers + body read) (ms). */
+  durationMs: number;
   error?: string;
+  /** Populated when health run uses --pagespeed and this URL was analyzed. */
+  insights?: PageSpeedInsightRecord;
+}
+
+/** HEAD/GET verification for same-origin URLs discovered but not fetched as HTML in BFS. */
+export interface LinkCheckRecord {
+  target: string;
+  status: number;
+  ok: boolean;
+  durationMs: number;
+  method: "HEAD" | "GET_RANGE";
 }
 
 export interface CrawlSiteResult {
@@ -22,17 +70,15 @@ export interface CrawlSiteResult {
   uniqueUrlsChecked: number;
   pages: PageFetchRecord[];
   brokenLinks: BrokenLinkRecord[];
+  /** Discovered internal URLs checked with HEAD/GET (not crawled as full pages). Omitted in older report.json files. */
+  linkChecks?: LinkCheckRecord[];
+  /** Set when PageSpeed Insights was run for this crawl. */
+  pageSpeedInsightsMeta?: {
+    strategy: "mobile" | "desktop";
+    totalDurationMs: number;
+    urlsAnalyzed: number;
+  };
   durationMs: number;
-}
-
-export interface PageSpeedMetrics {
-  url: string;
-  strategy: "mobile" | "desktop";
-  performanceScore: number | null;
-  accessibilityScore: number | null;
-  seoScore: number | null;
-  bestPracticesScore: number | null;
-  error?: string;
 }
 
 export interface SiteHealthReport {
@@ -42,5 +88,4 @@ export interface SiteHealthReport {
   startedAt: string;
   finishedAt: string;
   crawl: CrawlSiteResult;
-  pageSpeed?: PageSpeedMetrics;
 }

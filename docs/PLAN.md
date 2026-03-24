@@ -1,100 +1,73 @@
-# Plan of action (POA)
+# Rollout plan (simple steps)
 
-**Companion to:** [PRD](./PRD.md)  
-**Purpose:** How we **introduce**, **pilot**, and **operate** QA-Agent internally—phases, deliverables, and ownership placeholders.
+This is a **suggested order** for bringing QA-Agent into regular use at a team. Assign names and dates to your own situation.
 
-**Primary product:** `qa-agent health` — URL list (`.txt`), crawl, link checks, optional PageSpeed, artifacts under `artifacts/health/<runId>/`, optional **`--serve`** live dashboard.  
-**Legacy:** `qa-agent run` — Playwright form tests from JSON.
+**Companion docs:** [PRD](./PRD.md) · [ARCHITECTURE](./ARCHITECTURE.md)
 
 ---
 
-## Phase 0 — Alignment
+## Phase 0 — Agree on the basics
 
-**Objective:** Agree on **what** we monitor, **where** URLs live, and **how** we share results.
+**Goal:** Everyone knows **what** we check, **which URLs** are allowed, and **how** we share results.
 
-| Task | Deliverable | Owner (assign) |
-|------|-------------|----------------|
-| Confirm **staging vs production** roots policy | Short written policy | PM / Eng lead |
-| Agree **who edits** `urls.txt` and change control | Team convention | Eng lead |
-| Agree **report distribution** (zip, email, wiki) | Decision | Product |
-| Point stakeholders at [Non-technical guide](./NON_TECHNICAL_GUIDE.md) | Link shared | PM |
+| Task | Output |
+|------|--------|
+| Decide staging vs production rules | Short written note |
+| Decide who edits **`config/urls.txt`** (created from `urls.example.txt`, not committed) | One owner or rotation |
+| Decide how reports are shared (email, drive, wiki) | One channel |
+| Confirm we’re **allowed** to hit customer sites on a schedule | Yes/No per client or policy |
 
-**Exit criteria:** PRD non-goals and open decisions reviewed; no blocking ambiguity on **permission to hit customer sites**.
-
----
-
-## Phase 1 — Baseline competency
-
-**Objective:** Any operator can run **`health`** from a clean machine and read **`artifacts/health/<runId>/index.html`**.
-
-| Task | Deliverable | Owner |
-|------|-------------|--------|
-| Node 20+, `npm install`, `npm run build` | Verified on ≥2 machines | Eng |
-| Create `config/urls.txt` from example; run `npm run health -- --urls config/urls.txt` | Successful run + artifacts | Eng |
-| Optional: `GOOGLE_PAGESPEED_API_KEY` in `.env`; confirm scores or intentional `--skip-pagespeed` | Notes | Eng / DevOps |
-| Optional: run with **`--serve`** and walk through live dashboard + `/reports/` | Team demo | Eng |
-| Document VM-oriented **defaults** (`--concurrency`, `--max-pages`) | One-pager or README pointer | Eng / DevOps |
-
-**Exit criteria:** Repeatable green run; team knows where **`index.html`** and per-site **`report.html`** live.
+**Done when:** No confusion about permission to crawl.
 
 ---
 
-## Phase 2 — Pilot on real roots
+## Phase 1 — Learn the tool
 
-**Objective:** Validate value on a **small, approved** set of production or staging URLs.
+**Goal:** Two or more people can run **`health`** on a clean machine and open **`artifacts/health/<runId>/index.html`**.
 
-| Task | Deliverable | Owner |
-|------|-------------|--------|
-| Add **5–15** real roots with ownership notes | `urls.txt` in repo or private path on VM | QA / Eng |
-| Track **false positives** and **timeouts** | Simple log or spreadsheet | QA |
-| Watch **PageSpeed quota** if enabled | Alerts or calendar reminder | DevOps |
+| Task | Output |
+|------|--------|
+| Install Node 20+, `npm install`, `npm run build` | Works on ≥2 machines |
+| `cp config/urls.example.txt config/urls.txt`, edit, run `npm run health -- --urls config/urls.txt` | Reports appear |
+| Understand **defaults:** crawl is **uncapped** (`--max-pages 0`, `--max-link-checks 0`) — large sites need time or explicit caps | No surprise long runs |
+| Optional: try `--serve` once | Team has seen the live dashboard |
 
-**Exit criteria:** We trust the signal; triage process exists for red sites.
-
----
-
-## Phase 3 — Scale and operations
-
-**Objective:** **20–30+** roots on a **single VM** (or equivalent) with clear ownership.
-
-| Task | Deliverable | Owner |
-|------|-------------|--------|
-| **Schedule** `node dist/index.js health --urls …` (cron / systemd) | Job + env file for secrets | DevOps |
-| Tune **`--concurrency`** from observed duration | Documented choice | Eng |
-| **Prune** old `artifacts/health/` | Cron or runbook | DevOps |
-| **Triage runbook** — who acts on exit code 1 | One page | QA lead |
-
-**Exit criteria:** Daily (or agreed) runs; non-zero exit understood; disk not growing without bound.
+**Done when:** Anyone trained can find the HTML reports without help.
 
 ---
 
-## Phase 4 — Backlog (prioritize as needed)
+## Phase 2 — Try it on real sites
 
-- Email or zip of `artifacts/health/<runId>/` after each run.  
-- **robots.txt** or crawl-delay if contracts require it.  
-- Slack / Teams notification on failure.  
-- Richer coverage for **JS-heavy** SPAs (e.g. optional Playwright crawl).  
-- Maintain legacy **`run`** only if still required.
+**Goal:** Run against a **small** set of real URLs (e.g. 5–15) and see if the results are useful.
 
----
+| Task | Output |
+|------|--------|
+| Add real roots with clear owners | Updated **`config/urls.txt`** (local file) |
+| Note false alarms and slow sites | Simple log |
 
-## RACI (template — fill names before external use)
-
-| Activity | Responsible | Accountable |
-|----------|-------------|-------------|
-| `urls.txt` content | QA / Eng | Eng lead |
-| PageSpeed API key & VM env | DevOps | Eng lead |
-| Client consent for automated requests | AM / PM | Manager |
+**Done when:** The team trusts red/green enough to act on it.
 
 ---
 
-## Milestones
+## Phase 3 — Run it on a schedule
 
-1. **M1:** Any engineer runs `health` locally and explains one report.  
-2. **M2:** Pilot on ≥5 real roots with two weeks of triage notes.  
-3. **M3:** Scheduled VM runs + retention policy.  
-4. **M4:** Optional report distribution automation.
+**Goal:** One **server** (VM) runs checks **daily** or **weekly**, keeps **secrets** safe, and **deletes old** report folders so the disk doesn’t fill up.
+
+| Task | Output |
+|------|--------|
+| Cron or systemd timer | Job runs on time |
+| Secrets in env file, not in git | Documented location |
+| Retention policy (e.g. delete runs older than 30 days) | Script or calendar reminder |
+| Alerting on non-zero exit | Optional hook to email/Slack |
+
+**Done when:** Failures get noticed without manual babysitting.
 
 ---
 
-*Aligned with repository **README** and **PRD** v1.0.*
+## Phase 4 — Keep improving
+
+**Goal:** Operational settings match reality: **`--max-pages` / `--max-link-checks`** when full crawls are too heavy, **`--timeout-ms`** for slow hosts, **`--concurrency`** for many roots — and docs stay updated when the team changes process.
+
+---
+
+*See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for laptop vs server details.*

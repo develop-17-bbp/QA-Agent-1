@@ -1,72 +1,85 @@
-# Implementation and deployment
+# Running QA-Agent (implementation guide)
 
-**Audience:** Engineers and **DevOps** who run QA-Agent on laptops or servers.  
-**Companion docs:** [PRD](./PRD.md), [POA](./PLAN.md), [README](../README.md).
-
----
-
-## 1. What runs where
-
-| Environment | Typical use | Health command |
-|-------------|-------------|----------------|
-| **Developer laptop** | Ad-hoc runs, debugging, demos | `npm run health -- --urls config/urls.txt` |
-| **Dedicated VM** | Scheduled daily (or cron) checks | `node dist/index.js health --urls /opt/qa-agent/config/urls.txt` |
-
-**Legacy form runs** (`qa-agent run`) use **Playwright** + Chromium; **health** does **not** need a browser install.
+**Who this is for:** People who will run the tool on a **laptop** or a **server**.  
+**Commands:** The **[main README](../README.md)** has the full flag list.
 
 ---
 
-## 2. Architecture (health)
+## Two common setups
+
+| Where | Typical use |
+|-------|-------------|
+| **Your laptop** | Try it, debug, demo |
+| **A server (VM)** | Same command on a **timer** (cron / systemd) every day or week |
+
+**Important:** `health` does **not** need Playwright or Chromium. Only the legacy **`run`** command needs the browser installed.
+
+---
+
+## What happens in `health` (one line)
 
 ```
-urls.txt ──► qa-agent health ──► fetch + parse HTML (cheerio)
-                    │                    │
-                    │                    ├── BFS same-origin crawl (capped)
-                    │                    ├── HEAD/GET internal URLs
-                    │                    └── optional PageSpeed API (per root)
-                    ▼
-         artifacts/health/<runId>/
-              index.html, summary.txt
-              <site-id>/report.html, report.json
+urls.txt → program → fetch pages + parse HTML → write reports under artifacts/health/<runId>/
 ```
-
-Optional **`--serve`**: a small **Node HTTP server** on **127.0.0.1** serves:
-
-- **`/`** — live dashboard (reads **Server-Sent Events** from `/api/stream`).  
-- **`/api/stream`** — SSE of `run_start`, `site_start`, `site_complete`, `run_complete`, etc.  
-- **`/reports/…`** — static files from the **current** run directory (same origin as the dashboard).
-
-**Security note:** **`--serve`** is for **local operators**. Do not expose the port to the internet without TLS, authentication, and network controls. Use **SSH port forwarding** if you need the UI from another machine: `ssh -L 3847:127.0.0.1:3847 user@vm`.
 
 ---
 
-## 3. Pattern A — Local development
+## Default crawl limits (`health`)
 
-1. Install **Node 20+**, clone repo.  
-2. `npm install && npm run build`  
-3. `cp config/urls.example.txt config/urls.txt` and edit.  
-4. Optional: `.env` with `GOOGLE_PAGESPEED_API_KEY` (see [README](../README.md)).  
-5. Run:
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--max-pages` | **`0`** | **`0`** = no cap — BFS visits every same-origin HTML page reachable from the root until the queue is empty. Any **positive** number stops after that many **full page fetches**. |
+| `--max-link-checks` | **`0`** | **`0`** = no cap on extra **HEAD** checks for internal URLs that were not visited as full pages (e.g. when `--max-pages` was capped). |
+
+So **out of the box**, a run tries for **full** site coverage (within same-origin link discovery). For **scheduled** jobs on **very large** sites, consider **`--max-pages 500`** (example), **`--timeout-ms`**, or off-peak windows.
+
+---
+
+## Configuration files (`health` and `run`)
+
+- **`health`** needs a URL list: **`cp config/urls.example.txt config/urls.txt`**, then edit **`config/urls.txt`**. That path is **gitignored** so your roots stay private.
+- **`run`** needs JSON: **`cp config/sites.example.json config/sites.json`**, then edit **`config/sites.json`** (also **gitignored**). Enable/disable sites there; for the **local fixture** entry, run **`npm run fixture`** in another terminal first (see main README).
+
+On a **server**, deploy **`urls.txt`** / **`sites.json`** the same way you deploy secrets (config management, secure copy) — they are **not** cloned from git.
+
+---
+
+## Pattern A — Developer laptop
+
+1. Install **Node.js 20+**.
+2. In the repo: `npm install && npm run build`.
+3. `cp config/urls.example.txt config/urls.txt` and edit.
+4. Run:
 
    ```bash
    npm run health -- --urls config/urls.txt
    ```
 
-6. Optional live UI:
+5. Open `artifacts/health/<newest folder>/index.html`.
 
-   ```bash
-   npm run health -- --urls config/urls.txt --serve --port 3847
-   ```
+**Faster dev (no `build` every time):**
 
-**Hot reload dev:** `npm run dev -- --urls config/urls.txt` (tsx; no `build` step).
+```bash
+npm run dev -- --urls config/urls.txt
+```
+
+**Live dashboard:**
+
+```bash
+npm run health -- --urls config/urls.txt --serve
+```
+
+Default port **3847**. Use `--port` to change. **Do not** expose this to the whole internet without extra security — it’s meant for **localhost** or **SSH tunnel** (`ssh -L 3847:127.0.0.1:3847 user@server`).
+
+Optional `.env` for **`run`** only (SMTP email): see `.env.example`.
 
 ---
 
-## 4. Pattern B — Dedicated VM (scheduled)
+## Pattern B — Server with a schedule
 
-**Stack:** one Linux VM, **cron** or **systemd timer**, outbound **HTTPS** only to target sites + `googleapis.com` (if PageSpeed enabled).
+**Idea:** The machine runs the same command on a schedule; outbound **HTTPS** to the sites you list (and to your SMTP host if you use `run` with email).
 
-**Example flow:**
+Example (paths are examples — change to yours):
 
 ```text
 cd /opt/qa-agent
@@ -75,55 +88,34 @@ set -a && source /etc/qa-agent.env && set +a
 node dist/index.js health --urls /opt/qa-agent/config/urls.txt --out /opt/qa-agent/artifacts/health
 ```
 
-- Propagate **non-zero exit** to monitoring if the job fails.  
-- **Secrets:** `/etc/qa-agent.env` (mode `600`), not committed.  
-- **Config:** `urls.txt` via git or secure copy.  
-- **Disk:** prune old runs, e.g. `find /opt/qa-agent/artifacts/health -maxdepth 1 -type d -mtime +30 -exec rm -rf {} \;` (adjust retention).
+- Propagate **non-zero exit** to monitoring if the job fails.
+- Keep env files **private** (e.g. mode `600`), not in git.
+- **Prune** old runs so disk doesn’t fill up.
 
-**VM sizing (starting point):** 2 vCPU, 4–8 GB RAM, 20 GB disk; increase if many roots or high `--max-pages`.
+**Rough sizing to start:** 2 vCPU, 4–8 GB RAM. **Default unlimited crawl** can stress CPU, network, and **duration** on sites with thousands of pages — add **`--max-pages`** caps or split URL lists if jobs exceed your window.
 
-**Do not** schedule **`--serve`** on a headless VM unless someone will port-forward to it; use plain **`health`** for unattended jobs.
-
----
-
-## 5. Secrets
-
-| Variable | Used by |
-|----------|---------|
-| `GOOGLE_PAGESPEED_API_KEY` | `health` (PageSpeed) — trim-safe in code; no referrer restriction for CLI (see README). |
-| SMTP / `QA_AGENT_*` | Legacy **`run`** email path (see `.env.example`). |
+**Headless VM:** don’t rely on `--serve` unless someone uses SSH port-forward; plain `health` is fine for unattended jobs.
 
 ---
 
-## 6. Email and handoff
+## Secrets
 
-- **Health:** no built-in SMTP in the reference flow; **zip** `artifacts/health/<runId>/` or attach in a separate step.  
-- **Legacy run:** can email via nodemailer when SMTP env vars are set.
+| Secret | Purpose |
+|--------|---------|
+| SMTP / `QA_AGENT_NOTIFY_EMAILS` | Optional — only for legacy **`run`** email (see `.env.example`) |
 
----
-
-## 7. Legacy: `qa-agent run`
-
-- `npx playwright install chromium`  
-- `node dist/index.js run --config config/sites.json`  
-- Artifacts: `artifacts/<runId>/` (not under `health/`).  
-- Same VM model applies; see `.env.example` for SMTP.
+Never commit secrets. Use `.env` locally or a server env file.
 
 ---
 
-## 8. Compliance and safety
+## Troubleshooting (quick)
 
-- Obtain **client / internal approval** before automating requests to third-party sites.  
-- Treat **`artifacts/`** as potentially sensitive (URLs, errors).  
-- **robots.txt** is **not** enforced in v1 — align with legal/policy if required.
-
----
-
-## 9. Related links
-
-- [README](../README.md) — CLI flags, troubleshooting.  
-- [Non-technical guide](./NON_TECHNICAL_GUIDE.md) — plain-language overview.
+| Symptom | What to try |
+|---------|-------------|
+| Run takes forever / too many requests | **Expected** with default **unlimited** crawl on big sites. Set **`--max-pages`** (and optionally **`--max-link-checks`**) to a positive cap, or run less often. |
+| Timeouts on slow pages | Raise **`--timeout-ms`** a bit; avoid hammering the same host with extreme **`--concurrency`**. |
+| Port in use with `--serve` | **`--port <other>`** |
 
 ---
 
-*Document version aligned with QA-Agent **0.2.x** (health + `--serve` + legacy `run`).*
+*Architecture diagram: [ARCHITECTURE.md](./ARCHITECTURE.md)*

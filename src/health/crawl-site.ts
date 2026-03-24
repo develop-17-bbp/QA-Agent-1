@@ -1,8 +1,60 @@
 import { load } from "cheerio";
-import type { BrokenLinkRecord, CrawlSiteResult, PageFetchRecord } from "./types.js";
+import pLimit from "p-limit";
+import type { BrokenLinkRecord, CrawlSiteResult, LinkCheckRecord, PageFetchRecord } from "./types.js";
 import { siteIdFromUrl } from "./load-urls.js";
 
-const UA = "QA-Agent/0.2 (+https://github.com) site-health-crawl";
+/** Many hosts block non-browser UAs; override with QA_AGENT_USER_AGENT if needed. */
+const DEFAULT_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 QA-Agent/0.2";
+
+function userAgent(): string {
+  const fromEnv = process.env.QA_AGENT_USER_AGENT?.trim();
+  return fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_UA;
+}
+
+const MAX_FETCH_ATTEMPTS = 3;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function isTimeoutLikeError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("timeout") ||
+    m.includes("timed out") ||
+    m.includes("aborted") ||
+    (m.includes("abort") && m.includes("signal"))
+  );
+}
+
+/** Transient network/TLS/socket errors worth retrying (Node/undici wording varies). */
+function isTransientError(message: string): boolean {
+  if (isTimeoutLikeError(message)) return true;
+  const m = message.toLowerCase();
+  return (
+    m.includes("fetch failed") ||
+    m.includes("econnreset") ||
+    m.includes("econnrefused") ||
+    m.includes("etimedout") ||
+    m.includes("enetunreach") ||
+    m.includes("ehostunreach") ||
+    m.includes("eai_again") ||
+    m.includes("socket hang up") ||
+    m.includes("premature close") ||
+    m.includes("other side closed") ||
+    m.includes("und_err_connect") ||
+    m.includes("und_err_socket") ||
+    m.includes("tls") ||
+    m.includes("ssl") ||
+    m.includes("certificate") ||
+    m.includes("wrong version number")
+  );
+}
+
+function shouldRetryFetch(attempt: number, message: string): boolean {
+  return attempt < MAX_FETCH_ATTEMPTS - 1 && (isTimeoutLikeError(message) || isTransientError(message));
+}
 
 function sameOrigin(a: string, b: string): boolean {
   try {
@@ -28,60 +80,119 @@ function normalizeHref(href: string, pageUrl: string): string | null {
 async function fetchPage(
   url: string,
   timeoutMs: number,
-): Promise<{ status: number; body: string | null; error?: string }> {
+): Promise<{ status: number; body: string | null; durationMs: number; error?: string }> {
+  const started = Date.now();
+  let lastError: string | undefined;
+  const ua = userAgent();
+  const htmlHeaders = {
+    "User-Agent": ua,
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+
+  for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(url, {
+        redirect: "follow",
+        headers: htmlHeaders,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const ct = res.headers.get("content-type") ?? "";
+      const body =
+        ct.includes("text/html") || ct.includes("application/xhtml") || ct.includes("xml")
+          ? await res.text()
+          : null;
+      return { status: res.status, body, durationMs: Date.now() - started };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      lastError = msg;
+      if (shouldRetryFetch(attempt, msg)) {
+        await sleep(200 * (attempt + 1));
+        continue;
+      }
+      return { status: 0, body: null, durationMs: Date.now() - started, error: msg };
+    }
+  }
+
+  return { status: 0, body: null, durationMs: Date.now() - started, error: lastError ?? "Unknown error" };
+}
+
+async function headOrGetStatus(
+  target: string,
+  timeoutMs: number,
+): Promise<{ status: number; durationMs: number; method: "HEAD" | "GET_RANGE"; error?: string }> {
+  const started = Date.now();
+  let lastError: string | undefined;
+  const ua = userAgent();
+  const headHeaders = {
+    "User-Agent": ua,
+    Accept: "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+
+  for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(target, {
+        method: "HEAD",
+        redirect: "follow",
+        headers: headHeaders,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.status === 405 || res.status === 501) {
+        const g = await fetch(target, {
+          method: "GET",
+          redirect: "follow",
+          headers: { ...headHeaders, Range: "bytes=0-0" },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        return { status: g.status, durationMs: Date.now() - started, method: "GET_RANGE" };
+      }
+      return { status: res.status, durationMs: Date.now() - started, method: "HEAD" };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      lastError = msg;
+      if (shouldRetryFetch(attempt, msg)) {
+        await sleep(200 * (attempt + 1));
+        continue;
+      }
+      return { status: 0, durationMs: Date.now() - started, method: "HEAD", error: msg };
+    }
+  }
+
+  return { status: 0, durationMs: Date.now() - started, method: "HEAD", error: lastError ?? "Unknown error" };
+}
+
+function canonicalHref(url: string): string {
   try {
-    const res = await fetch(url, {
-      redirect: "follow",
-      headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml" },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    const ct = res.headers.get("content-type") ?? "";
-    const body =
-      ct.includes("text/html") || ct.includes("application/xhtml") || ct.includes("xml")
-        ? await res.text()
-        : null;
-    return { status: res.status, body };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { status: 0, body: null, error: msg };
+    return new URL(url).href;
+  } catch {
+    return url;
   }
 }
 
-async function headOrGetStatus(target: string, timeoutMs: number): Promise<{ status: number; error?: string }> {
-  try {
-    const res = await fetch(target, {
-      method: "HEAD",
-      redirect: "follow",
-      headers: { "User-Agent": UA },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (res.status === 405 || res.status === 501) {
-      const g = await fetch(target, {
-        method: "GET",
-        redirect: "follow",
-        headers: { "User-Agent": UA, Range: "bytes=0-0" },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      return { status: g.status };
-    }
-    return { status: res.status };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { status: 0, error: msg };
-  }
+/** `<= 0` means no limit (use MAX_SAFE_INTEGER internally). */
+function capOrUnlimited(n: number): number {
+  return n > 0 ? n : Number.MAX_SAFE_INTEGER;
 }
 
 export async function crawlSite(options: {
   startUrl: string;
   maxPages: number;
-  /** Max extra same-origin URLs to verify with HEAD (links found but not visited in BFS) */
+  /** Max extra same-origin URLs to verify with HEAD (links found but not visited in BFS). `<= 0` = no limit. */
   maxLinkChecks: number;
   requestTimeoutMs: number;
+  /** Parallel HTTP fetches per site (BFS + link checks). Default callers pass >= 1. */
+  fetchConcurrency: number;
 }): Promise<CrawlSiteResult> {
   const started = Date.now();
   const base = new URL(options.startUrl);
   const hostname = base.hostname;
   const siteId = siteIdFromUrl(options.startUrl);
+
+  const maxPagesCap = capOrUnlimited(options.maxPages);
+  const maxLinkChecksCap = capOrUnlimited(options.maxLinkChecks);
+  const fetchConcurrency = Math.max(1, options.fetchConcurrency);
+  const limit = pLimit(fetchConcurrency);
 
   const visited = new Set<string>();
   const queued = new Set<string>();
@@ -90,26 +201,31 @@ export async function crawlSite(options: {
 
   const pages: PageFetchRecord[] = [];
   const brokenLinks: BrokenLinkRecord[] = [];
+  const linkChecks: LinkCheckRecord[] = [];
   /** Every unique same-origin URL we discover from <a href> — verify even if not crawled */
   const discoveredInternal = new Set<string>();
 
-  while (queue.length > 0 && visited.size < options.maxPages) {
-    const pageUrl = queue.shift()!;
-    if (visited.has(pageUrl)) continue;
-    visited.add(pageUrl);
+  let outstanding = 0;
 
-    const { status, body, error } = await fetchPage(pageUrl, options.requestTimeoutMs);
+  async function processPage(pageUrl: string): Promise<void> {
+    const { status, body, error, durationMs } = await fetchPage(pageUrl, options.requestTimeoutMs);
     const ok = status >= 200 && status < 400;
-    pages.push({ url: pageUrl, status, ok, error: error ?? (ok ? undefined : `HTTP ${status}`) });
+    pages.push({
+      url: pageUrl,
+      status,
+      ok,
+      durationMs,
+      error: error ?? (ok ? undefined : `HTTP ${status}`),
+    });
 
     if (!ok && status !== 0) {
-      brokenLinks.push({ foundOn: "(crawl)", target: pageUrl, status, error });
+      brokenLinks.push({ foundOn: "(crawl)", target: pageUrl, status, error, durationMs });
     }
     if (error && status === 0) {
-      brokenLinks.push({ foundOn: "(crawl)", target: pageUrl, error });
+      brokenLinks.push({ foundOn: "(crawl)", target: pageUrl, error, durationMs });
     }
 
-    if (!body || !ok) continue;
+    if (!body || !ok) return;
 
     const $ = load(body);
     $("a[href]").each((_, el) => {
@@ -119,26 +235,84 @@ export async function crawlSite(options: {
       if (!abs || !sameOrigin(abs, pageUrl)) return;
       discoveredInternal.add(abs);
 
-      if (!visited.has(abs) && !queued.has(abs) && visited.size < options.maxPages) {
+      if (!visited.has(abs) && !queued.has(abs) && visited.size < maxPagesCap) {
         queue.push(abs);
         queued.add(abs);
       }
     });
   }
 
+  await new Promise<void>((resolve) => {
+    function tryFinish() {
+      if (outstanding === 0 && queue.length === 0) {
+        resolve();
+      }
+    }
+
+    function scheduleNext(): void {
+      while (queue.length > 0 && visited.size < maxPagesCap) {
+        const pageUrl = queue.shift()!;
+        if (visited.has(pageUrl)) continue;
+        if (visited.size >= maxPagesCap) break;
+        visited.add(pageUrl);
+        outstanding++;
+        void limit(async () => {
+          try {
+            await processPage(pageUrl);
+          } finally {
+            outstanding--;
+            scheduleNext();
+            tryFinish();
+          }
+        });
+      }
+      tryFinish();
+    }
+
+    scheduleNext();
+  });
+
   /** Verify discovered internal links we did not crawl (HEAD/GET), capped */
   const toVerifyAll = [...discoveredInternal].filter((u) => !visited.has(u));
-  const toVerify = toVerifyAll.slice(0, options.maxLinkChecks);
-  for (const target of toVerify) {
-    const { status, error } = await headOrGetStatus(target, options.requestTimeoutMs);
-    const linkOk = status >= 200 && status < 400;
-    if (!linkOk) {
-      brokenLinks.push({
-        foundOn: "(discovered, not crawled)",
-        target,
-        status: status || undefined,
-        error: error ?? (status ? `HTTP ${status}` : undefined),
-      });
+  const toVerify = toVerifyAll.slice(0, maxLinkChecksCap);
+  await Promise.all(
+    toVerify.map((target) =>
+      limit(async () => {
+        const { status, error, durationMs, method } = await headOrGetStatus(target, options.requestTimeoutMs);
+        const linkOk = status >= 200 && status < 400;
+        linkChecks.push({ target, status, ok: linkOk, durationMs, method });
+        if (!linkOk) {
+          brokenLinks.push({
+            foundOn: "(discovered, not crawled)",
+            target,
+            status: status || undefined,
+            error: error ?? (status ? `HTTP ${status}` : undefined),
+            durationMs,
+          });
+        }
+      }),
+    ),
+  );
+
+  /** Ensure the listed URL appears in `pages` (same canonical href as start). */
+  const listedCanonical = canonicalHref(options.startUrl);
+  const listedSeen = pages.some((p) => canonicalHref(p.url) === listedCanonical);
+  if (!listedSeen) {
+    const { status, error, durationMs } = await fetchPage(listedCanonical, options.requestTimeoutMs);
+    const ok = status >= 200 && status < 400;
+    visited.add(listedCanonical);
+    pages.unshift({
+      url: listedCanonical,
+      status,
+      ok,
+      durationMs,
+      error: error ?? (ok ? undefined : `HTTP ${status}`),
+    });
+    if (!ok && status !== 0) {
+      brokenLinks.push({ foundOn: "(listed URL)", target: listedCanonical, status, error, durationMs });
+    }
+    if (error && status === 0) {
+      brokenLinks.push({ foundOn: "(listed URL)", target: listedCanonical, error, durationMs });
     }
   }
 
@@ -151,6 +325,7 @@ export async function crawlSite(options: {
     uniqueUrlsChecked: visited.size + toVerify.length,
     pages,
     brokenLinks,
+    linkChecks,
     durationMs,
   };
 }

@@ -79,6 +79,50 @@
         "type": "text_visible",
         "value": "Thank you"
       }
+    },
+    {
+      "id": "local-fixture-homepage",
+      "name": "Local fixture — run `npm run fixture` first, then enable this site",
+      "enabled": false,
+      "url": "http://127.0.0.1:3333/",
+      "forms": [
+        {
+          "selector": "form#fixture-contact-form",
+          "fields": [
+            {
+              "name": "name",
+              "selector": "input#name",
+              "value": "QA Agent (fixture run)",
+              "action": "fill"
+            },
+            {
+              "name": "email",
+              "selector": "input#email",
+              "value": "qa-agent@example.test",
+              "action": "fill"
+            },
+            {
+              "name": "company",
+              "selector": "input#company",
+              "value": "Internal QA",
+              "action": "fill"
+            },
+            {
+              "name": "message",
+              "selector": "textarea#message",
+              "value": "Automated submission from QA-Agent fixture site.",
+              "action": "fill"
+            }
+          ],
+          "submit": {
+            "selector": "button[type=\"submit\"]"
+          }
+        }
+      ],
+      "success": {
+        "type": "url_contains",
+        "value": "thanks.html"
+      }
     }
   ]
 }

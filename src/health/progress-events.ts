@@ -9,6 +9,7 @@ export type HealthProgressEvent =
     }
   | {
       type: "site_start";
+      runId: string;
       siteId: string;
       hostname: string;
       startUrl: string;
@@ -17,6 +18,7 @@ export type HealthProgressEvent =
     }
   | {
       type: "site_complete";
+      runId: string;
       siteId: string;
       hostname: string;
       startUrl: string;
@@ -26,9 +28,12 @@ export type HealthProgressEvent =
       pagesVisited: number;
       brokenLinks: number;
       durationMs: number;
+      /** Path under the run folder for `/reports/:runId/…` (e.g. `001-example.com/report.html`). */
+      reportHtmlHref: string;
     }
   | {
       type: "site_error";
+      runId: string;
       siteId: string;
       hostname: string;
       startUrl: string;

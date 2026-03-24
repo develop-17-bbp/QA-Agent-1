@@ -3,7 +3,7 @@
   "version": "0.2.1",
   "private": true,
   "type": "module",
-  "description": "CLI: site health (crawl, internal links, optional PageSpeed API, HTML reports, optional local live dashboard). Legacy: form smoke tests.",
+  "description": "CLI: site health (crawl, internal links, HTML reports, optional local live dashboard). Legacy: form smoke tests.",
   "bin": {
     "qa-agent": "./dist/index.js"
   },
