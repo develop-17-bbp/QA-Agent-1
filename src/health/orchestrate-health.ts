@@ -6,7 +6,12 @@ import { healthSiteOutputDirName, loadUrlsFromTxt, siteIdFromUrl } from "./load-
 import { attachPageSpeedInsights, resolvePageSpeedApiKey } from "./pagespeed-insights.js";
 import type { HealthProgressEvent } from "./progress-events.js";
 import { masterReportBaseName, perSiteReportBaseName } from "./report-names.js";
-import { buildHealthIndexHtml, writeMasterHealthReports, writeSiteHealthReports } from "./report-site.js";
+import {
+  buildHealthIndexHtml,
+  buildMasterRedirectHtml,
+  writeMasterHealthReports,
+  writeSiteHealthReports,
+} from "./report-site.js";
 import type { SiteHealthReport } from "./types.js";
 
 function runId(): string {
@@ -162,7 +167,7 @@ export async function orchestrateHealthCheck(options: {
 
     const siteDir = path.join(runDir, outputDirName);
     const siteFileBase = perSiteReportBaseName(report.hostname, report.finishedAt);
-    await writeSiteHealthReports({ report, outDir: siteDir, fileBaseName: siteFileBase });
+    await writeSiteHealthReports({ report, outDir: siteDir, fileBaseName: siteFileBase, runId: rid });
 
     const failed = crawl.brokenLinks.length > 0 || crawl.pages.some((p) => !p.ok);
     const reportHtmlHref = `${outputDirName}/report.html`;
@@ -214,6 +219,12 @@ export async function orchestrateHealthCheck(options: {
     },
   });
 
+  await writeFile(
+    path.join(runDir, "master.html"),
+    buildMasterRedirectHtml(`${masterBase}.html`),
+    "utf8",
+  );
+
   const indexItems = results.map((r, i) => {
     const folder = healthSiteOutputDirName(i, r.startUrl);
     const base = perSiteReportBaseName(r.hostname, r.finishedAt);
@@ -256,7 +267,7 @@ export async function orchestrateHealthCheck(options: {
       durationMs: r.crawl.durationMs,
       reportHtmlHref: `${healthSiteOutputDirName(i, r.startUrl)}/report.html`,
     })),
-    masterHtmlHref: `./${masterBase}.html`,
+    masterHtmlHref: "./master.html",
     indexHtmlHref: "./index.html",
   };
   await writeFile(path.join(runDir, "run-meta.json"), JSON.stringify(runMeta, null, 2), "utf8");

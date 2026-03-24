@@ -1,10 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { chromium, type Browser } from "playwright";
-import type { SiteConfig } from "../config/schema.js";
+import { chromium, type Browser, type Page } from "playwright";
+import type { FormConfig, SiteConfig } from "../config/schema.js";
 import type { SiteRunResult } from "../types.js";
 
-async function assertSuccess(page: import("playwright").Page, site: SiteConfig): Promise<void> {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function assertSuccess(page: Page, site: SiteConfig): Promise<void> {
   const check = site.success;
   switch (check.type) {
     case "url_contains": {
@@ -16,7 +20,6 @@ async function assertSuccess(page: import("playwright").Page, site: SiteConfig):
     }
     case "text_visible": {
       const timeout = check.timeoutMs ?? 15_000;
-      // Ignore hidden copies in the DOM (e.g. Webflow .w-form-done placeholder text).
       await page
         .getByText(check.value, { exact: false })
         .locator("visible=true")
@@ -34,6 +37,66 @@ async function assertSuccess(page: import("playwright").Page, site: SiteConfig):
       throw new Error(`Unknown success check: ${JSON.stringify(_exhaustive)}`);
     }
   }
+}
+
+async function runCaptchaBeforeSubmit(
+  page: Page,
+  captcha: FormConfig["captcha"],
+  headless: boolean,
+): Promise<void> {
+  if (!captcha || captcha.strategy === "none") return;
+
+  if (captcha.strategy === "pause_after_fields") {
+    if (headless) {
+      throw new Error(
+        'CAPTCHA strategy "pause_after_fields" needs a visible browser — re-run with `npm run run -- --headed` (or `qa-agent run --headed`) so a human can solve the challenge before submit.',
+      );
+    }
+    const ms = captcha.pauseMs ?? 120_000;
+    console.log(
+      `[qa-agent] CAPTCHA pause ${ms}ms — solve the challenge in the browser window; the run will continue and click submit automatically.`,
+    );
+    await sleep(ms);
+    return;
+  }
+
+  if (captcha.strategy === "wait_for_selector") {
+    const sel = captcha.waitSelector;
+    if (!sel?.trim()) {
+      throw new Error('CAPTCHA strategy "wait_for_selector" requires captcha.waitSelector in config');
+    }
+    const timeout = captcha.waitTimeoutMs ?? 120_000;
+    await page.locator(sel).first().waitFor({ state: "visible", timeout });
+  }
+}
+
+async function runLiveAgentFlow(page: Page, site: SiteConfig, headless: boolean): Promise<void> {
+  const la = site.liveAgent;
+  if (!la || la.enabled === false) return;
+
+  const timeout = la.timeoutMs ?? 120_000;
+  const scope = la.frameSelector ? page.frameLocator(la.frameSelector) : page;
+
+  await scope.locator(la.openChatSelector).first().click({ timeout: Math.min(30_000, timeout) });
+  await scope.locator(la.messageInputSelector).first().waitFor({ state: "visible", timeout: 30_000 });
+  await scope.locator(la.messageInputSelector).first().fill(la.visitorMessage);
+
+  if (la.sendSelector) {
+    await scope.locator(la.sendSelector).first().click();
+  } else {
+    await scope.locator(la.messageInputSelector).first().press("Enter");
+  }
+
+  if (!headless) {
+    console.log(
+      `[qa-agent] Waiting up to ${timeout}ms for agent message containing: ${JSON.stringify(la.agentMessageContains)}`,
+    );
+  }
+
+  await scope
+    .getByText(la.agentMessageContains, { exact: false })
+    .first()
+    .waitFor({ state: "visible", timeout });
 }
 
 export async function runSite(
@@ -55,6 +118,14 @@ export async function runSite(
     });
     const page = await context.newPage();
     await page.goto(site.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+
+    const la = site.liveAgent;
+    const runLiveFirst =
+      la && la.enabled !== false && la.runBeforeForms === true;
+
+    if (runLiveFirst) {
+      await runLiveAgentFlow(page, site, headless);
+    }
 
     for (const form of site.forms) {
       const root = form.selector ? page.locator(form.selector) : page.locator("body");
@@ -79,15 +150,31 @@ export async function runSite(
           case "uncheck":
             await first.uncheck();
             break;
+          case "click":
+            await first.click();
+            break;
           default:
             await first.fill(field.value);
         }
+
+        if (field.delayAfterMs !== undefined && field.delayAfterMs > 0) {
+          await sleep(field.delayAfterMs);
+        }
       }
+
+      await runCaptchaBeforeSubmit(page, form.captcha, headless);
 
       const submit = form.selector
         ? root.locator(form.submit.selector).first()
         : page.locator(form.submit.selector).first();
       await submit.click();
+    }
+
+    const runLiveAfter =
+      la && la.enabled !== false && la.runBeforeForms !== true;
+
+    if (runLiveAfter) {
+      await runLiveAgentFlow(page, site, headless);
     }
 
     await assertSuccess(page, site);

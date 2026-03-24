@@ -77,10 +77,24 @@ function normalizeHref(href: string, pageUrl: string): string | null {
   }
 }
 
+function primaryMime(contentTypeHeader: string): string | undefined {
+  const t = contentTypeHeader.split(";")[0]?.trim();
+  return t || undefined;
+}
+
 async function fetchPage(
   url: string,
   timeoutMs: number,
-): Promise<{ status: number; body: string | null; durationMs: number; error?: string }> {
+): Promise<{
+  status: number;
+  body: string | null;
+  durationMs: number;
+  error?: string;
+  contentType?: string;
+  bodyBytes?: number;
+  redirected?: boolean;
+  finalUrl?: string;
+}> {
   const started = Date.now();
   let lastError: string | undefined;
   const ua = userAgent();
@@ -98,11 +112,21 @@ async function fetchPage(
         signal: AbortSignal.timeout(timeoutMs),
       });
       const ct = res.headers.get("content-type") ?? "";
+      const mime = primaryMime(ct);
       const body =
         ct.includes("text/html") || ct.includes("application/xhtml") || ct.includes("xml")
           ? await res.text()
           : null;
-      return { status: res.status, body, durationMs: Date.now() - started };
+      const bodyBytes = body != null ? Buffer.byteLength(body, "utf8") : undefined;
+      return {
+        status: res.status,
+        body,
+        durationMs: Date.now() - started,
+        contentType: mime,
+        bodyBytes,
+        redirected: res.redirected,
+        finalUrl: res.url,
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       lastError = msg;
@@ -208,7 +232,10 @@ export async function crawlSite(options: {
   let outstanding = 0;
 
   async function processPage(pageUrl: string): Promise<void> {
-    const { status, body, error, durationMs } = await fetchPage(pageUrl, options.requestTimeoutMs);
+    const { status, body, error, durationMs, contentType, bodyBytes, redirected, finalUrl } = await fetchPage(
+      pageUrl,
+      options.requestTimeoutMs,
+    );
     const ok = status >= 200 && status < 400;
     pages.push({
       url: pageUrl,
@@ -216,6 +243,10 @@ export async function crawlSite(options: {
       ok,
       durationMs,
       error: error ?? (ok ? undefined : `HTTP ${status}`),
+      contentType,
+      bodyBytes,
+      redirected,
+      finalUrl,
     });
 
     if (!ok && status !== 0) {
@@ -298,7 +329,10 @@ export async function crawlSite(options: {
   const listedCanonical = canonicalHref(options.startUrl);
   const listedSeen = pages.some((p) => canonicalHref(p.url) === listedCanonical);
   if (!listedSeen) {
-    const { status, error, durationMs } = await fetchPage(listedCanonical, options.requestTimeoutMs);
+    const { status, error, durationMs, contentType, bodyBytes, redirected, finalUrl } = await fetchPage(
+      listedCanonical,
+      options.requestTimeoutMs,
+    );
     const ok = status >= 200 && status < 400;
     visited.add(listedCanonical);
     pages.unshift({
@@ -307,6 +341,10 @@ export async function crawlSite(options: {
       ok,
       durationMs,
       error: error ?? (ok ? undefined : `HTTP ${status}`),
+      contentType,
+      bodyBytes,
+      redirected,
+      finalUrl,
     });
     if (!ok && status !== 0) {
       brokenLinks.push({ foundOn: "(listed URL)", target: listedCanonical, status, error, durationMs });

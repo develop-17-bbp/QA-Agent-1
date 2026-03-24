@@ -26,7 +26,7 @@ For each **starting URL** in your text file:
 3. **Stay on the same website** (same “origin” — same protocol + host + port).
 4. **Queue new links** and keep going (**breadth-first**). By default **`--max-pages` is 0** (no cap): the crawl continues until the queue is empty or something stops the process.
 5. **Check links** that weren’t fully opened with **HEAD** requests. By default **`--max-link-checks` is 0** (no cap). If **`--max-pages`** is capped, some internal URLs may only be **HEAD**-checked here; with a **full** BFS (no cap), this pass often has little or nothing left to do.
-6. **Write** `report.html` / `report.json` per site, plus a run-level `index.html` and `summary.txt`.
+6. **Write** `report.html` / `report.json` per site, plus a run-level `index.html`, **`master.html`** (redirect to the timestamped combined HTML), **`run-meta.json`**, and `summary.txt`.
 
 Report fields **`pagesVisited`** vs **`uniqueUrlsChecked`**: the first is full **GET** fetches; the second adds **HEAD** (or similar) checks for discovered URLs not covered by the BFS when a **page cap** was in effect.
 
@@ -34,9 +34,21 @@ Report fields **`pagesVisited`** vs **`uniqueUrlsChecked`**: the first is full *
 
 ---
 
-## Optional: `--serve` dashboard
+## Optional: `--serve` dashboard and report layout
 
-If you add `--serve`, a **small web server** starts on **your computer** (usually `127.0.0.1`). It shows **live progress** using **Server-Sent Events** (the server pushes updates to the browser). After the run, it can **serve the report files** so links work in the browser. It’s meant for **operators**, not the public internet.
+If you add `--serve`, a **small web server** starts on **your computer** (usually `127.0.0.1`). It exposes:
+
+| Route | Purpose |
+|-------|---------|
+| **`/`** | **Dashboard HTML**: start runs from the UI, **SSE** live progress, **History** (`GET /api/history`), PDF export (`GET /api/pdf`). |
+| **`/reports/<runId>/…`** | Static files under the run directory (same as opening `artifacts/health/<runId>/` in a browser). |
+| **`POST /api/issue-overrides`** | Saves `{ runId, overrides }` to **`issue-overrides.json`** in that run (for triage state in HTML reports). |
+
+HTML reports and the run index share a **sticky top bar** (dashboard-style navigation): **Run index** · **Combined report** (`master.html` → versioned `MASTER-all-sites-*.html`) · **Live dashboard** (shown only when the page is loaded over `http(s)` so links resolve). Per-site reports link **up** to the run index and combined report with relative URLs.
+
+**Triage** in report tables uses stable keys (hashed row identity) and **localStorage**; when served from the dashboard, the client can **fetch** `issue-overrides.json` and **POST** updates on change.
+
+It’s meant for **operators**, not the public internet.
 
 ---
 

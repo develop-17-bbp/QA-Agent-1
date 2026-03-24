@@ -1,10 +1,11 @@
 import { createReadStream } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type { HealthRunMeta } from "./orchestrate-health.js";
 import type { HealthProgressEvent } from "./progress-events.js";
+import { renderHtmlFileToPdf } from "./html-to-pdf.js";
 import { parseUrlsFromText } from "./load-urls.js";
 import { orchestrateHealthCheck } from "./orchestrate-health.js";
 
@@ -46,6 +47,14 @@ function isSafeRunIdSegment(name: string): boolean {
   return /^[a-zA-Z0-9_.-]+$/.test(name) && !name.includes("..");
 }
 
+/** Relative path under a run dir (only .html report files). */
+function isAllowedReportHtmlRel(rel: string): boolean {
+  if (!rel || rel.includes("..")) return false;
+  const norm = rel.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!norm.endsWith(".html")) return false;
+  return true;
+}
+
 async function readBody(req: http.IncomingMessage, maxBytes: number): Promise<string> {
   return await new Promise((resolve, reject) => {
     let total = 0;
@@ -68,6 +77,119 @@ export interface HealthHistoryDay {
   runs: HealthRunMeta[];
 }
 
+function parseSummarySiteLine(line: string): {
+  hostname: string;
+  pages: number;
+  broken: number;
+  failed: boolean;
+} | null {
+  const m = line.match(/^([^:]+):\s*pages=(\d+)\s+brokenLinks=(\d+)\s+(OK|FAIL)\s*$/);
+  if (!m) return null;
+  return {
+    hostname: m[1],
+    pages: Number(m[2]),
+    broken: Number(m[3]),
+    failed: m[4] === "FAIL",
+  };
+}
+
+/**
+ * Older runs have no run-meta.json — rebuild a compatible shape from summary.txt + folder layout.
+ */
+async function loadLegacyRunMeta(runDir: string, runId: string): Promise<HealthRunMeta | null> {
+  const summaryPath = path.join(runDir, "summary.txt");
+  let raw: string;
+  try {
+    raw = await readFile(summaryPath, "utf8");
+  } catch {
+    return null;
+  }
+
+  const lines = raw.split(/\r?\n/);
+  let urlsFile: string | undefined;
+  const urlLine = lines.find((l) => l.startsWith("URLs file:"));
+  if (urlLine) {
+    urlsFile = urlLine.replace(/^URLs file:\s*/i, "").trim();
+  }
+
+  let totalSites = 0;
+  let siteFailures = 0;
+  const metaLine = lines.find((l) => /Sites:\s*\d+/.test(l) && /Failed/i.test(l));
+  if (metaLine) {
+    const m = metaLine.match(/Sites:\s*(\d+)\s*·\s*Failed\s*\(issues found\):\s*(\d+)/i);
+    if (m) {
+      totalSites = Number(m[1]);
+      siteFailures = Number(m[2]);
+    }
+  }
+
+  let generatedAt: string;
+  try {
+    const st = await stat(path.join(runDir, "index.html"));
+    generatedAt = st.mtime.toISOString();
+  } catch {
+    try {
+      const st = await stat(summaryPath);
+      generatedAt = st.mtime.toISOString();
+    } catch {
+      generatedAt = new Date(0).toISOString();
+    }
+  }
+
+  const dirents = await readdir(runDir, { withFileTypes: true });
+  const siteDirs = dirents
+    .filter((e) => e.isDirectory() && /^\d{3}-/.test(e.name))
+    .map((e) => e.name)
+    .sort();
+
+  const usedLine = new Set<number>();
+  const sites: HealthRunMeta["sites"] = [];
+  for (const folder of siteDirs) {
+    const hostname = folder.replace(/^\d{3}-/, "");
+    let pagesVisited = 0;
+    let brokenLinks = 0;
+    let failed = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (usedLine.has(i)) continue;
+      const parsed = parseSummarySiteLine(lines[i]);
+      if (parsed && parsed.hostname === hostname) {
+        usedLine.add(i);
+        pagesVisited = parsed.pages;
+        brokenLinks = parsed.broken;
+        failed = parsed.failed;
+        break;
+      }
+    }
+    sites.push({
+      hostname,
+      startUrl: `https://${hostname}/`,
+      failed,
+      pagesVisited,
+      brokenLinks,
+      durationMs: 0,
+      reportHtmlHref: `${folder}/report.html`,
+    });
+  }
+
+  const masterFiles = dirents
+    .filter((e) => e.isFile() && e.name.startsWith("MASTER-all-sites-") && e.name.endsWith(".html"))
+    .map((e) => e.name)
+    .sort();
+  const masterHtmlHref = masterFiles.length > 0 ? `./${masterFiles[0]}` : "./MASTER-all-sites.html";
+
+  return {
+    runId,
+    generatedAt,
+    urlsSource: "file",
+    urlsFile,
+    totalSites: totalSites || sites.length,
+    siteFailures: siteFailures || sites.filter((s) => s.failed).length,
+    sites,
+    masterHtmlHref,
+    indexHtmlHref: "./index.html",
+  };
+}
+
 async function listHealthHistory(outRoot: string): Promise<{ days: HealthHistoryDay[] }> {
   let entries;
   try {
@@ -80,12 +202,14 @@ async function listHealthHistory(outRoot: string): Promise<{ days: HealthHistory
   for (const ent of entries) {
     if (!ent.isDirectory() || ent.name.startsWith(".")) continue;
     if (!isSafeRunIdSegment(ent.name)) continue;
-    const metaPath = path.join(outRoot, ent.name, "run-meta.json");
+    const runDir = path.join(outRoot, ent.name);
+    const metaPath = path.join(runDir, "run-meta.json");
     try {
       const raw = await readFile(metaPath, "utf8");
       metas.push(JSON.parse(raw) as HealthRunMeta);
     } catch {
-      /* older run without run-meta.json — skip or minimal entry */
+      const legacy = await loadLegacyRunMeta(runDir, ent.name);
+      if (legacy) metas.push(legacy);
     }
   }
 
@@ -118,33 +242,38 @@ function dashboardHtml(): string {
   <title>QA-Agent — health dashboard</title>
   <style>
     :root {
-      --bg: #0d1117;
-      --surface: #161b22;
-      --border: #30363d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --accent: #58a6ff;
-      --ok: #3fb950;
-      --warn: #d29922;
-      --bad: #f85149;
-      --run: #a371f7;
+      --bg: #f5f5f7;
+      --surface: rgba(255, 255, 255, 0.9);
+      --surface-solid: #ffffff;
+      --border: rgba(0, 0, 0, 0.08);
+      --text: #1d1d1f;
+      --muted: #86868b;
+      --accent: #0071e3;
+      --ok: #34c759;
+      --warn: #ff9500;
+      --bad: #ff3b30;
+      --run: #5856d6;
     }
     * { box-sizing: border-box; }
     body {
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
       margin: 0;
-      background: var(--bg);
+      background: linear-gradient(180deg, #e8e8ed 0%, var(--bg) 32%, var(--bg) 100%);
       color: var(--text);
       min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.022em;
     }
     header {
-      padding: 20px 24px;
+      padding: 28px 28px 24px;
       border-bottom: 1px solid var(--border);
       background: var(--surface);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
     }
-    h1 { font-size: 1.2rem; font-weight: 600; margin: 0 0 6px 0; }
-    .sub { font-size: 0.85rem; color: var(--muted); margin: 0; }
-    main { padding: 20px 24px 48px; max-width: 1100px; margin: 0 auto; }
+    h1 { font-size: 1.75rem; font-weight: 600; margin: 0 0 8px 0; letter-spacing: -0.03em; }
+    .sub { font-size: 0.9375rem; color: var(--muted); margin: 0; line-height: 1.4; }
+    main { padding: 28px 24px 52px; max-width: 1100px; margin: 0 auto; }
     .tabs {
       display: flex;
       gap: 4px;
@@ -165,10 +294,10 @@ function dashboardHtml(): string {
     }
     .tab:hover { color: var(--text); }
     .tab[aria-selected="true"] {
-      background: var(--surface);
+      background: var(--surface-solid);
       color: var(--accent);
       border: 1px solid var(--border);
-      border-bottom-color: var(--surface);
+      border-bottom-color: var(--surface-solid);
       margin-bottom: -1px;
     }
     .panel { display: none; }
@@ -177,26 +306,28 @@ function dashboardHtml(): string {
     textarea.urls {
       width: 100%;
       min-height: 120px;
-      padding: 12px 14px;
-      border-radius: 8px;
+      padding: 14px 16px;
+      border-radius: 12px;
       border: 1px solid var(--border);
-      background: #0d1117;
+      background: var(--surface-solid);
       color: var(--text);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 0.82rem;
       line-height: 1.45;
       resize: vertical;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
     }
     .row-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
     button.primary {
       font: inherit;
       font-weight: 600;
-      padding: 10px 18px;
-      border-radius: 8px;
-      border: 1px solid #388bfd;
-      background: #1f6feb;
+      padding: 11px 22px;
+      border-radius: 980px;
+      border: none;
+      background: var(--accent);
       color: #fff;
       cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 113, 227, 0.25);
     }
     button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
     button.ghost {
@@ -210,19 +341,20 @@ function dashboardHtml(): string {
     }
     .hint { font-size: 0.82rem; color: var(--muted); margin: 10px 0 0 0; }
     .banner {
-      padding: 12px 14px;
-      border-radius: 8px;
+      padding: 14px 18px;
+      border-radius: 14px;
       border: 1px solid var(--border);
-      background: var(--surface);
+      background: var(--surface-solid);
       margin-bottom: 20px;
-      font-size: 0.9rem;
+      font-size: 0.9375rem;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
     }
-    .banner a { color: var(--accent); }
-    .banner.err { border-color: #f8514966; }
+    .banner a { color: var(--accent); font-weight: 500; }
+    .banner.err { border-color: rgba(255, 59, 48, 0.35); background: rgba(255, 59, 48, 0.06); }
     table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
-    th { color: var(--muted); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
-    tr:hover td { background: #ffffff06; }
+    th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    tr:hover td { background: rgba(0, 113, 227, 0.04); }
     .hostname { font-weight: 600; word-break: break-all; }
     .url { font-size: 0.8rem; color: var(--muted); word-break: break-all; }
     .badge {
@@ -232,18 +364,18 @@ function dashboardHtml(): string {
       font-size: 0.75rem;
       font-weight: 600;
     }
-    .badge.pending { background: #30363d; color: var(--muted); }
-    .badge.running { background: #a371f733; color: var(--run); }
-    .badge.ok { background: #23863633; color: var(--ok); }
-    .badge.fail { background: #da363333; color: var(--bad); }
-    .badge.err { background: #da363333; color: var(--bad); }
+    .badge.pending { background: rgba(0, 0, 0, 0.06); color: var(--muted); }
+    .badge.running { background: rgba(88, 86, 214, 0.12); color: var(--run); }
+    .badge.ok { background: rgba(52, 199, 89, 0.15); color: #1d7a42; }
+    .badge.fail { background: rgba(255, 59, 48, 0.12); color: var(--bad); }
+    .badge.err { background: rgba(255, 59, 48, 0.12); color: var(--bad); }
     .rep-link { margin-left: 8px; font-size: 0.8rem; font-weight: 600; }
     #log {
       margin-top: 24px;
-      padding: 14px;
-      border-radius: 8px;
+      padding: 14px 16px;
+      border-radius: 12px;
       border: 1px solid var(--border);
-      background: #010409;
+      background: rgba(0, 0, 0, 0.03);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 0.75rem;
       color: var(--muted);
@@ -252,27 +384,97 @@ function dashboardHtml(): string {
       white-space: pre-wrap;
       word-break: break-all;
     }
-    .day-block { margin-bottom: 28px; }
-    .day-title {
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--text);
-      margin: 0 0 12px 0;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border);
-    }
-    .run-card {
+    .job-card {
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px;
+      border-radius: 16px;
       margin-bottom: 12px;
-      background: var(--surface);
+      background: var(--surface-solid);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+      overflow: hidden;
     }
-    .run-card h3 { margin: 0 0 8px 0; font-size: 0.88rem; font-weight: 600; color: var(--accent); word-break: break-all; }
+    .job-card__head {
+      width: 100%;
+      text-align: left;
+      padding: 14px 18px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      font: inherit;
+      color: inherit;
+    }
+    .job-card__head:hover { background: rgba(0, 113, 227, 0.05); }
+    .job-card__head:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .job-card__head-main { min-width: 0; flex: 1; }
+    .job-card__title {
+      margin: 0 0 4px 0;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--accent);
+      word-break: break-all;
+      line-height: 1.35;
+    }
+    .job-card__sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: 0;
+      line-height: 1.4;
+    }
+    .job-card__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .job-card__chip {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: rgba(0, 0, 0, 0.05);
+      color: var(--muted);
+    }
+    .job-card__chip--bad { background: rgba(255, 59, 48, 0.1); color: var(--bad); }
+    .job-card__chip--ok { background: rgba(52, 199, 89, 0.12); color: #1d7a42; }
+    .job-card__chevron {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      margin-top: 2px;
+      color: var(--muted);
+      transition: transform 0.2s ease;
+    }
+    .job-card--open .job-card__chevron { transform: rotate(180deg); color: var(--accent); }
+    .job-card__body {
+      padding: 0 18px 18px 18px;
+      border-top: 1px solid var(--border);
+    }
+    .job-card__body[hidden] { display: none !important; }
     .run-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 10px; }
     .run-links { font-size: 0.85rem; margin-bottom: 10px; }
     .run-links a { color: var(--accent); font-weight: 600; text-decoration: none; margin-right: 12px; }
     .run-links a:hover { text-decoration: underline; }
+    .btn-pdf {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 3px 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .btn-pdf:hover { color: var(--accent); border-color: var(--accent); }
     .mini-table { width: 100%; font-size: 0.8rem; margin-top: 8px; }
     .mini-table th { font-size: 0.68rem; }
     .mini-table td { padding: 6px 8px; }
@@ -284,12 +486,13 @@ function dashboardHtml(): string {
 <body>
   <header>
     <h1>Site health dashboard</h1>
-    <p class="sub">Start checks from the browser, stream live status, open per-site HTML reports, and browse past runs by day.</p>
+    <p class="sub">Run <code>npm run health -- --serve</code> (no <code>--urls</code> required). Paste root URLs below to crawl, generate HTML/JSON reports, and download PDFs. Open <strong>Past runs</strong> for a list of job cards — click a card to expand links and per-site results.</p>
+    <p class="sub" style="margin-top:10px">Each finished run is served at <code>/reports/&lt;runId&gt;/index.html</code> (run index), with per-site folders and a <strong>Combined report</strong> link. Use the sticky bar inside those pages to jump between the run index, combined HTML, and this dashboard.</p>
   </header>
   <main>
     <div class="tabs" role="tablist">
       <button type="button" class="tab" role="tab" id="tab-run" aria-selected="true" aria-controls="panel-run">New run</button>
-      <button type="button" class="tab" role="tab" id="tab-history" aria-selected="false" aria-controls="panel-history">History by day</button>
+      <button type="button" class="tab" role="tab" id="tab-history" aria-selected="false" aria-controls="panel-history">Past runs</button>
     </div>
 
     <section id="panel-run" class="panel active" role="tabpanel" aria-labelledby="tab-run">
@@ -299,7 +502,7 @@ function dashboardHtml(): string {
         <button type="button" class="primary" id="btn-start">Start health check</button>
         <span id="busy-hint" class="hint" style="display:none">A run is in progress…</span>
       </div>
-      <p class="hint">Uses the same crawl options as the CLI (timeouts, fetch concurrency, PageSpeed if enabled). If you launched with <code>--urls</code>, the first run may already be in progress or finished below.</p>
+      <p class="hint">Uses the same crawl options as the CLI (timeouts, fetch concurrency, PageSpeed if enabled). If you launched with <code>--urls path/to/urls.txt</code>, that crawl may already be running or finished below.</p>
 
       <div id="banner" class="banner">Connecting to live stream…</div>
       <table>
@@ -311,7 +514,7 @@ function dashboardHtml(): string {
             <th>Pages</th>
             <th>Broken</th>
             <th>Duration</th>
-            <th>Report</th>
+            <th>HTML / PDF</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -320,7 +523,7 @@ function dashboardHtml(): string {
     </section>
 
     <section id="panel-history" class="panel" role="tabpanel" aria-labelledby="tab-history" hidden>
-      <p class="hint" style="margin-top:0">Runs are stored under your artifacts folder. Each card links to the combined report and per-site HTML.</p>
+      <p class="hint" style="margin-top:0">Runs are stored under your artifacts folder. Each row is a <strong>job card</strong> — click the header to show run index / combined report links and the site table.</p>
       <div id="history-root"><p class="history-empty">Loading…</p></div>
     </section>
   </main>
@@ -353,6 +556,10 @@ function dashboardHtml(): string {
     function reportHref(runId, reportHtmlHref) {
       var parts = String(reportHtmlHref).split("/").map(encodeURIComponent).join("/");
       return "/reports/" + encodeURIComponent(runId) + "/" + parts;
+    }
+
+    function pdfHref(runId, fileRel) {
+      return "/api/pdf?runId=" + encodeURIComponent(runId) + "&file=" + encodeURIComponent(fileRel);
     }
 
     function ensureRow(siteId, index, hostname, startUrl) {
@@ -395,8 +602,16 @@ function dashboardHtml(): string {
       if (o.pagesVisited != null) tr.querySelector(".pages").textContent = String(o.pagesVisited);
       if (o.brokenLinks != null) tr.querySelector(".broken").textContent = String(o.brokenLinks);
       if (o.durationMs != null) tr.querySelector(".dur").textContent = o.durationMs + " ms";
-      if (o.reportHref) {
-        repCell.innerHTML = '<a class="rep-link" href="' + escapeAttr(o.reportHref) + '">Open HTML</a>';
+      if (o.reportHref && o.runId && o.reportFileRel) {
+        repCell.innerHTML =
+          '<a class="rep-link" href="' +
+          escapeAttr(o.reportHref) +
+          '">HTML</a>' +
+          '<a class="btn-pdf" href="' +
+          escapeAttr(pdfHref(o.runId, o.reportFileRel)) +
+          '" download>PDF</a>';
+      } else if (o.reportHref) {
+        repCell.innerHTML = '<a class="rep-link" href="' + escapeAttr(o.reportHref) + '">HTML</a>';
       } else {
         repCell.textContent = "—";
       }
@@ -437,58 +652,132 @@ function dashboardHtml(): string {
       }
     }
 
+    function flattenRuns(data) {
+      var runs = [];
+      if (!data.days) return runs;
+      data.days.forEach(function (day) {
+        (day.runs || []).forEach(function (run) {
+          runs.push(run);
+        });
+      });
+      runs.sort(function (a, b) {
+        var ta = String(a.generatedAt || "");
+        var tb = String(b.generatedAt || "");
+        return ta < tb ? 1 : ta > tb ? -1 : 0;
+      });
+      return runs;
+    }
+
     function renderHistory(data) {
       if (!data.days || data.days.length === 0) {
-        historyRoot.innerHTML = '<p class="history-empty">No runs with run-meta.json yet. Complete a health check to see history here.</p>';
+        historyRoot.innerHTML = '<p class="history-empty">No runs found under artifacts. Each run folder needs <code>run-meta.json</code> (new runs) or at least <code>summary.txt</code> + per-site folders (older runs).</p>';
+        return;
+      }
+      var runs = flattenRuns(data);
+      if (runs.length === 0) {
+        historyRoot.innerHTML = '<p class="history-empty">No runs in history.</p>';
         return;
       }
       var frag = document.createDocumentFragment();
-      data.days.forEach(function (day) {
-        var section = document.createElement("div");
-        section.className = "day-block";
-        section.innerHTML = '<h2 class="day-title">' + escapeHtml(day.date) + "</h2>";
-        day.runs.forEach(function (run) {
-          section.appendChild(runCard(run));
-        });
-        frag.appendChild(section);
+      runs.forEach(function (run) {
+        frag.appendChild(jobCard(run));
       });
       historyRoot.textContent = "";
       historyRoot.appendChild(frag);
     }
 
-    function runCard(run) {
+    function jobCard(run) {
       var wrap = document.createElement("div");
-      wrap.className = "run-card";
+      wrap.className = "job-card";
       var idx = "/reports/" + encodeURIComponent(run.runId) + "/index.html";
       var mh = run.masterHtmlHref || "";
       if (mh.slice(0, 2) === "./") mh = mh.slice(2);
       var master = "/reports/" + encodeURIComponent(run.runId) + "/" + mh.split("/").map(encodeURIComponent).join("/");
       var sitesRows = (run.sites || []).map(function (s) {
         var href = reportHref(run.runId, s.reportHtmlHref);
+        var pdf = pdfHref(run.runId, s.reportHtmlHref);
         var st = s.failed ? '<span class="status-bad">Issues</span>' : '<span class="status-ok">OK</span>';
-        return "<tr><td>" + escapeHtml(s.hostname) + "</td><td>" + st + "</td><td>" + String(s.pagesVisited) + "</td><td>" + String(s.brokenLinks) + "</td><td><a href=\"" + escapeAttr(href) + "\">Report</a></td></tr>";
+        return (
+          "<tr><td>" +
+          escapeHtml(s.hostname) +
+          "</td><td>" +
+          st +
+          "</td><td>" +
+          String(s.pagesVisited) +
+          "</td><td>" +
+          String(s.brokenLinks) +
+          '</td><td><a href="' +
+          escapeAttr(href) +
+          '">HTML</a> <a class="btn-pdf" href="' +
+          escapeAttr(pdf) +
+          '">PDF</a></td></tr>'
+        );
       }).join("");
-      wrap.innerHTML =
-        "<h3>" + escapeHtml(run.runId) + "</h3>" +
-        '<div class="run-meta">' +
-        escapeHtml(run.generatedAt) +
+      var masterPdf = pdfHref(run.runId, mh);
+      var hasIssues = Number(run.siteFailures) > 0;
+      var chipClass = hasIssues ? "job-card__chip job-card__chip--bad" : "job-card__chip job-card__chip--ok";
+      var chipLabel = hasIssues ? String(run.siteFailures) + " site(s) with issues" : "All sites OK";
+
+      var head = document.createElement("button");
+      head.type = "button";
+      head.className = "job-card__head";
+      head.setAttribute("aria-expanded", "false");
+      head.innerHTML =
+        '<span class="job-card__head-main">' +
+        '<p class="job-card__title">' +
+        escapeHtml(run.runId) +
+        "</p>" +
+        '<p class="job-card__sub">' +
+        escapeHtml(run.generatedAt || "") +
         " · " +
-        String(run.totalSites) +
-        " site(s) · " +
-        String(run.siteFailures) +
-        " with issues · " +
-        escapeHtml(run.urlsSource) +
+        escapeHtml(run.urlsSource || "") +
+        "</p>" +
+        '<div class="job-card__chips">' +
+        '<span class="job-card__chip">' +
+        String(run.totalSites || 0) +
+        " site(s)</span>" +
+        '<span class="' +
+        chipClass +
+        '">' +
+        chipLabel +
+        "</span>" +
+        "</div>" +
+        '<span class="job-card__hint" style="font-size:0.75rem;color:var(--muted);margin-top:8px;display:block">Click to show links and details</span>' +
+        "</span>" +
+        '<svg class="job-card__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+
+      var body = document.createElement("div");
+      body.className = "job-card__body";
+      body.hidden = true;
+      body.setAttribute("hidden", "");
+      body.innerHTML =
+        '<div class="run-meta"><strong>URLs</strong> · ' +
+        (run.urlsFile ? escapeHtml(String(run.urlsFile)) : "—") +
         "</div>" +
         '<div class="run-links"><a href="' +
         escapeAttr(idx) +
         '">Run index</a><a href="' +
         escapeAttr(master) +
-        '">Combined report</a></div>' +
+        '">Combined HTML</a><a class="btn-pdf" href="' +
+        escapeAttr(masterPdf) +
+        '">Combined PDF</a></div>' +
         (sitesRows
-          ? '<table class="mini-table data-table"><thead><tr><th>Site</th><th>Status</th><th>Pages</th><th>Broken</th><th>Report</th></tr></thead><tbody>' +
+          ? '<table class="mini-table data-table"><thead><tr><th>Site</th><th>Status</th><th>Pages</th><th>Broken</th><th>HTML / PDF</th></tr></thead><tbody>' +
             sitesRows +
             "</tbody></table>"
-          : "");
+          : '<p class="run-meta">No per-site rows in metadata.</p>');
+
+      head.addEventListener("click", function () {
+        var open = !wrap.classList.contains("job-card--open");
+        wrap.classList.toggle("job-card--open", open);
+        head.setAttribute("aria-expanded", open ? "true" : "false");
+        body.hidden = !open;
+        if (open) body.removeAttribute("hidden");
+        else body.setAttribute("hidden", "");
+      });
+
+      wrap.appendChild(head);
+      wrap.appendChild(body);
       return wrap;
     }
 
@@ -547,6 +836,8 @@ function dashboardHtml(): string {
           oc.pagesVisited = data.pagesVisited;
           oc.brokenLinks = data.brokenLinks;
           oc.durationMs = data.durationMs;
+          oc.runId = data.runId;
+          oc.reportFileRel = data.reportHtmlHref;
           oc.reportHref = reportHref(data.runId, data.reportHtmlHref);
           paintRow(oc);
         }
@@ -694,6 +985,137 @@ export async function runHealthDashboard(options: {
           "Cache-Control": "no-store",
         });
         res.end(JSON.stringify(data));
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/pdf") {
+        const runId = url.searchParams.get("runId");
+        const file = url.searchParams.get("file");
+        if (!runId || !file || !isSafeRunIdSegment(runId) || !isAllowedReportHtmlRel(file)) {
+          res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Bad request: need runId and file (relative .html path under the run folder)");
+          return;
+        }
+        const runRoot = path.join(outRoot, runId);
+        if (!isPathInsideRoot(outRoot, runRoot)) {
+          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Forbidden");
+          return;
+        }
+        const relFs = file
+          .replace(/\\/g, "/")
+          .split("/")
+          .filter(Boolean)
+          .join(path.sep);
+        const absHtml = path.join(runRoot, relFs);
+        if (!isPathInsideRoot(runRoot, absHtml)) {
+          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Forbidden");
+          return;
+        }
+        try {
+          const st = await stat(absHtml);
+          if (!st.isFile()) {
+            res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+            res.end("Not found");
+            return;
+          }
+        } catch {
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Not found");
+          return;
+        }
+        try {
+          const pdf = await renderHtmlFileToPdf(absHtml);
+          const base = path.basename(file, ".html").replace(/[^a-zA-Z0-9._-]+/g, "_");
+          res.writeHead(200, {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="health-${runId}-${base}.pdf"`,
+            "Cache-Control": "no-store",
+          });
+          res.end(pdf);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end(
+            `PDF generation failed: ${msg}\n\nIf Chromium is missing, run: npx playwright install chromium\n`,
+          );
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/issue-overrides") {
+        let body: string;
+        try {
+          body = await readBody(req, 512_000);
+        } catch {
+          res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Bad request");
+          return;
+        }
+        let payload: { runId?: unknown; overrides?: unknown };
+        try {
+          payload = JSON.parse(body) as { runId?: unknown; overrides?: unknown };
+        } catch {
+          res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Invalid JSON");
+          return;
+        }
+        const runIdParam =
+          typeof payload.runId === "string" ? payload.runId : String(payload.runId ?? "");
+        if (!runIdParam || !isSafeRunIdSegment(runIdParam)) {
+          res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Bad runId");
+          return;
+        }
+        const rawOv = payload.overrides;
+        if (!rawOv || typeof rawOv !== "object" || Array.isArray(rawOv)) {
+          res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("overrides must be an object");
+          return;
+        }
+        const allowed = new Set(["open", "ok", "working", "resolved"]);
+        const cleaned: Record<string, string> = {};
+        for (const [k, v] of Object.entries(rawOv as Record<string, unknown>)) {
+          if (typeof k !== "string" || k.length > 128) continue;
+          if (typeof v !== "string" || !allowed.has(v)) continue;
+          cleaned[k] = v;
+        }
+        const runRoot = path.join(outRoot, runIdParam);
+        if (!isPathInsideRoot(outRoot, runRoot)) {
+          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Forbidden");
+          return;
+        }
+        const outPath = path.join(runRoot, "issue-overrides.json");
+        if (!isPathInsideRoot(runRoot, outPath)) {
+          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Forbidden");
+          return;
+        }
+        try {
+          await mkdir(runRoot, { recursive: true });
+          await writeFile(
+            outPath,
+            JSON.stringify(
+              {
+                runId: runIdParam,
+                savedAt: new Date().toISOString(),
+                overrides: cleaned,
+              },
+              null,
+              2,
+            ),
+            "utf8",
+          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end(msg);
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: true }));
         return;
       }
 

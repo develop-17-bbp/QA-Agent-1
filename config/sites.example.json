@@ -123,6 +123,90 @@
         "type": "url_contains",
         "value": "thanks.html"
       }
+    },
+    {
+      "id": "local-fixture-live-chat-only",
+      "name": "Local fixture — live chat only (no form submit)",
+      "enabled": false,
+      "url": "http://127.0.0.1:3333/",
+      "forms": [],
+      "liveAgent": {
+        "openChatSelector": "#fixture-chat-launcher",
+        "messageInputSelector": "#fixture-chat-input",
+        "sendSelector": "#fixture-chat-send",
+        "visitorMessage": "QA-Agent fixture — testing live agent reply",
+        "agentMessageContains": "fixture agent here",
+        "timeoutMs": 20000
+      },
+      "success": {
+        "type": "text_visible",
+        "value": "fixture agent here",
+        "timeoutMs": 5000
+      }
+    },
+    {
+      "id": "local-fixture-chat-then-form",
+      "name": "Local fixture — chat first, then CAPTCHA + contact form",
+      "enabled": false,
+      "url": "http://127.0.0.1:3333/",
+      "liveAgent": {
+        "runBeforeForms": true,
+        "openChatSelector": "#fixture-chat-launcher",
+        "messageInputSelector": "#fixture-chat-input",
+        "sendSelector": "#fixture-chat-send",
+        "visitorMessage": "QA-Agent fixture — hello from visitor",
+        "agentMessageContains": "fixture agent here",
+        "timeoutMs": 25000
+      },
+      "forms": [
+        {
+          "selector": "form#fixture-contact-form",
+          "fields": [
+            {
+              "name": "name",
+              "selector": "input#name",
+              "value": "QA Agent (fixture)",
+              "action": "fill"
+            },
+            {
+              "name": "email",
+              "selector": "input#email",
+              "value": "qa-agent@example.test",
+              "action": "fill"
+            },
+            {
+              "name": "company",
+              "selector": "input#company",
+              "value": "Internal QA",
+              "action": "fill"
+            },
+            {
+              "name": "message",
+              "selector": "textarea#message",
+              "value": "Automated submission after chat + CAPTCHA stand-in.",
+              "action": "fill"
+            },
+            {
+              "name": "captcha-sim",
+              "selector": "#fixture-captcha-simulate",
+              "value": "",
+              "action": "click"
+            }
+          ],
+          "captcha": {
+            "strategy": "wait_for_selector",
+            "waitSelector": "#fixture-captcha-token.fixture-captcha-visible",
+            "waitTimeoutMs": 8000
+          },
+          "submit": {
+            "selector": "button[type=\"submit\"]"
+          }
+        }
+      ],
+      "success": {
+        "type": "url_contains",
+        "value": "thanks.html"
+      }
     }
   ]
 }

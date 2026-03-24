@@ -21,9 +21,12 @@ program
 program
   .command("health")
   .description(
-    "Read root URLs from a .txt file, crawl same-origin pages, verify internal links — write per-site HTML/JSON under --out/<runId>/",
+    "Crawl same-origin pages, verify internal links — write per-site HTML/JSON under --out/<runId>/. Use --serve alone for UI-only (paste URLs in the browser).",
   )
-  .requiredOption("--urls <file>", "Text file: one https URL per line (# comments allowed)")
+  .option(
+    "--urls [file]",
+    "Optional: text file with one https URL per line (# comments). Required for non-interactive runs without --serve",
+  )
   .option("--out <dir>", "Output root folder (default: artifacts/health)", "artifacts/health")
   .option(
     "--concurrency <n>",
@@ -72,7 +75,7 @@ program
   .option("--pagespeed-timeout-ms <n>", "Timeout per PageSpeed API request (ms)", "120000")
   .action(
     async (opts: {
-      urls: string;
+      urls?: string;
       out: string;
       concurrency: string;
       maxPages: string;
@@ -113,6 +116,12 @@ program
         throw new Error(`Invalid port: ${opts.port}`);
       }
 
+      if (!opts.serve && !opts.urls) {
+        throw new Error(
+          "Pass --urls <file> for a CLI-only run, or use --serve (optionally with --urls) to open the dashboard.",
+        );
+      }
+
       const pagespeedMaxUrls = Number.parseInt(opts.pagespeedMaxUrls, 10);
       const pagespeedConcurrency = Number.parseInt(opts.pagespeedConcurrency, 10);
       const pagespeedTimeoutMs = Number.parseInt(opts.pagespeedTimeoutMs, 10);
@@ -132,7 +141,7 @@ program
       }
 
       const orchestrateBase = {
-        urlsFile: path.resolve(opts.urls),
+        ...(opts.urls ? { urlsFile: path.resolve(opts.urls) } : {}),
         outRoot: path.resolve(opts.out),
         maxPages,
         maxLinkChecks,
@@ -160,11 +169,15 @@ program
           })
         : await orchestrateHealthCheck(orchestrateBase);
 
-      console.log(`\nHealth run ${runId} complete.`);
-      console.log(`Index: ${runDir}/index.html (per-site + combined MASTER-all-sites-… reports)`);
-      console.log(`Summary: ${runDir}/summary.txt`);
+      if (runId) {
+        console.log(`\nHealth run ${runId} complete.`);
+        console.log(`Index: ${runDir}/index.html (per-site + combined MASTER-all-sites-… reports)`);
+        console.log(`Summary: ${runDir}/summary.txt`);
+      } else if (opts.serve) {
+        console.log(`\nDashboard running — paste URLs in the UI to start crawls and reports.`);
+      }
       if (opts.serve) {
-        console.log(`Live UI was on http://127.0.0.1:${servePort}/ (same origin as /reports/…)`);
+        console.log(`Live UI: http://127.0.0.1:${servePort}/ (reports: /reports/<runId>/… · PDF: /api/pdf)`);
       }
       process.exitCode = siteFailures > 0 ? 1 : 0;
     },

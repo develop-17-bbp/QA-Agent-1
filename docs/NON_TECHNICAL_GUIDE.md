@@ -34,6 +34,8 @@ We look after **many websites**. Opening every page by hand does not scale. This
 
 Sometimes the technical team runs it with a **small local webpage** that shows **progress** while it runs. That’s **optional** and meant for **our operators**, not a public website.
 
+The same page can **open the finished reports** from your computer. The reports have a **menu bar at the top** so you can jump between the **list of sites** for that run, the **single combined report** for all sites, and **back to the live dashboard**. If you use the reports, you may also see **triage** options on problem rows (for example “resolved” or “OK”) so teams can track what was fixed — that stays on your machine unless you use the server mode that saves a small file with the run.
+
 ---
 
 ## Where things live (conceptually)

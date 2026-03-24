@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PageFetchRecord, PageSpeedInsightRecord, SiteHealthReport } from "./types.js";
@@ -5,21 +6,24 @@ import type { PageFetchRecord, PageSpeedInsightRecord, SiteHealthReport } from "
 /** Shared styles for single-site and combined health HTML. */
 const HEALTH_REPORT_CSS = `
     :root {
-      --bg: #f0f4f8;
-      --surface: #ffffff;
-      --text: #0f172a;
-      --text-muted: #64748b;
-      --border: #e2e8f0;
-      --accent: #2563eb;
-      --accent-soft: #eff6ff;
-      --ok: #059669;
-      --ok-bg: #ecfdf5;
-      --err: #dc2626;
-      --err-bg: #fef2f2;
-      --warn: #d97706;
-      --radius: 12px;
-      --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.04);
-      --font: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      --bg: #f5f5f7;
+      --surface: rgba(255, 255, 255, 0.82);
+      --surface-solid: #ffffff;
+      --text: #1d1d1f;
+      --text-muted: #86868b;
+      --border: rgba(0, 0, 0, 0.08);
+      --accent: #0071e3;
+      --accent-soft: rgba(0, 113, 227, 0.08);
+      --ok: #34c759;
+      --ok-bg: rgba(52, 199, 89, 0.12);
+      --err: #ff3b30;
+      --err-bg: rgba(255, 59, 48, 0.08);
+      --warn: #ff9500;
+      --radius: 20px;
+      --radius-sm: 12px;
+      --shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08);
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     }
     * { box-sizing: border-box; }
     body {
@@ -27,136 +31,179 @@ const HEALTH_REPORT_CSS = `
       min-height: 100vh;
       font-family: var(--font);
       font-size: 15px;
-      line-height: 1.5;
+      line-height: 1.47059;
+      letter-spacing: -0.022em;
       color: var(--text);
-      background: linear-gradient(165deg, #e8eef5 0%, var(--bg) 40%, #f8fafc 100%);
+      background: linear-gradient(180deg, #e8e8ed 0%, var(--bg) 28%, var(--bg) 100%);
       -webkit-font-smoothing: antialiased;
     }
     .report-shell {
-      max-width: 1120px;
+      max-width: 1180px;
       margin: 0 auto;
-      padding: 28px 20px 48px;
+      padding: 32px 22px 56px;
     }
     .report-header {
       background: var(--surface);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
       border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 28px 28px 24px;
-      margin-bottom: 24px;
+      box-shadow: var(--shadow-lg);
+      padding: 32px 32px 28px;
+      margin-bottom: 28px;
       border: 1px solid var(--border);
     }
     .report-kicker {
-      margin: 0 0 8px;
-      font-size: 0.75rem;
+      margin: 0 0 10px;
+      font-size: 0.72rem;
       font-weight: 600;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--accent);
+      color: var(--text-muted);
     }
     .report-header h1 {
-      margin: 0 0 16px;
-      font-size: 1.65rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      line-height: 1.25;
+      margin: 0 0 12px;
+      font-size: 2.125rem;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
       color: var(--text);
     }
     .report-header .lead {
-      margin: 0 0 20px;
+      margin: 0 0 24px;
       color: var(--text-muted);
-      font-size: 0.95rem;
+      font-size: 1.0625rem;
+      font-weight: 400;
     }
     .report-header .lead a { color: var(--accent); font-weight: 500; text-decoration: none; }
     .report-header .lead a:hover { text-decoration: underline; }
     .stat-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+      gap: 10px;
+    }
+    .stat-grid--wide {
+      margin-top: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
     }
     .stat {
-      background: var(--accent-soft);
-      border: 1px solid #bfdbfe;
-      border-radius: 10px;
+      background: var(--surface-solid);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
       padding: 14px 16px;
+      box-shadow: var(--shadow);
     }
     .stat-label {
       display: block;
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       color: var(--text-muted);
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
     .stat-value {
-      font-size: 1.15rem;
-      font-weight: 700;
+      font-size: 1.25rem;
+      font-weight: 600;
       font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
       color: var(--text);
     }
-    .stat-value small { font-size: 0.8rem; font-weight: 500; color: var(--text-muted); }
+    .stat-value small { font-size: 0.8125rem; font-weight: 500; color: var(--text-muted); }
+    .http-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+      align-items: center;
+    }
+    .http-pills__label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+    .http-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 11px;
+      border-radius: 100px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      border: 1px solid var(--border);
+      background: var(--surface-solid);
+    }
+    .http-pill--2xx { color: #1d7a42; background: rgba(52, 199, 89, 0.12); border-color: rgba(52, 199, 89, 0.25); }
+    .http-pill--3xx { color: #8b6914; background: rgba(255, 149, 0, 0.12); border-color: rgba(255, 149, 0, 0.25); }
+    .http-pill--4xx { color: #b45309; background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); }
+    .http-pill--5xx { color: #b91c1c; background: rgba(255, 59, 48, 0.1); border-color: rgba(255, 59, 48, 0.25); }
+    .http-pill--err { color: #6b7280; background: rgba(107, 114, 128, 0.12); border-color: rgba(107, 114, 128, 0.2); }
     .report-section {
-      background: var(--surface);
+      background: var(--surface-solid);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       border: 1px solid var(--border);
-      padding: 24px 26px 26px;
-      margin-bottom: 20px;
+      padding: 26px 28px 28px;
+      margin-bottom: 22px;
     }
     .report-section h2 {
-      margin: 0 0 6px;
-      font-size: 1.1rem;
-      font-weight: 700;
-      letter-spacing: -0.01em;
+      margin: 0 0 8px;
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
       color: var(--text);
-      padding-bottom: 10px;
-      border-bottom: 2px solid var(--accent);
-      display: inline-block;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
       width: 100%;
     }
     .section-desc {
-      margin: 10px 0 16px;
-      font-size: 0.875rem;
+      margin: 12px 0 18px;
+      font-size: 0.9375rem;
       color: var(--text-muted);
     }
     .section-desc a { color: var(--accent); }
     .table-wrap {
       overflow-x: auto;
-      margin: 0 -4px;
-      border-radius: 8px;
+      margin: 0;
+      border-radius: var(--radius-sm);
       border: 1px solid var(--border);
     }
     table.data-table {
       border-collapse: collapse;
       width: 100%;
-      font-size: 0.875rem;
+      font-size: 0.8125rem;
     }
     .data-table thead th {
       text-align: left;
-      padding: 12px 14px;
-      font-size: 0.72rem;
-      font-weight: 700;
+      padding: 11px 12px;
+      font-size: 0.65rem;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       color: var(--text-muted);
-      background: #f8fafc;
-      border-bottom: 2px solid var(--border);
+      background: rgba(0, 0, 0, 0.02);
+      border-bottom: 1px solid var(--border);
       white-space: nowrap;
     }
     .data-table tbody td {
-      padding: 11px 14px;
-      border-bottom: 1px solid #f1f5f9;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
       vertical-align: top;
       word-break: break-word;
     }
-    .data-table tbody tr:nth-child(even) td { background: #fafbfc; }
-    .data-table tbody tr:hover td { background: #f1f5f9; }
-    .data-table tbody tr.row-ok td { background: rgba(16, 185, 129, 0.07) !important; }
-    .data-table tbody tr.row-err td { background: rgba(239, 68, 68, 0.07) !important; }
-    .data-table tbody tr.row-ok:hover td { background: rgba(16, 185, 129, 0.12) !important; }
-    .data-table tbody tr.row-err:hover td { background: rgba(239, 68, 68, 0.12) !important; }
+    .data-table tbody tr:nth-child(even) td { background: rgba(0, 0, 0, 0.015); }
+    .data-table tbody tr:hover td { background: rgba(0, 113, 227, 0.04) !important; }
+    .data-table tbody tr.row-ok td { background: rgba(52, 199, 89, 0.06) !important; }
+    .data-table tbody tr.row-err td { background: rgba(255, 59, 48, 0.06) !important; }
+    .data-table tbody tr.row-ok:hover td { background: rgba(52, 199, 89, 0.1) !important; }
+    .data-table tbody tr.row-err:hover td { background: rgba(255, 59, 48, 0.1) !important; }
     .data-table tbody tr:last-child td { border-bottom: none; }
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .cell-mono {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
     .data-table a {
       color: var(--accent);
       text-decoration: none;
@@ -166,19 +213,19 @@ const HEALTH_REPORT_CSS = `
     .cell-ok { color: var(--ok); font-weight: 600; }
     .cell-err { color: var(--err); font-weight: 500; }
     .empty-state {
-      padding: 20px;
+      padding: 22px;
       text-align: center;
-      color: var(--ok);
+      color: #1d7a42;
       font-weight: 500;
       background: var(--ok-bg);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
     }
     .ok { color: var(--ok); }
     .err { color: var(--err); }
     .meta { color: var(--text-muted); font-size: 0.85rem; }
-    .score-bad { background: #fef2f2; color: #991b1b; border-color: #fecaca !important; }
-    .score-warn { background: #fffbeb; color: #92400e; border-color: #fde68a !important; }
-    .score-good { background: #ecfdf5; color: #065f46; border-color: #a7f3d0 !important; }
+    .score-bad { background: rgba(255, 59, 48, 0.1); color: #b91c1c; border-color: rgba(255, 59, 48, 0.25) !important; }
+    .score-warn { background: rgba(255, 149, 0, 0.12); color: #9a3412; border-color: rgba(255, 149, 0, 0.3) !important; }
+    .score-good { background: rgba(52, 199, 89, 0.12); color: #166534; border-color: rgba(52, 199, 89, 0.3) !important; }
     .report-footer {
       margin-top: 32px;
       padding-top: 16px;
@@ -192,16 +239,16 @@ const HEALTH_REPORT_CSS = `
     .psi-card {
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 22px 24px;
-      background: linear-gradient(180deg, #fafbfc 0%, #fff 32%);
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+      padding: 24px 26px;
+      background: var(--surface-solid);
+      box-shadow: var(--shadow);
     }
     .psi-card-err { border-color: #fecaca; background: #fffafa; }
     .psi-card-err .err { margin: 0; font-size: 0.9rem; line-height: 1.45; }
     .psi-card-top { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
     .psi-gauge-box { flex: 0 0 auto; text-align: center; width: 148px; }
     .psi-gauge { width: 120px; height: 120px; display: block; margin: 0 auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,.06)); }
-    .psi-gauge-bg { stroke: #e2e8f0; }
+    .psi-gauge-bg { stroke: rgba(0, 0, 0, 0.08); }
     .psi-gauge-score { font-size: 28px; font-weight: 700; fill: var(--text); font-family: var(--font); }
     .psi-gauge-cap { margin: 6px 0 0; font-size: 0.7rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
     .psi-card-head { flex: 1; min-width: 220px; }
@@ -210,8 +257,8 @@ const HEALTH_REPORT_CSS = `
     .psi-cats { display: flex; flex-wrap: wrap; gap: 8px; }
     .psi-pill {
       display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 700;
-      border: 1px solid var(--border); background: #f8fafc;
+      padding: 6px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+      border: 1px solid var(--border); background: rgba(0, 0, 0, 0.02);
     }
     .psi-pill-k { font-weight: 600; color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: .06em; }
     .psi-foot { margin: 14px 0 0; font-size: 0.8rem; }
@@ -239,12 +286,13 @@ const HEALTH_REPORT_CSS = `
     .psi-opp-title { display: inline; margin-right: 8px; }
     .psi-opp-save { font-weight: 700; color: var(--accent); }
     .master-site-heading {
-      margin: 28px 0 12px;
+      margin: 32px 0 14px;
       padding-bottom: 10px;
-      border-bottom: 2px solid #bfdbfe;
-      color: var(--accent);
-      font-size: 1.15rem;
-      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
     }
     /* Table filters (client-side) */
     .table-filters {
@@ -254,9 +302,9 @@ const HEALTH_REPORT_CSS = `
       gap: 10px 14px;
       margin-bottom: 14px;
       padding: 14px 16px;
-      background: #f8fafc;
+      background: rgba(0, 0, 0, 0.02);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
     }
     .table-filters__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
     .table-filters__label {
@@ -292,7 +340,7 @@ const HEALTH_REPORT_CSS = `
       cursor: pointer;
       align-self: flex-end;
     }
-    .table-filters__reset:hover { background: #f1f5f9; }
+    .table-filters__reset:hover { background: rgba(0, 113, 227, 0.08); border-color: var(--accent); color: var(--accent); }
     .table-filters__count {
       font-size: 0.82rem;
       color: var(--text-muted);
@@ -301,25 +349,104 @@ const HEALTH_REPORT_CSS = `
       white-space: nowrap;
     }
     .data-table tbody tr.filter-hidden { display: none !important; }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .issue-triage-cell { white-space: nowrap; }
+    .issue-triage-cell--na { color: var(--text-muted); }
+    .issue-triage-select {
+      font: inherit;
+      font-size: 0.78rem;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-solid);
+      color: var(--text);
+      max-width: 11rem;
+    }
+    .data-table tbody tr[data-triage-status="ok"] td,
+    .data-table tbody tr[data-triage-status="working"] td,
+    .data-table tbody tr[data-triage-status="resolved"] td {
+      box-shadow: inset 3px 0 0 0 rgba(52, 199, 89, 0.55);
+    }
+    /* Sticky dashboard-style nav (single-site + combined reports) */
+    .report-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: saturate(180%) blur(16px);
+      -webkit-backdrop-filter: saturate(180%) blur(16px);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+    }
+    .report-nav__inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 10px 22px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+    }
+    .report-nav__brand {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-right: 12px;
+    }
+    .report-nav__sep {
+      color: var(--text-muted);
+      font-weight: 400;
+      margin: 0 2px;
+      user-select: none;
+    }
+    .report-nav__link {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 8px;
+    }
+    .report-nav__link:hover { background: var(--accent-soft); }
+    .report-nav__here {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 8px;
+      background: rgba(0, 113, 227, 0.08);
+    }
+    .report-nav__dash { display: none; }
+    .report-nav--http .report-nav__dash { display: inline; }
 `;
 
 const HEALTH_REPORT_HEAD = `
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="color-scheme" content="light"/>
 `;
 
 const INDEX_PAGE_CSS = `
     :root {
-      --bg: #f0f4f8;
+      --bg: #f5f5f7;
       --surface: #ffffff;
-      --text: #0f172a;
-      --muted: #64748b;
-      --accent: #2563eb;
-      --border: #e2e8f0;
-      --font: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+      --text: #1d1d1f;
+      --muted: #86868b;
+      --accent: #0071e3;
+      --border: rgba(0, 0, 0, 0.08);
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
     }
     * { box-sizing: border-box; }
     body {
@@ -327,57 +454,102 @@ const INDEX_PAGE_CSS = `
       min-height: 100vh;
       font-family: var(--font);
       color: var(--text);
-      background: linear-gradient(165deg, #e8eef5 0%, var(--bg) 50%, #f8fafc 100%);
+      background: linear-gradient(180deg, #e8e8ed 0%, var(--bg) 35%, var(--bg) 100%);
       -webkit-font-smoothing: antialiased;
-      padding: 32px 20px 48px;
+      padding: 36px 22px 52px;
+      letter-spacing: -0.022em;
     }
-    .idx-wrap { max-width: 920px; margin: 0 auto; }
+    .idx-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: saturate(180%) blur(16px);
+      border-bottom: 1px solid var(--border);
+      margin: -36px -22px 24px -22px;
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+    }
+    .idx-nav__brand {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-right: 8px;
+    }
+    .idx-nav__link {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 8px;
+    }
+    .idx-nav__link:hover { background: rgba(0, 113, 227, 0.08); }
+    .idx-nav__here {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 8px;
+      background: rgba(0, 113, 227, 0.08);
+    }
+    .idx-nav__dash { display: none; }
+    .idx-nav--http .idx-nav__dash { display: inline; }
+    .idx-wrap { max-width: 960px; margin: 0 auto; }
     .idx-hero {
-      background: var(--surface);
-      border-radius: 14px;
-      padding: 28px 30px;
-      margin-bottom: 22px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-radius: 20px;
+      padding: 32px 34px;
+      margin-bottom: 24px;
       border: 1px solid var(--border);
-      box-shadow: 0 2px 12px rgba(15,23,42,.06);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
     }
-    .idx-hero h1 { margin: 0 0 8px; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
-    .idx-kicker { margin: 0 0 16px; font-size: 0.75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
-    .idx-meta { margin: 0 0 8px; font-size: 0.9rem; color: var(--muted); }
-    .idx-meta strong { color: var(--text); }
+    .idx-hero h1 { margin: 0 0 10px; font-size: 1.75rem; font-weight: 600; letter-spacing: -0.03em; }
+    .idx-kicker { margin: 0 0 18px; font-size: 0.72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .idx-meta { margin: 0 0 8px; font-size: 0.9375rem; color: var(--muted); }
+    .idx-meta strong { color: var(--text); font-weight: 600; }
     .idx-combined {
-      margin-top: 14px;
-      padding: 14px 16px;
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      border-radius: 10px;
-      font-size: 0.92rem;
+      margin-top: 16px;
+      padding: 14px 18px;
+      background: rgba(0, 113, 227, 0.06);
+      border: 1px solid rgba(0, 113, 227, 0.15);
+      border-radius: 12px;
+      font-size: 0.9375rem;
     }
     .idx-combined a { color: var(--accent); font-weight: 600; text-decoration: none; }
     .idx-combined a:hover { text-decoration: underline; }
     .idx-table-wrap {
       background: var(--surface);
-      border-radius: 12px;
+      border-radius: 16px;
       border: 1px solid var(--border);
       overflow: hidden;
-      box-shadow: 0 2px 8px rgba(15,23,42,.05);
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
     }
-    table.idx-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table.idx-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
     .idx-table th {
       text-align: left;
-      padding: 14px 16px;
-      font-size: 0.7rem;
+      padding: 14px 18px;
+      font-size: 0.65rem;
       text-transform: uppercase;
-      letter-spacing: .05em;
+      letter-spacing: .06em;
       color: var(--muted);
-      background: #f8fafc;
-      border-bottom: 2px solid var(--border);
+      font-weight: 600;
+      background: rgba(0, 0, 0, 0.02);
+      border-bottom: 1px solid var(--border);
     }
-    .idx-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .idx-table td { padding: 14px 18px; border-bottom: 1px solid rgba(0, 0, 0, 0.05); vertical-align: middle; }
     .idx-table tr:last-child td { border-bottom: none; }
-    .idx-table tr:hover td { background: #f8fafc; }
-    .idx-table a { color: var(--accent); font-weight: 600; text-decoration: none; font-size: 0.85rem; }
+    .idx-table tr:hover td { background: rgba(0, 113, 227, 0.04); }
+    .idx-table a { color: var(--accent); font-weight: 600; text-decoration: none; font-size: 0.8125rem; }
     .idx-table a:hover { text-decoration: underline; }
-    .idx-foot { margin-top: 20px; font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+    .idx-foot { margin-top: 22px; font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
 `;
 
 function esc(s: string): string {
@@ -386,6 +558,199 @@ function esc(s: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+/** Stable id for triage persistence (matches across HTML regenerations for same logical issue). */
+function issueKeyHash(parts: string[]): string {
+  return createHash("sha256").update(parts.join("|"), "utf8").digest("base64url").slice(0, 24);
+}
+
+function triageSelectCell(issueKey: string): string {
+  const id = `triage-${issueKey}`;
+  return `<td class="issue-triage-cell">
+  <label class="visually-hidden" for="${id}">Triage</label>
+  <select class="issue-triage-select" id="${id}" data-issue-key="${esc(issueKey)}" aria-label="Triage status">
+    <option value="open">Open</option>
+    <option value="ok">OK</option>
+    <option value="working">Working</option>
+    <option value="resolved">Resolved</option>
+  </select>
+</td>`;
+}
+
+function triageEmptyCell(): string {
+  return `<td class="issue-triage-cell issue-triage-cell--na">—</td>`;
+}
+
+/** Sticky nav shared by per-site and combined health HTML (stable links via master.html). */
+function buildHealthNavHtml(opts: { variant: "site" | "master" }): string {
+  const indexHref = opts.variant === "site" ? "../index.html" : "./index.html";
+  const combinedHref = opts.variant === "site" ? "../master.html" : "./master.html";
+  if (opts.variant === "site") {
+    return `<nav class="report-nav" aria-label="Health run navigation">
+  <div class="report-nav__inner">
+    <span class="report-nav__brand">QA-Agent</span>
+    <a class="report-nav__link" href="${indexHref}">Run index</a>
+    <span class="report-nav__sep" aria-hidden="true">·</span>
+    <a class="report-nav__link" href="${combinedHref}">Combined report</a>
+    <span class="report-nav__sep" aria-hidden="true">·</span>
+    <a class="report-nav__link report-nav__dash" href="/">Live dashboard</a>
+  </div>
+</nav>`;
+  }
+  return `<nav class="report-nav" aria-label="Health run navigation">
+  <div class="report-nav__inner">
+    <span class="report-nav__brand">QA-Agent</span>
+    <a class="report-nav__link" href="${indexHref}">Run index</a>
+    <span class="report-nav__sep" aria-hidden="true">·</span>
+    <span class="report-nav__here" aria-current="page">Combined report</span>
+    <span class="report-nav__sep" aria-hidden="true">·</span>
+    <a class="report-nav__link report-nav__dash" href="/">Live dashboard</a>
+  </div>
+</nav>`;
+}
+
+const HEALTH_NAV_SCRIPT = `<script>
+(function(){
+  if(location.protocol==="http:"||location.protocol==="https:"){
+    document.querySelectorAll(".report-nav").forEach(function(n){ n.classList.add("report-nav--http"); });
+    document.querySelectorAll(".idx-nav").forEach(function(n){ n.classList.add("idx-nav--http"); });
+  }
+})();
+<\/script>`;
+
+/** Small redirect page so per-site reports can link to ../master.html before the timestamped filename exists. */
+export function buildMasterRedirectHtml(masterHtmlFileName: string): string {
+  const base = path.basename(masterHtmlFileName);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Combined health — opening…</title>
+  <meta http-equiv="refresh" content="0;url=${esc(base)}"/>
+</head>
+<body style="font-family:system-ui,-apple-system,sans-serif;padding:2rem;background:#f5f5f7;color:#444">
+  <p>Opening <a href="${esc(base)}">combined health report</a>…</p>
+</body>
+</html>`;
+}
+
+function formatBytes(n: number): string {
+  if (n === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let v = n;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  const rounded = i === 0 ? Math.round(v) : v >= 10 ? Math.round(v) : Number(v.toFixed(1));
+  return `${rounded} ${units[i]}`;
+}
+
+interface PageAggregateStats {
+  count: number;
+  okCount: number;
+  successPct: number;
+  avgMs: number;
+  medianMs: number;
+  p95Ms: number;
+  minMs: number;
+  maxMs: number;
+  totalBytes: number;
+  http2xx: number;
+  http3xx: number;
+  http4xx: number;
+  http5xx: number;
+  httpErr: number;
+  redirectedCount: number;
+}
+
+function computePageAggregateStats(pages: PageFetchRecord[]): PageAggregateStats {
+  const count = pages.length;
+  if (count === 0) {
+    return {
+      count: 0,
+      okCount: 0,
+      successPct: 0,
+      avgMs: 0,
+      medianMs: 0,
+      p95Ms: 0,
+      minMs: 0,
+      maxMs: 0,
+      totalBytes: 0,
+      http2xx: 0,
+      http3xx: 0,
+      http4xx: 0,
+      http5xx: 0,
+      httpErr: 0,
+      redirectedCount: 0,
+    };
+  }
+  const times = pages.map((p) => p.durationMs).sort((a, b) => a - b);
+  const sum = times.reduce((a, b) => a + b, 0);
+  const mid = Math.floor((times.length - 1) / 2);
+  const medianMs =
+    times.length % 2 === 1 ? times[mid]! : Math.round((times[mid]! + times[mid + 1]!) / 2);
+  const p95Idx = Math.max(0, Math.ceil(0.95 * times.length) - 1);
+  const p95Ms = times[p95Idx] ?? 0;
+  let okCount = 0;
+  let totalBytes = 0;
+  let http2xx = 0;
+  let http3xx = 0;
+  let http4xx = 0;
+  let http5xx = 0;
+  let httpErr = 0;
+  let redirectedCount = 0;
+  for (const p of pages) {
+    if (p.ok) okCount++;
+    if (p.bodyBytes != null) totalBytes += p.bodyBytes;
+    if (p.redirected) redirectedCount++;
+    if (p.status === 0) httpErr++;
+    else if (p.status >= 200 && p.status < 300) http2xx++;
+    else if (p.status >= 300 && p.status < 400) http3xx++;
+    else if (p.status >= 400 && p.status < 500) http4xx++;
+    else if (p.status >= 500) http5xx++;
+  }
+  return {
+    count,
+    okCount,
+    successPct: Math.round((100 * okCount) / count),
+    avgMs: Math.round(sum / count),
+    medianMs,
+    p95Ms,
+    minMs: times[0] ?? 0,
+    maxMs: times[times.length - 1] ?? 0,
+    totalBytes,
+    http2xx,
+    http3xx,
+    http4xx,
+    http5xx,
+    httpErr,
+    redirectedCount,
+  };
+}
+
+function shortMime(m: string | undefined): string {
+  if (!m) return "—";
+  return m.length > 40 ? `${m.slice(0, 37)}…` : m;
+}
+
+function displayRedirectPath(p: PageFetchRecord): string {
+  if (!p.redirected || !p.finalUrl) return "—";
+  if (p.finalUrl === p.url) return "—";
+  try {
+    const u = new URL(p.finalUrl);
+    const path = `${u.pathname}${u.search}`;
+    return path.length > 42 ? `${path.slice(0, 39)}…` : path || "—";
+  } catch {
+    return p.finalUrl.length > 42 ? `${p.finalUrl.slice(0, 39)}…` : p.finalUrl;
+  }
+}
+
+function redirectYesNo(p: PageFetchRecord): string {
+  return p.redirected ? "Yes" : "No";
 }
 
 /** Human-readable outcome for the “Pages fetched” table. */
@@ -532,6 +897,70 @@ const HEALTH_TABLE_FILTERS_SCRIPT = `<script>
     go();
   }
   document.querySelectorAll("[data-table-filters-for]").forEach(wire);
+})();
+<\/script>`;
+
+/** Persist triage (Open / OK / Working / Resolved) per issue row; merges server JSON + localStorage. */
+const HEALTH_ISSUE_TRIAGE_SCRIPT = `<script>
+(function(){
+  function runId(){ return document.body.getAttribute("data-run-id")||""; }
+  function storageKey(){ return "qa-agent-issue-overrides-"+(runId()||"default"); }
+  function loadLocal(){ try{ return JSON.parse(localStorage.getItem(storageKey())||"{}")||{}; }catch(e){ return {}; } }
+  function saveLocal(o){ try{ localStorage.setItem(storageKey(), JSON.stringify(o)); }catch(e){} }
+  function applyRow(tr, sel, map){
+    var k=tr.getAttribute("data-issue-key");
+    if(!k)return;
+    var v=map[k]||"open";
+    if(sel)sel.value=v;
+    tr.setAttribute("data-triage-status", v);
+  }
+  function merge(a,b){
+    var o={};
+    for(var k in a)o[k]=a[k];
+    for(var k in b)o[k]=b[k];
+    return o;
+  }
+  async function loadServer(){
+    var rid=runId();
+    if(!rid)return {};
+    try{
+      var r=await fetch("/reports/"+encodeURIComponent(rid)+"/issue-overrides.json",{cache:"no-store"});
+      if(!r.ok)return {};
+      var j=await r.json();
+      return (j&&typeof j==="object"&&j.overrides&&typeof j.overrides==="object")?j.overrides:j;
+    }catch(e){ return {}; }
+  }
+  function postAll(map){
+    var rid=runId();
+    if(!rid)return;
+    var p=window.location.protocol;
+    if(p!=="http:"&&p!=="https:")return;
+    try{
+      fetch("/api/issue-overrides",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:rid,overrides:map})});
+    }catch(e){}
+  }
+  async function init(){
+    var server=await loadServer();
+    var local=loadLocal();
+    var map=merge(server,local);
+    document.querySelectorAll("tr[data-issue-key]").forEach(function(tr){
+      var sel=tr.querySelector(".issue-triage-select");
+      applyRow(tr, sel, map);
+    });
+    document.querySelectorAll(".issue-triage-select").forEach(function(sel){
+      sel.addEventListener("change", function(){
+        var tr=sel.closest("tr");
+        var k=tr&&tr.getAttribute("data-issue-key");
+        if(!k)return;
+        var m=loadLocal();
+        m[k]=sel.value;
+        saveLocal(m);
+        if(tr)tr.setAttribute("data-triage-status", sel.value);
+        postAll(m);
+      });
+    });
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
 <\/script>`;
 
@@ -692,8 +1121,26 @@ function buildPsiCardHtml(ins: PageSpeedInsightRecord): string {
 </article>`;
 }
 
-export function buildSiteHealthHtml(report: SiteHealthReport): string {
+function httpPillsHtml(agg: PageAggregateStats): string {
+  if (agg.count === 0) return "";
+  return `<div class="http-pills" role="group" aria-label="HTTP status counts">
+    <span class="http-pills__label">Responses</span>
+    <span class="http-pill http-pill--2xx">2xx · ${agg.http2xx}</span>
+    <span class="http-pill http-pill--3xx">3xx · ${agg.http3xx}</span>
+    <span class="http-pill http-pill--4xx">4xx · ${agg.http4xx}</span>
+    <span class="http-pill http-pill--5xx">5xx · ${agg.http5xx}</span>
+    <span class="http-pill http-pill--err">Err · ${agg.httpErr}</span>
+  </div>`;
+}
+
+export function buildSiteHealthHtml(
+  report: SiteHealthReport,
+  options?: { runId?: string },
+): string {
+  const runIdAttr = options?.runId ?? "";
   const c = report.crawl;
+  const host = c.hostname;
+  const agg = computePageAggregateStats(c.pages);
   const brokenSorted = [...c.brokenLinks].sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0));
   const pagesSorted = [...c.pages].sort((a, b) => b.durationMs - a.durationMs);
   const linkChecksSorted = [...(c.linkChecks ?? [])].sort((a, b) => b.durationMs - a.durationMs);
@@ -710,17 +1157,19 @@ export function buildSiteHealthHtml(report: SiteHealthReport): string {
 
   const brokenRows =
     brokenSorted.length === 0
-      ? `<tr data-filter-skip="1"><td colspan="5"><div class="empty-state">No broken internal links detected in this run.</div></td></tr>`
+      ? `<tr data-filter-skip="1"><td colspan="6"><div class="empty-state">No broken internal links detected in this run.</div></td></tr>`
       : brokenSorted
           .map((b) => {
             const ms = b.durationMs ?? 0;
             const ft = `${b.foundOn} ${b.target} ${b.error ?? ""}`.toLowerCase();
-            return `<tr data-filter-text="${esc(ft)}" data-filter-ms="${String(ms)}" data-filter-result="${brokenHttpKind(b.status)}">
+            const ikey = issueKeyHash(["broken", host, b.foundOn, b.target, String(b.status ?? ""), b.error ?? ""]);
+            return `<tr data-issue-key="${esc(ikey)}" data-filter-text="${esc(ft)}" data-filter-ms="${String(ms)}" data-filter-result="${brokenHttpKind(b.status)}">
   <td>${esc(b.foundOn)}</td>
   <td><a href="${esc(b.target)}">${esc(b.target)}</a></td>
   <td>${b.status ?? "—"}</td>
   <td class="num">${fmtMs(b.durationMs)}</td>
   <td class="cell-err">${esc(b.error ?? "")}</td>
+  ${triageSelectCell(ikey)}
 </tr>`;
           })
           .join("\n");
@@ -732,6 +1181,20 @@ export function buildSiteHealthHtml(report: SiteHealthReport): string {
     ? `<div class="stat"><span class="stat-label">PageSpeed API</span><span class="stat-value">${esc(c.pageSpeedInsightsMeta.strategy)} <small>· ${c.pageSpeedInsightsMeta.urlsAnalyzed} URLs · ${formatDuration(c.pageSpeedInsightsMeta.totalDurationMs)}</small></span></div>`
     : "";
 
+  const aggStatsHtml =
+    agg.count === 0
+      ? ""
+      : `<div class="stat-grid stat-grid--wide">
+    <div class="stat"><span class="stat-label">Avg response</span><span class="stat-value">${agg.avgMs}<small> ms</small></span></div>
+    <div class="stat"><span class="stat-label">Median</span><span class="stat-value">${agg.medianMs}<small> ms</small></span></div>
+    <div class="stat"><span class="stat-label">P95</span><span class="stat-value">${agg.p95Ms}<small> ms</small></span></div>
+    <div class="stat"><span class="stat-label">Min · max</span><span class="stat-value">${agg.minMs}<small> · ${agg.maxMs} ms</small></span></div>
+    <div class="stat"><span class="stat-label">Success rate</span><span class="stat-value">${agg.successPct}<small> %</small></span></div>
+    <div class="stat"><span class="stat-label">HTML transferred</span><span class="stat-value">${formatBytes(agg.totalBytes)}</span></div>
+    <div class="stat"><span class="stat-label">Redirects</span><span class="stat-value">${agg.redirectedCount}<small> pages</small></span></div>
+  </div>
+  ${httpPillsHtml(agg)}`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -739,7 +1202,8 @@ export function buildSiteHealthHtml(report: SiteHealthReport): string {
   <title>Health — ${esc(c.hostname)}</title>
   <style>${HEALTH_REPORT_CSS}</style>
 </head>
-<body>
+<body data-run-id="${esc(runIdAttr)}">
+  ${buildHealthNavHtml({ variant: "site" })}
   <div class="report-shell">
   <header class="report-header">
     <p class="report-kicker">QA-Agent · Site health</p>
@@ -752,7 +1216,8 @@ export function buildSiteHealthHtml(report: SiteHealthReport): string {
       <div class="stat"><span class="stat-label">Broken rows</span><span class="stat-value">${c.brokenLinks.length}</span></div>
       ${psiMetaHtml}
     </div>
-    <p class="meta" style="margin:18px 0 0;">Run window: ${esc(report.startedAt)} → ${esc(report.finishedAt)}</p>
+    ${aggStatsHtml}
+    <p class="meta" style="margin:20px 0 0;">Run window: ${esc(report.startedAt)} → ${esc(report.finishedAt)}</p>
   </header>
 
   <section class="report-section">
@@ -761,7 +1226,7 @@ export function buildSiteHealthHtml(report: SiteHealthReport): string {
     ${brokenFilters}
     <div class="table-wrap">
     <table class="data-table" id="health-table-broken">
-      <thead><tr><th>Found on</th><th>Target</th><th>HTTP</th><th class="num">Time (ms)</th><th>Detail</th></tr></thead>
+      <thead><tr><th>Found on</th><th>Target</th><th>HTTP</th><th class="num">Time (ms)</th><th>Detail</th><th>Triage</th></tr></thead>
       <tbody>${brokenRows}</tbody>
     </table>
     </div>
@@ -769,21 +1234,34 @@ export function buildSiteHealthHtml(report: SiteHealthReport): string {
 
   <section class="report-section">
     <h2>Pages fetched</h2>
-    <p class="section-desc">Full page GET (headers + HTML body). Sorted slowest first.</p>
+    <p class="section-desc">Full page GET (headers + HTML body). <strong>Type</strong> is the response MIME; <strong>Size</strong> is UTF-8 bytes of the HTML body; <strong>Redirect</strong> shows when the final URL differed. Sorted slowest first.</p>
     ${buildTableFiltersHtml("health-table-pages", FILTER_STATUS_PAGES)}
     <div class="table-wrap">
     <table class="data-table" id="health-table-pages">
-      <thead><tr><th>URL</th><th>HTTP</th><th class="num">Time (ms)</th><th>Result</th></tr></thead>
+      <thead><tr><th>URL</th><th>HTTP</th><th class="num">Time (ms)</th><th>Type</th><th class="num">Size</th><th>Redirect</th><th>Result</th><th>Triage</th></tr></thead>
       <tbody>
         ${pagesSorted
-          .map(
-            (p) => `<tr class="${p.ok ? "row-ok" : "row-err"}" data-filter-text="${esc(p.url.toLowerCase())}" data-filter-ms="${String(p.durationMs)}" data-filter-result="${pageFetchFilterKey(p)}">
+          .map((p) => {
+            const ft = `${p.url} ${p.contentType ?? ""}`.toLowerCase();
+            const sizeCell = p.bodyBytes != null ? formatBytes(p.bodyBytes) : "—";
+            const redir =
+              p.redirected && p.finalUrl && p.finalUrl !== p.url
+                ? `<strong>${esc(redirectYesNo(p))}</strong><br/><span class="cell-mono">${esc(displayRedirectPath(p))}</span>`
+                : esc(redirectYesNo(p));
+            const pageKey = issueKeyHash(["page", host, p.url]);
+            const triage = p.ok ? triageEmptyCell() : triageSelectCell(pageKey);
+            const issueAttr = p.ok ? "" : ` data-issue-key="${esc(pageKey)}"`;
+            return `<tr class="${p.ok ? "row-ok" : "row-err"}"${issueAttr} data-filter-text="${esc(ft)}" data-filter-ms="${String(p.durationMs)}" data-filter-result="${pageFetchFilterKey(p)}">
           <td><a href="${esc(p.url)}">${esc(p.url)}</a></td>
           <td>${p.status}</td>
           <td class="num">${p.durationMs}</td>
+          <td><span title="${esc(p.contentType ?? "")}">${esc(shortMime(p.contentType))}</span></td>
+          <td class="num">${sizeCell}</td>
+          <td>${redir}</td>
           <td class="${p.ok ? "cell-ok" : "cell-err"}">${esc(pageFetchResult(p))}</td>
-        </tr>`,
-          )
+          ${triage}
+        </tr>`;
+          })
           .join("\n")}
       </tbody>
     </table>
@@ -811,18 +1289,22 @@ export function buildSiteHealthHtml(report: SiteHealthReport): string {
     ${buildTableFiltersHtml("health-table-links", FILTER_STATUS_LINKS)}
     <div class="table-wrap">
     <table class="data-table" id="health-table-links">
-      <thead><tr><th>Target</th><th>HTTP</th><th class="num">Time (ms)</th><th>Method</th><th>Result</th></tr></thead>
+      <thead><tr><th>Target</th><th>HTTP</th><th class="num">Time (ms)</th><th>Method</th><th>Result</th><th>Triage</th></tr></thead>
       <tbody>
         ${linkChecksSorted
-          .map(
-            (l) => `<tr class="${l.ok ? "row-ok" : "row-err"}" data-filter-text="${esc(l.target.toLowerCase())}" data-filter-ms="${String(l.durationMs)}" data-filter-result="${l.ok ? "ok" : "failed"}">
+          .map((l) => {
+            const linkKey = issueKeyHash(["link", host, l.target, l.method]);
+            const triage = l.ok ? triageEmptyCell() : triageSelectCell(linkKey);
+            const issueAttr = l.ok ? "" : ` data-issue-key="${esc(linkKey)}"`;
+            return `<tr class="${l.ok ? "row-ok" : "row-err"}"${issueAttr} data-filter-text="${esc(l.target.toLowerCase())}" data-filter-ms="${String(l.durationMs)}" data-filter-result="${l.ok ? "ok" : "failed"}">
           <td><a href="${esc(l.target)}">${esc(l.target)}</a></td>
           <td>${l.status}</td>
           <td class="num">${l.durationMs}</td>
           <td>${esc(l.method)}</td>
           <td class="${l.ok ? "cell-ok" : "cell-err"}">${l.ok ? "OK" : "Failed"}</td>
-        </tr>`,
-          )
+          ${triage}
+        </tr>`;
+          })
           .join("\n")}
       </tbody>
     </table>
@@ -833,6 +1315,8 @@ export function buildSiteHealthHtml(report: SiteHealthReport): string {
   <footer class="report-footer">Generated by QA-Agent · Site health crawl</footer>
   </div>
   ${HEALTH_TABLE_FILTERS_SCRIPT}
+  ${HEALTH_ISSUE_TRIAGE_SCRIPT}
+  ${HEALTH_NAV_SCRIPT}
 </body>
 </html>`;
 }
@@ -849,18 +1333,27 @@ export function buildMasterHealthHtml(
 
   const brokenRows =
     brokenAll.length === 0
-      ? `<tr data-filter-skip="1"><td colspan="6"><div class="empty-state">No broken internal links across all sites.</div></td></tr>`
+      ? `<tr data-filter-skip="1"><td colspan="7"><div class="empty-state">No broken internal links across all sites.</div></td></tr>`
       : brokenAll
           .map((b) => {
             const ms = b.durationMs ?? 0;
             const ft = `${b.siteHostname} ${b.foundOn} ${b.target} ${b.error ?? ""}`.toLowerCase();
-            return `<tr data-filter-text="${esc(ft)}" data-filter-ms="${String(ms)}" data-filter-result="${brokenHttpKind(b.status)}">
+            const ikey = issueKeyHash([
+              "broken",
+              b.siteHostname,
+              b.foundOn,
+              b.target,
+              String(b.status ?? ""),
+              b.error ?? "",
+            ]);
+            return `<tr data-issue-key="${esc(ikey)}" data-filter-text="${esc(ft)}" data-filter-ms="${String(ms)}" data-filter-result="${brokenHttpKind(b.status)}">
   <td>${esc(b.siteHostname)}</td>
   <td>${esc(b.foundOn)}</td>
   <td><a href="${esc(b.target)}">${esc(b.target)}</a></td>
   <td>${b.status ?? "—"}</td>
   <td class="num">${fmtMs(b.durationMs)}</td>
   <td class="cell-err">${esc(b.error ?? "")}</td>
+  ${triageSelectCell(ikey)}
 </tr>`;
           })
           .join("\n");
@@ -875,13 +1368,25 @@ export function buildMasterHealthHtml(
 
   const pageRows = pagesAll
     .map((p) => {
-      const ft = `${p.siteHostname} ${p.url}`.toLowerCase();
-      return `<tr class="${p.ok ? "row-ok" : "row-err"}" data-filter-text="${esc(ft)}" data-filter-ms="${String(p.durationMs)}" data-filter-result="${pageFetchFilterKey(p)}">
+      const ft = `${p.siteHostname} ${p.url} ${p.contentType ?? ""}`.toLowerCase();
+      const sizeCell = p.bodyBytes != null ? formatBytes(p.bodyBytes) : "—";
+      const redir =
+        p.redirected && p.finalUrl && p.finalUrl !== p.url
+          ? `<strong>${esc(redirectYesNo(p))}</strong><br/><span class="cell-mono">${esc(displayRedirectPath(p))}</span>`
+          : esc(redirectYesNo(p));
+      const pageKey = issueKeyHash(["page", p.siteHostname, p.url]);
+      const triage = p.ok ? triageEmptyCell() : triageSelectCell(pageKey);
+      const issueAttr = p.ok ? "" : ` data-issue-key="${esc(pageKey)}"`;
+      return `<tr class="${p.ok ? "row-ok" : "row-err"}"${issueAttr} data-filter-text="${esc(ft)}" data-filter-ms="${String(p.durationMs)}" data-filter-result="${pageFetchFilterKey(p)}">
   <td>${esc(p.siteHostname)}</td>
   <td><a href="${esc(p.url)}">${esc(p.url)}</a></td>
   <td>${p.status}</td>
   <td class="num">${p.durationMs}</td>
+  <td><span title="${esc(p.contentType ?? "")}">${esc(shortMime(p.contentType))}</span></td>
+  <td class="num">${sizeCell}</td>
+  <td>${redir}</td>
   <td class="${p.ok ? "cell-ok" : "cell-err"}">${esc(pageFetchResult(p))}</td>
+  ${triage}
 </tr>`;
     })
     .join("\n");
@@ -900,18 +1405,22 @@ export function buildMasterHealthHtml(
     ${buildTableFiltersHtml("master-table-links", FILTER_STATUS_LINKS)}
     <div class="table-wrap">
     <table class="data-table" id="master-table-links">
-      <thead><tr><th>Site</th><th>Target</th><th>HTTP</th><th class="num">Time (ms)</th><th>Method</th><th>Result</th></tr></thead>
+      <thead><tr><th>Site</th><th>Target</th><th>HTTP</th><th class="num">Time (ms)</th><th>Method</th><th>Result</th><th>Triage</th></tr></thead>
       <tbody>
         ${linksAll
           .map((l) => {
             const ft = `${l.siteHostname} ${l.target}`.toLowerCase();
-            return `<tr class="${l.ok ? "row-ok" : "row-err"}" data-filter-text="${esc(ft)}" data-filter-ms="${String(l.durationMs)}" data-filter-result="${l.ok ? "ok" : "failed"}">
+            const linkKey = issueKeyHash(["link", l.siteHostname, l.target, l.method]);
+            const triage = l.ok ? triageEmptyCell() : triageSelectCell(linkKey);
+            const issueAttr = l.ok ? "" : ` data-issue-key="${esc(linkKey)}"`;
+            return `<tr class="${l.ok ? "row-ok" : "row-err"}"${issueAttr} data-filter-text="${esc(ft)}" data-filter-ms="${String(l.durationMs)}" data-filter-result="${l.ok ? "ok" : "failed"}">
           <td>${esc(l.siteHostname)}</td>
           <td><a href="${esc(l.target)}">${esc(l.target)}</a></td>
           <td>${l.status}</td>
           <td class="num">${l.durationMs}</td>
           <td>${esc(l.method)}</td>
           <td class="${l.ok ? "cell-ok" : "cell-err"}">${l.ok ? "OK" : "Failed"}</td>
+          ${triage}
         </tr>`;
           })
           .join("\n")}
@@ -923,13 +1432,17 @@ export function buildMasterHealthHtml(
   const summaryRows = reports
     .map((r) => {
       const failed = r.crawl.brokenLinks.length > 0 || r.crawl.pages.some((p) => !p.ok);
+      const sa = computePageAggregateStats(r.crawl.pages);
       return `<tr>
   <td>${esc(r.hostname)}</td>
   <td><a href="${esc(r.startUrl)}">${esc(r.startUrl)}</a></td>
   <td class="num">${r.crawl.pagesVisited}</td>
   <td class="num">${r.crawl.brokenLinks.length}</td>
+  <td class="num">${sa.count ? sa.avgMs : "—"}</td>
+  <td class="num">${sa.count ? `${sa.successPct}%` : "—"}</td>
+  <td class="num">${sa.count ? formatBytes(sa.totalBytes) : "—"}</td>
   <td class="${failed ? "cell-err" : "cell-ok"}">${failed ? "Issues" : "OK"}</td>
-  <td class="num" style="font-size:0.82rem">${esc(r.finishedAt)}</td>
+  <td class="num" style="font-size:0.8rem">${esc(r.finishedAt)}</td>
 </tr>`;
     })
     .join("\n");
@@ -974,7 +1487,8 @@ export function buildMasterHealthHtml(
   <title>Combined health — all sites</title>
   <style>${HEALTH_REPORT_CSS}</style>
 </head>
-<body>
+<body data-run-id="${esc(meta.runId)}">
+  ${buildHealthNavHtml({ variant: "master" })}
   <div class="report-shell">
   <header class="report-header">
     <p class="report-kicker">QA-Agent · Combined run</p>
@@ -994,7 +1508,7 @@ export function buildMasterHealthHtml(
     <p class="section-desc">Per-site crawl totals and status.</p>
     <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th>Site</th><th>Start URL</th><th class="num">Pages</th><th class="num">Broken rows</th><th>Status</th><th>Finished at</th></tr></thead>
+      <thead><tr><th>Site</th><th>Start URL</th><th class="num">Pages</th><th class="num">Broken</th><th class="num">Avg ms</th><th class="num">OK %</th><th class="num">HTML size</th><th>Status</th><th>Finished</th></tr></thead>
       <tbody>${summaryRows}</tbody>
     </table>
     </div>
@@ -1006,7 +1520,7 @@ export function buildMasterHealthHtml(
     ${masterBrokenFilters}
     <div class="table-wrap">
     <table class="data-table" id="master-table-broken">
-      <thead><tr><th>Site</th><th>Found on</th><th>Target</th><th>HTTP</th><th class="num">Time (ms)</th><th>Detail</th></tr></thead>
+      <thead><tr><th>Site</th><th>Found on</th><th>Target</th><th>HTTP</th><th class="num">Time (ms)</th><th>Detail</th><th>Triage</th></tr></thead>
       <tbody>${brokenRows}</tbody>
     </table>
     </div>
@@ -1014,11 +1528,11 @@ export function buildMasterHealthHtml(
 
   <section class="report-section">
     <h2>Pages fetched (all sites)</h2>
-    <p class="section-desc">Sorted slowest first. Search matches site hostname and URL.</p>
+    <p class="section-desc">Sorted slowest first. Search matches site, URL, and content type. Columns include MIME type, HTML size, and redirects.</p>
     ${buildTableFiltersHtml("master-table-pages", FILTER_STATUS_PAGES)}
     <div class="table-wrap">
     <table class="data-table" id="master-table-pages">
-      <thead><tr><th>Site</th><th>URL</th><th>HTTP</th><th class="num">Time (ms)</th><th>Result</th></tr></thead>
+      <thead><tr><th>Site</th><th>URL</th><th>HTTP</th><th class="num">Time (ms)</th><th>Type</th><th class="num">Size</th><th>Redirect</th><th>Result</th><th>Triage</th></tr></thead>
       <tbody>${pageRows}</tbody>
     </table>
     </div>
@@ -1031,6 +1545,8 @@ export function buildMasterHealthHtml(
   <footer class="report-footer">Generated by QA-Agent · Combined health report</footer>
   </div>
   ${HEALTH_TABLE_FILTERS_SCRIPT}
+  ${HEALTH_ISSUE_TRIAGE_SCRIPT}
+  ${HEALTH_NAV_SCRIPT}
 </body>
 </html>`;
 }
@@ -1040,9 +1556,11 @@ export async function writeSiteHealthReports(options: {
   outDir: string;
   /** Filename base without extension (e.g. report-www-example-com-2026-03-23T17-03-21-217Z). */
   fileBaseName: string;
+  /** Health run folder id; enables triage persistence in the dashboard. */
+  runId?: string;
 }): Promise<{ htmlPath: string; jsonPath: string; canonicalHtmlPath: string; canonicalJsonPath: string }> {
   await mkdir(options.outDir, { recursive: true });
-  const html = buildSiteHealthHtml(options.report);
+  const html = buildSiteHealthHtml(options.report, { runId: options.runId });
   const json = JSON.stringify(options.report, null, 2);
   const canonicalHtmlPath = path.join(options.outDir, `${options.fileBaseName}.html`);
   const canonicalJsonPath = path.join(options.outDir, `${options.fileBaseName}.json`);
@@ -1095,14 +1613,18 @@ export function buildHealthIndexHtml(options: {
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="color-scheme" content="light"/>
   <title>QA-Agent — health run index</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet"/>
   <style>${INDEX_PAGE_CSS}</style>
 </head>
 <body>
+<nav class="idx-nav" aria-label="Health run navigation">
+  <span class="idx-nav__brand">QA-Agent</span>
+  <span class="idx-nav__here" aria-current="page">Run index</span>
+  <a class="idx-nav__link" href="./master.html">Combined report</a>
+  <a class="idx-nav__link idx-nav__dash" href="/">Live dashboard</a>
+</nav>
 <div class="idx-wrap">
   <div class="idx-hero">
     <p class="idx-kicker">QA-Agent · Health run</p>
@@ -1112,7 +1634,8 @@ export function buildHealthIndexHtml(options: {
     <p class="idx-meta"><strong>URLs file</strong> ${esc(options.urlsFile)}</p>
     <div class="idx-combined">
       <strong>Combined (all sites):</strong>
-      <a href="${esc(options.masterHtmlPath)}">${esc(path.basename(options.masterHtmlPath))}</a>
+      <a href="./master.html">Combined HTML</a>
+      <span class="idx-meta"> (${esc(path.basename(options.masterHtmlPath))})</span>
       · <a href="${esc(options.masterJsonPath)}">JSON</a>
     </div>
   </div>
@@ -1122,7 +1645,8 @@ export function buildHealthIndexHtml(options: {
       <tbody>${rows}</tbody>
     </table>
   </div>
-  <p class="idx-foot">Each per-site filename includes the website name and when that report was generated. The combined report timestamp is when the full run finished.</p>
+  <p class="idx-foot">Each per-site folder includes <code>report.html</code> (and a timestamped copy). <strong>Combined HTML</strong> uses <code>master.html</code> to jump to the versioned combined file. Use the top bar to open the live dashboard when you started the tool with <code>--serve</code>.</p>
 </div>
+${HEALTH_NAV_SCRIPT}
 </body></html>`;
 }

@@ -14,7 +14,9 @@
     "dev": "tsx src/index.ts health",
     "dev:run": "tsx src/index.ts run",
     "lint": "tsc --noEmit",
-    "fixture": "npm start --prefix fixture-site"
+    "fixture": "npm start --prefix fixture-site",
+    "fixture:kill": "node scripts/kill-port.mjs 3333",
+    "setup-browsers": "playwright install chromium"
   },
   "engines": {
     "node": ">=20"

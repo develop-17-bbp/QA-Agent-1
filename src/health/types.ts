@@ -49,6 +49,14 @@ export interface PageFetchRecord {
   /** Wall-clock time for this page fetch (headers + body read) (ms). */
   durationMs: number;
   error?: string;
+  /** Primary MIME type from Content-Type (no charset), when the response was received. */
+  contentType?: string;
+  /** UTF-8 byte length of the HTML body when read (for sizing transfer). */
+  bodyBytes?: number;
+  /** True when the browser stack followed redirects to reach the final URL. */
+  redirected?: boolean;
+  /** Final URL after redirects (may differ from `url`). */
+  finalUrl?: string;
   /** Populated when health run uses --pagespeed and this URL was analyzed. */
   insights?: PageSpeedInsightRecord;
 }
