@@ -97,28 +97,22 @@ export default function RunDetail() {
 
   return (
     <div>
-      <Link to="/history" style={{ fontSize: "0.88rem" }}>
+      <Link to="/history" style={{ fontSize: "0.8125rem", fontWeight: 500 }}>
         ← Run history
       </Link>
       <motion.p
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        style={{
-          color: "var(--muted)",
-          marginTop: 14,
-          marginBottom: 6,
-          fontSize: "0.82rem",
-          letterSpacing: "0.04em",
-          textTransform: "uppercase",
-          fontWeight: 600,
-        }}
+        className="qa-kicker"
+        style={{ marginTop: 16, marginBottom: 4 }}
       >
         Run workspace
       </motion.p>
       <motion.h1
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        style={{ fontSize: "1.35rem", fontWeight: 700, marginTop: 0, letterSpacing: "-0.03em", wordBreak: "break-all" }}
+        className="qa-page-title"
+        style={{ fontSize: "1.25rem", wordBreak: "break-all" }}
       >
         {title}
       </motion.h1>
@@ -146,61 +140,30 @@ export default function RunDetail() {
           <SiteStatusEditor run={run} onSaved={() => setReportPreviewNonce((n) => n + 1)} />
 
           <motion.section
+            className="qa-panel"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.03 }}
-            style={{
-              marginTop: 24,
-              padding: 20,
-              borderRadius: "var(--radius)",
-              border: "1px solid var(--border)",
-              background: "var(--glass)",
-            }}
+            style={{ marginTop: 24, padding: 20 }}
           >
             <h2 style={{ margin: "0 0 10px", fontSize: "1rem", fontWeight: 600 }}>Run index</h2>
             <p style={{ margin: "0 0 14px", color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>
               Table of contents with links into each site folder (static HTML index).
             </p>
-            <a
-              href={reportIndexUrl(run.runId)}
-              target="_blank"
-              rel="noreferrer"
-              style={{ fontWeight: 600, color: "var(--accent2)" }}
-            >
+            <a href={reportIndexUrl(run.runId)} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>
               Open run index (HTML)
             </a>
           </motion.section>
 
           <motion.section
+            className="qa-panel"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.08 }}
-            style={{
-              marginTop: 32,
-              padding: 0,
-              borderRadius: "var(--radius)",
-              border: "2px solid rgba(34, 211, 238, 0.35)",
-              background: "linear-gradient(160deg, rgba(34,211,238,0.1), var(--glass))",
-              overflow: "hidden",
-            }}
+            style={{ marginTop: 24, padding: 0, overflow: "hidden" }}
           >
-            <div
-              style={{
-                padding: "18px 20px",
-                borderBottom: "1px solid var(--border)",
-                background: "rgba(0,0,0,0.3)",
-              }}
-            >
-              <p
-                style={{
-                  margin: "0 0 10px",
-                  fontSize: "0.68rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  color: "var(--accent2)",
-                }}
-              >
+            <div className="qa-panel-header">
+              <p className="qa-kicker" style={{ marginBottom: 8, letterSpacing: "0.08em" }}>
                 Final step · PDF export
               </p>
               <div
@@ -213,7 +176,7 @@ export default function RunDetail() {
                 }}
               >
                 <div style={{ minWidth: 0, flex: "1 1 240px" }}>
-                  <h2 style={{ margin: "0 0 6px", fontSize: "1.15rem", fontWeight: 700 }}>Combined report</h2>
+                  <h2 style={{ margin: "0 0 6px", fontSize: "1.0625rem", fontWeight: 600 }}>Combined report</h2>
                   <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>
                     Full all-sites view: PC, tablet, and phone start-page screenshots, PageSpeed scores, crawl tables, and triage — same as the legacy combined MASTER report. The preview below reflects saved triage when you export.{" "}
                     <strong style={{ color: "var(--text)" }}>Download PDF</strong> exports this same combined page (not the separate stats-only summary).
@@ -228,25 +191,12 @@ export default function RunDetail() {
                     ) : null}
                   </p>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "stretch" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "stretch" }}>
                   <motion.a
                     href={combinedPdfDownload}
-                    whileHover={{ scale: 1.02 }}
+                    className="qa-btn-primary"
                     whileTap={{ scale: 0.98 }}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "12px 22px",
-                      borderRadius: 999,
-                      fontWeight: 700,
-                      textDecoration: "none",
-                      color: "#061018",
-                      background: "linear-gradient(120deg, var(--accent), var(--accent2))",
-                      boxShadow: "0 8px 28px rgba(34, 211, 238, 0.25)",
-                      fontSize: "0.95rem",
-                      whiteSpace: "nowrap",
-                    }}
+                    style={{ textAlign: "center", minHeight: 36, fontSize: "0.875rem" }}
                   >
                     Download PDF
                   </motion.a>
@@ -254,40 +204,24 @@ export default function RunDetail() {
                     href={combinedHtmlBase}
                     target="_blank"
                     rel="noreferrer"
-                    style={{
-                      padding: "10px 16px",
-                      borderRadius: 999,
-                      border: "1px solid var(--border)",
-                      fontWeight: 600,
-                      fontSize: "0.85rem",
-                      textDecoration: "none",
-                      color: "var(--text)",
-                      textAlign: "center",
-                    }}
+                    className="qa-btn-default"
+                    style={{ textAlign: "center", fontSize: "0.8125rem" }}
                   >
-                    Open combined HTML (new tab)
+                    Open combined HTML
                   </a>
                   <a
                     href={statsSummaryHtmlBase}
                     target="_blank"
                     rel="noreferrer"
-                    style={{
-                      padding: "10px 16px",
-                      borderRadius: 999,
-                      border: "1px solid var(--border)",
-                      fontWeight: 600,
-                      fontSize: "0.82rem",
-                      textDecoration: "none",
-                      color: "var(--muted)",
-                      textAlign: "center",
-                    }}
+                    className="qa-btn-subtle"
+                    style={{ textAlign: "center", fontSize: "0.8125rem" }}
                   >
-                    Stats summary only (new tab)
+                    Stats summary only
                   </a>
                 </div>
               </div>
             </div>
-            <div style={{ background: "rgba(0,0,0,0.35)", minHeight: 480 }}>
+            <div style={{ background: "#ebecf0", minHeight: 480, borderTop: "1px solid var(--border)" }}>
               <iframe
                 title="Combined report (HTML)"
                 src={combinedHtmlPreview}
@@ -306,16 +240,14 @@ export default function RunDetail() {
           ) : null}
           {gemini ? (
             <motion.article
+              className="qa-panel"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               style={{
-                marginTop: 28,
-                padding: 24,
-                borderRadius: "var(--radius)",
-                border: "1px solid var(--border)",
-                background: "var(--glass)",
+                marginTop: 24,
+                padding: 20,
                 lineHeight: 1.55,
-                fontSize: "0.95rem",
+                fontSize: "0.9375rem",
               }}
             >
               <h2 style={{ marginTop: 0, fontSize: "1.1rem" }}>AI summary</h2>
@@ -331,15 +263,10 @@ export default function RunDetail() {
           )}
 
           <motion.section
+            className="qa-panel"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            style={{
-              marginTop: 28,
-              padding: 24,
-              borderRadius: "var(--radius)",
-              border: "1px solid var(--border)",
-              background: "var(--glass)",
-            }}
+            style={{ marginTop: 24, padding: 20 }}
           >
             <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: "1.1rem" }}>Ask about this run</h2>
             <p style={{ margin: "0 0 14px", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.5 }}>
@@ -350,6 +277,7 @@ export default function RunDetail() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "stretch" }}>
               <input
                 type="text"
+                className="qa-input"
                 value={runChatQuestion}
                 onChange={(e) => setRunChatQuestion(e.target.value)}
                 onKeyDown={(e) => {
@@ -377,18 +305,14 @@ export default function RunDetail() {
                 style={{
                   flex: "1 1 220px",
                   minWidth: 0,
-                  padding: "12px 14px",
-                  borderRadius: 10,
-                  border: "1px solid var(--border)",
-                  background: "rgba(0,0,0,0.25)",
-                  color: "var(--text)",
-                  fontSize: "0.92rem",
+                  padding: "8px 12px",
+                  fontSize: "0.875rem",
                 }}
               />
               <motion.button
                 type="button"
+                className="qa-btn-primary"
                 disabled={runChatLoading || !runChatQuestion.trim()}
-                whileHover={{ scale: runChatLoading ? 1 : 1.02 }}
                 whileTap={{ scale: runChatLoading ? 1 : 0.98 }}
                 onClick={() => {
                   void (async () => {
@@ -408,15 +332,8 @@ export default function RunDetail() {
                   })();
                 }}
                 style={{
-                  padding: "12px 20px",
-                  borderRadius: 10,
-                  border: "none",
-                  fontWeight: 700,
-                  fontSize: "0.9rem",
+                  minWidth: 72,
                   cursor: runChatLoading || !runChatQuestion.trim() ? "not-allowed" : "pointer",
-                  opacity: runChatLoading || !runChatQuestion.trim() ? 0.55 : 1,
-                  color: "#061018",
-                  background: "linear-gradient(120deg, var(--accent), var(--accent2))",
                 }}
               >
                 {runChatLoading ? "…" : "Ask"}

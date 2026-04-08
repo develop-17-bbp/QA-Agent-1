@@ -31,10 +31,10 @@ export default function ReportsHub() {
   return (
     <div>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 style={{ fontSize: "1.85rem", fontWeight: 700, letterSpacing: "-0.04em", margin: "0 0 10px" }}>Reports</h1>
-        <p style={{ color: "var(--muted)", maxWidth: 720, lineHeight: 1.55, margin: 0, fontSize: "0.98rem" }}>
+        <h1 className="qa-page-title">Reports</h1>
+        <p className="qa-page-desc">
           Open a run’s <strong style={{ color: "var(--text)" }}>workspace</strong> to review HTML reports, adjust site status, then{" "}
-          <strong style={{ color: "var(--text)" }}>download the final combined PDF</strong> when you’re done. PDF export is not available from this list — only from the workspace.
+          <strong style={{ color: "var(--text)" }}>download the final combined PDF</strong>. PDF export is only available from the workspace.
         </p>
       </motion.div>
 
@@ -46,38 +46,17 @@ export default function ReportsHub() {
           gap: 14,
         }}
       >
-        <Link
-          to="/upload"
-          style={{
-            padding: 20,
-            borderRadius: "var(--radius-sm)",
-            border: "1px solid var(--border)",
-            background: "var(--glass)",
-            textDecoration: "none",
-            color: "var(--text)",
-            transition: "transform 0.2s ease",
-          }}
-        >
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Import URLs</div>
-          <div style={{ fontSize: "0.88rem", color: "var(--muted)" }}>Upload .txt or .pdf, then send to the dashboard.</div>
+        <Link to="/upload" className="qa-panel" style={{ padding: 16, textDecoration: "none", color: "var(--text)" }}>
+          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: "0.9375rem" }}>Import URLs</div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--muted)", lineHeight: 1.45 }}>Upload .txt or .pdf, then send to the dashboard.</div>
         </Link>
-        <Link
-          to="/history"
-          style={{
-            padding: 20,
-            borderRadius: "var(--radius-sm)",
-            border: "1px solid var(--border)",
-            background: "var(--glass)",
-            textDecoration: "none",
-            color: "var(--text)",
-          }}
-        >
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Full history</div>
-          <div style={{ fontSize: "0.88rem", color: "var(--muted)" }}>Browse every run with timesheet-style cards.</div>
+        <Link to="/history" className="qa-panel" style={{ padding: 16, textDecoration: "none", color: "var(--text)" }}>
+          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: "0.9375rem" }}>Full history</div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--muted)", lineHeight: 1.45 }}>Browse every run and open workspaces.</div>
         </Link>
       </div>
 
-      <h2 style={{ fontSize: "1rem", fontWeight: 600, margin: "36px 0 16px" }}>Recent reports</h2>
+      <h2 style={{ fontSize: "0.875rem", fontWeight: 600, margin: "32px 0 14px", color: "var(--muted)" }}>Recent reports</h2>
       {err ? <p style={{ color: "var(--bad)" }}>{err}</p> : null}
       {loading ? (
         <p style={{ color: "var(--muted)" }}>Loading…</p>
@@ -95,15 +74,13 @@ export default function ReportsHub() {
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.04 }}
+              className="qa-panel"
               style={{
                 display: "flex",
                 flexWrap: "wrap",
                 alignItems: "center",
                 gap: 16,
-                padding: "16px 20px",
-                borderRadius: "var(--radius-sm)",
-                border: "1px solid var(--border)",
-                background: "linear-gradient(145deg, var(--glass), rgba(255,255,255,0.02))",
+                padding: "14px 18px",
               }}
             >
               <div style={{ flex: 1, minWidth: 200 }}>
@@ -121,22 +98,7 @@ export default function ReportsHub() {
                   )}
                 </div>
               </div>
-              <Link
-                to={`/run/${encodeURIComponent(run.runId)}`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "10px 20px",
-                  borderRadius: 999,
-                  fontWeight: 600,
-                  fontSize: "0.9rem",
-                  textDecoration: "none",
-                  color: "#061018",
-                  background: "linear-gradient(120deg, var(--accent), var(--accent2))",
-                  boxShadow: "0 8px 24px rgba(34, 211, 238, 0.2)",
-                  flexShrink: 0,
-                }}
-              >
+              <Link to={`/run/${encodeURIComponent(run.runId)}`} className="qa-btn-primary" style={{ flexShrink: 0 }}>
                 Open workspace
               </Link>
             </motion.li>

@@ -94,17 +94,15 @@ export default function SiteStatusEditor({ run, onSaved }: { run: HealthRunMeta;
 
   return (
     <motion.section
+      className="qa-panel"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       style={{
         marginTop: 24,
-        padding: 22,
-        borderRadius: "var(--radius)",
-        border: "1px solid var(--border)",
-        background: "var(--glass)",
+        padding: 20,
       }}
     >
-      <h2 style={{ margin: "0 0 8px", fontSize: "1.05rem", fontWeight: 600 }}>Sites</h2>
+      <h2 style={{ margin: "0 0 8px", fontSize: "1rem", fontWeight: 600 }}>Sites</h2>
       <p style={{ margin: "0 0 18px", color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>
         <strong style={{ color: "var(--text)" }}>Status</strong> feeds the combined PDF (&quot;Working websites&quot; + EDITED).{" "}
         <strong style={{ color: "var(--text)" }}>Open HTML</strong> is the full crawl with issue triage. Saves to{" "}
@@ -135,10 +133,10 @@ export default function SiteStatusEditor({ run, onSaved }: { run: HealthRunMeta;
                     alignItems: "center",
                     justifyContent: "space-between",
                     gap: 12,
-                    padding: "14px 16px",
+                    padding: "12px 14px",
                     borderRadius: "var(--radius-sm)",
                     border: "1px solid var(--border)",
-                    background: "rgba(0,0,0,0.2)",
+                    background: "var(--glass2)",
                   }}
                 >
                   <div style={{ minWidth: 0, flex: "1 1 200px" }}>
@@ -162,10 +160,9 @@ export default function SiteStatusEditor({ run, onSaved }: { run: HealthRunMeta;
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
                     <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span className="visually-hidden" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden" }}>
-                        PDF status for {s.hostname}
-                      </span>
+                      <span className="visually-hidden">PDF status for {s.hostname}</span>
                       <select
+                        className="qa-select"
                         value={st}
                         onChange={(e) => {
                           const v = e.target.value as SiteStatusValue;
@@ -177,14 +174,9 @@ export default function SiteStatusEditor({ run, onSaved }: { run: HealthRunMeta;
                         }}
                         aria-label={`PDF site status for ${s.hostname}`}
                         style={{
-                          font: "inherit",
-                          fontSize: "0.88rem",
-                          padding: "8px 12px",
-                          borderRadius: 10,
-                          border: "1px solid var(--border)",
-                          background: "rgba(0,0,0,0.35)",
-                          color: "var(--text)",
-                          minWidth: 160,
+                          fontSize: "0.8125rem",
+                          padding: "6px 10px",
+                          minWidth: 200,
                         }}
                       >
                         {OPTIONS.map((o) => (
@@ -194,36 +186,10 @@ export default function SiteStatusEditor({ run, onSaved }: { run: HealthRunMeta;
                         ))}
                       </select>
                     </label>
-                    <a
-                      href={htmlUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        padding: "8px 14px",
-                        borderRadius: 999,
-                        border: "1px solid var(--border)",
-                        fontSize: "0.82rem",
-                        fontWeight: 600,
-                        textDecoration: "none",
-                        color: "var(--text)",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <a href={htmlUrl} target="_blank" rel="noreferrer" className="qa-btn-default" style={{ whiteSpace: "nowrap" }}>
                       Open HTML
                     </a>
-                    <a
-                      href={pdfUrl}
-                      style={{
-                        padding: "8px 14px",
-                        borderRadius: 999,
-                        fontSize: "0.82rem",
-                        fontWeight: 700,
-                        textDecoration: "none",
-                        color: "#061018",
-                        whiteSpace: "nowrap",
-                        background: "linear-gradient(120deg, var(--accent), var(--accent2))",
-                      }}
-                    >
+                    <a href={pdfUrl} className="qa-btn-primary" style={{ whiteSpace: "nowrap" }}>
                       Download PDF
                     </a>
                   </div>

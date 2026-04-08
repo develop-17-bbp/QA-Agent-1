@@ -132,12 +132,10 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45 }}
-        style={{ marginBottom: 28 }}
+        style={{ marginBottom: 24 }}
       >
-        <h1 style={{ fontSize: "1.85rem", fontWeight: 700, letterSpacing: "-0.04em", margin: "0 0 10px" }}>
-          New run
-        </h1>
-        <p style={{ color: "var(--muted)", maxWidth: 640, lineHeight: 1.55, margin: 0, fontSize: "0.98rem" }}>
+        <h1 className="qa-page-title">New run</h1>
+        <p className="qa-page-desc">
           Queue a crawl from root URLs. Optional Lighthouse, viewport checks, and Gemini run after the crawl. See{" "}
           <Link to="/history">run history</Link> for past jobs and <Link to="/reports">reports</Link> for exports.
         </p>
@@ -146,34 +144,18 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
       <RunProgressBanner state={runBanner} />
 
       <motion.section
+        className="qa-panel"
         initial={{ opacity: 0, y: 12 }}
         animate={{
-          opacity: formDimmed ? 0.72 : 1,
+          opacity: formDimmed ? 0.75 : 1,
           y: 0,
-          scale: formDimmed ? 0.995 : 1,
         }}
         transition={{ duration: 0.35 }}
-        style={{
-          padding: 26,
-          borderRadius: "var(--radius)",
-          border: "1px solid var(--border)",
-          background: "var(--glass)",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.25)",
-        }}
+        style={{ padding: 24 }}
       >
-        <label
-          style={{
-            display: "block",
-            fontSize: "0.65rem",
-            fontWeight: 700,
-            letterSpacing: "0.12em",
-            color: "var(--muted)",
-            marginBottom: 10,
-          }}
-        >
-          ROOT URLS (ONE PER LINE)
-        </label>
+        <label className="qa-label-field">Root URLs (one per line)</label>
         <textarea
+          className="qa-textarea"
           value={urlsText}
           onChange={(e) => setUrlsText(e.target.value)}
           placeholder={"https://www.example.com\nwww.another.org"}
@@ -182,13 +164,9 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
           style={{
             width: "100%",
             resize: "vertical",
-            padding: 16,
-            borderRadius: "var(--radius-sm)",
-            border: "1px solid var(--border)",
-            background: "rgba(0,0,0,0.35)",
-            color: "var(--text)",
-            fontFamily: "ui-monospace, Menlo, monospace",
-            fontSize: "0.85rem",
+            padding: "12px 14px",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: "0.8125rem",
             lineHeight: 1.45,
             opacity: runInFlight ? 0.85 : 1,
           }}
@@ -210,18 +188,14 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
         <div style={{ marginTop: 20, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <motion.button
             type="button"
+            className="qa-btn-primary"
             whileTap={{ scale: runInFlight ? 1 : 0.98 }}
             onClick={() => void onStart()}
             disabled={runInFlight || !urlsText.trim()}
             style={{
-              padding: "12px 28px",
-              borderRadius: 999,
-              border: "none",
-              fontWeight: 600,
+              padding: "8px 20px",
+              minHeight: 36,
               cursor: runInFlight || !urlsText.trim() ? "not-allowed" : "pointer",
-              opacity: runInFlight || !urlsText.trim() ? 0.45 : 1,
-              background: "linear-gradient(120deg, var(--accent), var(--accent2))",
-              color: "#061018",
             }}
           >
             {runBanner.kind === "posting"
@@ -233,7 +207,7 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
                   : "Start run"}
           </motion.button>
         </div>
-        <p style={{ color: "var(--muted)", fontSize: "0.8rem", marginTop: 16, marginBottom: 0 }}>
+        <p style={{ color: "var(--muted)", fontSize: "0.8125rem", marginTop: 16, marginBottom: 0 }}>
           Large sites: turn off PageSpeed / viewport / Gemini for speed. Set <code>QA_AGENT_FETCH_CONCURRENCY</code> in <code>.env</code> for more parallel HTTP.
         </p>
       </motion.section>

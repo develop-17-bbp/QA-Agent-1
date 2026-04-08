@@ -31,11 +31,11 @@ export default function JobCard({ run, defaultOpen, titleNavigatesToRun = true }
         style={{
           marginTop: titleNavigatesToRun ? 10 : 0,
           padding: "10px 12px",
-          borderRadius: 10,
-          background: "rgba(0,0,0,0.25)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          fontSize: "0.78rem",
-          fontFamily: "ui-monospace, Menlo, monospace",
+          borderRadius: "var(--radius-sm)",
+          background: "var(--glass2)",
+          border: "1px solid var(--border)",
+          fontSize: "0.75rem",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
           color: "var(--muted)",
           lineHeight: 1.6,
         }}
@@ -80,48 +80,13 @@ export default function JobCard({ run, defaultOpen, titleNavigatesToRun = true }
           ) : null}
         </div>
       ) : null}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-        <span
-          style={{
-            fontSize: "0.72rem",
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            padding: "4px 10px",
-            borderRadius: 999,
-            background: fail ? "rgba(251,113,133,0.15)" : "rgba(52,211,153,0.15)",
-            color: fail ? "#fda4af" : "#6ee7b7",
-          }}
-        >
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+        <span className={fail ? "qa-lozenge qa-lozenge--danger" : "qa-lozenge qa-lozenge--success"}>
           {fail ? "Issues" : "Clean"}
         </span>
-        {run.features?.viewportCheck ? (
-          <span
-            style={{
-              fontSize: "0.72rem",
-              fontWeight: 600,
-              padding: "4px 10px",
-              borderRadius: 999,
-              background: "var(--glass2)",
-              color: "var(--muted)",
-            }}
-          >
-            Viewports
-          </span>
-        ) : null}
+        {run.features?.viewportCheck ? <span className="qa-lozenge qa-lozenge--neutral">Viewports</span> : null}
         {run.features?.pageSpeedStrategies?.length ? (
-          <span
-            style={{
-              fontSize: "0.72rem",
-              fontWeight: 600,
-              padding: "4px 10px",
-              borderRadius: 999,
-              background: "var(--glass2)",
-              color: "var(--muted)",
-            }}
-          >
-            PSI {run.features.pageSpeedStrategies.join("+")}
-          </span>
+          <span className="qa-lozenge qa-lozenge--neutral">PSI {run.features.pageSpeedStrategies.join("+")}</span>
         ) : null}
       </div>
     </div>
@@ -129,17 +94,14 @@ export default function JobCard({ run, defaultOpen, titleNavigatesToRun = true }
 
   return (
     <motion.article
+      className="qa-panel"
       layout
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
       style={{
-        borderRadius: "var(--radius)",
-        border: "1px solid var(--border)",
-        background: "linear-gradient(145deg, var(--glass) 0%, rgba(255,255,255,0.02) 100%)",
-        boxShadow: "0 24px 80px rgba(0,0,0,0.35)",
         overflow: "hidden",
-        marginBottom: 14,
+        marginBottom: 12,
       }}
     >
       <div
@@ -206,42 +168,29 @@ export default function JobCard({ run, defaultOpen, titleNavigatesToRun = true }
             >
               <div style={{ padding: "16px 20px 20px", fontSize: "0.88rem" }}>
                 <div style={{ marginBottom: 14 }}>
-                  <Link
-                    to={`/run/${encodeURIComponent(run.runId)}`}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "10px 18px",
-                      borderRadius: 999,
-                      fontWeight: 600,
-                      fontSize: "0.88rem",
-                      textDecoration: "none",
-                      color: "#061018",
-                      background: "linear-gradient(120deg, var(--accent), var(--accent2))",
-                    }}
-                  >
+                  <Link to={`/run/${encodeURIComponent(run.runId)}`} className="qa-btn-primary" style={{ display: "inline-flex" }}>
                     Open workspace
                   </Link>
                   <p style={{ margin: "10px 0 0", fontSize: "0.8rem", color: "var(--muted)", lineHeight: 1.45 }}>
                     Review reports, set site status, then download the final PDF from the workspace — not here.
                   </p>
                 </div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                <table className="qa-table">
                   <thead>
-                    <tr style={{ color: "var(--muted)", textAlign: "left" }}>
-                      <th style={{ padding: "6px 8px" }}>Site</th>
-                      <th style={{ padding: "6px 8px" }}>Pages</th>
-                      <th style={{ padding: "6px 8px" }}>Broken</th>
-                      <th style={{ padding: "6px 8px" }}>Crawl ms</th>
-                      <th style={{ padding: "6px 8px" }}>Status</th>
-                      <th style={{ padding: "6px 8px" }}>HTML</th>
-                      <th style={{ padding: "6px 8px" }}>PDF</th>
+                    <tr>
+                      <th>Site</th>
+                      <th>Pages</th>
+                      <th>Broken</th>
+                      <th>Crawl ms</th>
+                      <th>Status</th>
+                      <th>HTML</th>
+                      <th>PDF</th>
                     </tr>
                   </thead>
                   <tbody>
                     {run.sites.map((s) => (
-                      <tr key={s.hostname + s.startUrl} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                        <td style={{ padding: "8px", wordBreak: "break-all" }}>
+                      <tr key={s.hostname + s.startUrl}>
+                        <td style={{ wordBreak: "break-all" }}>
                           <a
                             href={siteReportHtmlUrl(run.runId, s.reportHtmlHref)}
                             target="_blank"
@@ -251,18 +200,18 @@ export default function JobCard({ run, defaultOpen, titleNavigatesToRun = true }
                             {s.hostname}
                           </a>
                         </td>
-                        <td style={{ padding: "8px" }}>{s.pagesVisited}</td>
-                        <td style={{ padding: "8px" }}>{s.brokenLinks}</td>
-                        <td style={{ padding: "8px", fontFamily: "ui-monospace, Menlo, monospace" }}>{s.durationMs}</td>
-                        <td style={{ padding: "8px", color: s.failed ? "var(--bad)" : "var(--ok)" }}>
+                        <td>{s.pagesVisited}</td>
+                        <td>{s.brokenLinks}</td>
+                        <td style={{ fontFamily: "ui-monospace, Menlo, monospace" }}>{s.durationMs}</td>
+                        <td style={{ color: s.failed ? "var(--bad)" : "var(--ok)", fontWeight: 600 }}>
                           {s.failed ? "Issues" : "OK"}
                         </td>
-                        <td style={{ padding: "8px" }}>
+                        <td>
                           <a href={siteReportHtmlUrl(run.runId, s.reportHtmlHref)} target="_blank" rel="noreferrer">
                             Open
                           </a>
                         </td>
-                        <td style={{ padding: "8px" }}>
+                        <td>
                           <a href={sitePdfUrl(run.runId, s.reportHtmlHref, { download: true })} style={{ fontWeight: 600 }}>
                             Download
                           </a>

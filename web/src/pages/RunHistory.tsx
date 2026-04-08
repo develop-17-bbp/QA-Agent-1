@@ -44,10 +44,10 @@ export default function RunHistory() {
   return (
     <div>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <h1 style={{ fontSize: "1.85rem", fontWeight: 700, letterSpacing: "-0.04em", margin: "0 0 10px" }}>Run history</h1>
-        <p style={{ color: "var(--muted)", maxWidth: 720, lineHeight: 1.55, margin: 0, fontSize: "0.98rem" }}>
-          Every completed run is a row with start/end times, wall duration, and per-site stats. Use the chevron for HTML report links,
-          PDF downloads, and the full workspace.
+        <h1 className="qa-page-title">Run history</h1>
+        <p className="qa-page-desc">
+          Every completed run lists start/end times, wall duration, and per-site stats. Expand a row for report links, PDF downloads,
+          and the full workspace.
         </p>
       </motion.div>
 
@@ -55,7 +55,7 @@ export default function RunHistory() {
         <p style={{ color: "var(--bad)", marginTop: 24 }}>{err}</p>
       ) : null}
 
-      <h2 style={{ fontSize: "1rem", fontWeight: 600, letterSpacing: "-0.02em", margin: "28px 0 18px" }}>
+      <h2 style={{ fontSize: "0.875rem", fontWeight: 600, margin: "24px 0 14px", color: "var(--muted)" }}>
         Activity · {totalRuns} run{totalRuns === 1 ? "" : "s"}
       </h2>
 
@@ -69,14 +69,8 @@ export default function RunHistory() {
             <motion.h3
               initial={{ opacity: 0, x: -6 }}
               animate={{ opacity: 1, x: 0 }}
-              style={{
-                fontSize: "0.72rem",
-                fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                color: "var(--muted)",
-                margin: "0 0 14px",
-              }}
+              className="qa-nav-section"
+              style={{ margin: "0 0 12px" }}
             >
               {day.date}
             </motion.h3>
