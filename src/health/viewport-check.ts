@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 import pLimit from "p-limit";
 import { isCrawlPageEligibleForLighthouseLab } from "./lab-eligible-crawl-page.js";
+import { preparePageForVisualCapture } from "./playwright-page-ready.js";
 import type { CrawlSiteResult, ViewportCheckRecord } from "./types.js";
 
 const MOBILE = { width: 390, height: 844 };
@@ -31,13 +32,10 @@ async function loadOneViewport(
     page.on("console", (msg) => {
       if (msg.type() === "error") consoleErrorCount += 1;
     });
-    const res = await page.goto(url, {
-      waitUntil: "domcontentloaded",
-      timeout: timeoutMs,
-    });
+    const res = await preparePageForVisualCapture(page, url, timeoutMs, "load");
     const loadMs = Date.now() - t0;
-    const ok = res?.ok() ?? false;
-    const httpStatus = res?.status();
+    const ok = true;
+    const httpStatus = res.status();
     await context.close();
     return { width, height, loadMs, ok, httpStatus, consoleErrorCount };
   } catch (e) {

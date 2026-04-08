@@ -1,6 +1,7 @@
 import { mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
+import { preparePageForVisualCapture, resolveScreenshotWaitUntil } from "./playwright-page-ready.js";
 import type { StartPageScreenshotBundle, StartPageScreenshotVariant } from "./types.js";
 
 export const START_PAGE_SCREENSHOT_PC = "start-page-pc.png";
@@ -16,6 +17,10 @@ export const START_PAGE_SCREENSHOT_FILE = START_PAGE_SCREENSHOT_PC;
  *
  * - `QA_AGENT_SCREENSHOT_FULL_PAGE=1` — full scroll height for the **PC** capture only (larger PNG).
  * - `QA_AGENT_SCREENSHOT_WIDTH` / `QA_AGENT_SCREENSHOT_HEIGHT` — **PC** viewport (default 1440×900).
+ * - `QA_AGENT_SCREENSHOT_WAIT_UNTIL` — `load` (default), `domcontentloaded`, or `networkidle` before content checks.
+ * - `QA_AGENT_SCREENSHOT_CONTENT_TIMEOUT_MS` — max wait for visible content (text/media/layout); default derived from crawl timeout.
+ *
+ * Skips saving a PNG when navigation fails (HTTP ≥400) or the page stays visually empty (blank shell, consent wall, etc.).
  */
 export async function captureStartPageScreenshotToDir(options: {
   startUrl: string;
@@ -45,6 +50,7 @@ export async function captureStartPageScreenshotToDir(options: {
   await mkdir(options.siteOutDir, { recursive: true });
   const t0 = Date.now();
   const variants: StartPageScreenshotVariant[] = [];
+  const waitUntil = resolveScreenshotWaitUntil();
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -58,10 +64,7 @@ export async function captureStartPageScreenshotToDir(options: {
         });
         try {
           const page = await context.newPage();
-          await page.goto(options.startUrl, {
-            waitUntil: "domcontentloaded",
-            timeout: options.requestTimeoutMs,
-          });
+          await preparePageForVisualCapture(page, options.startUrl, options.requestTimeoutMs, waitUntil);
           await page.screenshot({
             path: outAbs,
             fullPage: spec.fullPage,
