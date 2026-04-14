@@ -12,6 +12,10 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
   const [pageSpeedBoth, setPageSpeedBoth] = useState(true);
   const [viewportCheck, setViewportCheck] = useState(true);
   const [gemini, setGemini] = useState(true);
+  const [seoAudit, setSeoAudit] = useState(false);
+  const [useFirecrawl, setUseFirecrawl] = useState(false);
+  const [smartAnalysis, setSmartAnalysis] = useState(false);
+  const [maxPages, setMaxPages] = useState(50);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -113,6 +117,10 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
         pageSpeedBoth,
         viewportCheck,
         gemini,
+        seoAudit,
+        useFirecrawl,
+        smartAnalysis,
+        maxPages,
       });
       setRunBanner((b) => {
         if (b.kind === "live") return b;
@@ -203,6 +211,54 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
               Gemini summary
             </label>
           </OptionWithTooltip>
+          <OptionWithTooltip hint="After the crawl, discovers XML sitemaps (sitemap.xml, robots.txt), HEAD-checks every URL for 404s and redirects, then classifies URLs with Gemini LLM to find old versions, drafts, duplicates, and test pages.">
+            <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
+              <input type="checkbox" checked={seoAudit} disabled={runInFlight} onChange={(e) => setSeoAudit(e.target.checked)} />
+              SEO URL audit
+            </label>
+          </OptionWithTooltip>
+          <OptionWithTooltip hint="Use Firecrawl for 10x faster crawling with JavaScript rendering and anti-bot handling. Requires FIRECRAWL_API_KEY. Falls back to default crawler if unavailable.">
+            <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
+              <input type="checkbox" checked={useFirecrawl} disabled={runInFlight} onChange={(e) => setUseFirecrawl(e.target.checked)} />
+              Firecrawl (fast)
+            </label>
+          </OptionWithTooltip>
+          <OptionWithTooltip hint="After crawl, runs Ollama local LLM to autonomously analyze results, prioritize issues, and generate fix recommendations. Requires Ollama running locally. Zero API cost.">
+            <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
+              <input type="checkbox" checked={smartAnalysis} disabled={runInFlight} onChange={(e) => setSmartAnalysis(e.target.checked)} />
+              Smart Analysis (Ollama)
+            </label>
+          </OptionWithTooltip>
+        </div>
+        <hr className="qa-divider" />
+        <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>
+          Crawl limits
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", fontSize: 13 }}>
+            Max pages per site
+            <input
+              type="number"
+              min={1}
+              max={10000}
+              value={maxPages}
+              disabled={runInFlight}
+              onChange={(e) => setMaxPages(Math.max(1, Number(e.target.value) || 50))}
+              style={{
+                width: 80,
+                padding: "4px 8px",
+                borderRadius: 6,
+                border: "1px solid var(--border)",
+                background: "var(--bg-card)",
+                color: "var(--text)",
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                fontSize: "0.8125rem",
+              }}
+            />
+          </label>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>
+            Lower = faster. Use 20-50 for quick audits, 200+ for full crawls.
+          </span>
         </div>
         <div style={{ marginTop: 20, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <motion.button

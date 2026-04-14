@@ -73,8 +73,10 @@ export async function attachViewportChecks(
   const rows: ViewportCheckRecord[] = await Promise.all(
     candidates.map((p) =>
       limit(async (): Promise<ViewportCheckRecord> => {
-        const mob = await loadOneViewport(p.url, MOBILE.width, MOBILE.height, options.timeoutMs);
-        const desk = await loadOneViewport(p.url, DESKTOP.width, DESKTOP.height, options.timeoutMs);
+        const [mob, desk] = await Promise.all([
+          loadOneViewport(p.url, MOBILE.width, MOBILE.height, options.timeoutMs),
+          loadOneViewport(p.url, DESKTOP.width, DESKTOP.height, options.timeoutMs),
+        ]);
         return {
           url: p.url,
           mobile: {

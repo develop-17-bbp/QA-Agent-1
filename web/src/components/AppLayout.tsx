@@ -29,6 +29,7 @@ export default function AppLayout() {
           alignSelf: "flex-start",
           minHeight: "100vh",
           boxShadow: "1px 0 0 rgba(9, 30, 66, 0.06)",
+          overflowY: "auto",
         }}
       >
         <div className="qa-sidebar-brand">
@@ -36,7 +37,7 @@ export default function AppLayout() {
             <span className="qa-app-mark" aria-hidden />
             <span style={{ minWidth: 0 }}>
               <span className="qa-sidebar-brand-text">QA Agent</span>
-              <span className="qa-sidebar-brand-sub">Site health &amp; crawl reports</span>
+              <span className="qa-sidebar-brand-sub">SEO &amp; Site Intelligence</span>
             </span>
           </Link>
         </div>
@@ -61,8 +62,68 @@ export default function AppLayout() {
           </NavLink>
         </nav>
 
+        <nav style={{ marginTop: 6 }} aria-label="Site Audit">
+          <div className="qa-nav-section">On Page &amp; Tech SEO</div>
+          <NavLink to="/site-audit" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Site Audit</NavLink>
+          <NavLink to="/onpage-seo-checker" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>On-Page SEO Checker</NavLink>
+          <NavLink to="/position-tracking" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Position Tracking</NavLink>
+        </nav>
+
+        <nav style={{ marginTop: 6 }} aria-label="Competitive Analysis">
+          <div className="qa-nav-section">Competitive Analysis</div>
+          <NavLink to="/domain-overview" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Domain Overview</NavLink>
+          <NavLink to="/organic-rankings" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Organic Rankings</NavLink>
+          <NavLink to="/top-pages" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Top Pages</NavLink>
+          <NavLink to="/compare-domains" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Compare Domains</NavLink>
+          <NavLink to="/keyword-gap" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Gap</NavLink>
+          <NavLink to="/backlink-gap" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Backlink Gap</NavLink>
+          <NavLink to="/traffic-analytics" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Traffic Analytics</NavLink>
+        </nav>
+
+        <nav style={{ marginTop: 6 }} aria-label="Keyword Research">
+          <div className="qa-nav-section">Keyword Research</div>
+          <NavLink to="/keyword-overview" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Overview</NavLink>
+          <NavLink to="/keyword-magic-tool" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Magic Tool</NavLink>
+          <NavLink to="/keyword-strategy" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Strategy Builder</NavLink>
+          <NavLink to="/keyword-manager" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Manager</NavLink>
+        </nav>
+
+        <nav style={{ marginTop: 6 }} aria-label="Content Marketing">
+          <div className="qa-nav-section">Content Marketing</div>
+          <NavLink to="/seo-writing-assistant" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>SEO Writing Assistant</NavLink>
+          <NavLink to="/topic-research" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Topic Research</NavLink>
+          <NavLink to="/seo-content-template" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>SEO Content Template</NavLink>
+          <NavLink to="/content-audit" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Content Audit</NavLink>
+          <NavLink to="/post-tracking" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Post Tracking</NavLink>
+        </nav>
+
+        <nav style={{ marginTop: 6 }} aria-label="Link Building">
+          <div className="qa-nav-section">Link Building</div>
+          <NavLink to="/backlinks" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Backlinks</NavLink>
+          <NavLink to="/referring-domains" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Referring Domains</NavLink>
+          <NavLink to="/backlink-audit" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Backlink Audit</NavLink>
+        </nav>
+
+        <nav style={{ marginTop: 6 }} aria-label="AI Tools">
+          <div className="qa-nav-section">AI Tools</div>
+          <NavLink to="/query-lab" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
+            Query Lab
+          </NavLink>
+        </nav>
+
+        <nav style={{ marginTop: 6 }} aria-label="Monitoring">
+          <div className="qa-nav-section">Monitoring</div>
+          <NavLink to="/brand-monitoring" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Brand Monitoring</NavLink>
+          <NavLink to="/log-file-analyzer" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Log File Analyzer</NavLink>
+        </nav>
+
+        <nav style={{ marginTop: 6 }} aria-label="Local SEO">
+          <div className="qa-nav-section">Local SEO</div>
+          <NavLink to="/local-seo" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Local SEO Tools</NavLink>
+        </nav>
+
         <div className="qa-sidebar-footer">
-          Times follow your device timezone. Completed runs appear here once the server writes artifacts to disk.
+          Powered by Gemini AI. All analysis uses free tier APIs only.
         </div>
       </motion.aside>
 

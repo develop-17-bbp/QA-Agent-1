@@ -54,10 +54,11 @@ export async function captureStartPageScreenshotToDir(options: {
 
   const browser = await chromium.launch({ headless: true });
   try {
-    for (const spec of specs) {
-      const outAbs = path.join(options.siteOutDir, spec.fileName);
-      const tVar = Date.now();
-      try {
+    // Capture all viewports in parallel using the same browser instance
+    const results = await Promise.allSettled(
+      specs.map(async (spec): Promise<StartPageScreenshotVariant> => {
+        const outAbs = path.join(options.siteOutDir, spec.fileName);
+        const tVar = Date.now();
         const context = await browser.newContext({
           viewport: { width: spec.width, height: spec.height },
           deviceScaleFactor: 1,
@@ -70,33 +71,35 @@ export async function captureStartPageScreenshotToDir(options: {
             fullPage: spec.fullPage,
             type: "png",
           });
+          return {
+            label: spec.label,
+            fileName: spec.fileName,
+            viewportWidth: spec.width,
+            viewportHeight: spec.height,
+            fullPage: spec.fullPage,
+            durationMs: Date.now() - tVar,
+          };
+        } catch (e) {
+          try { await unlink(outAbs); } catch { /* no partial file */ }
+          const msg = e instanceof Error ? e.message : String(e);
+          return {
+            label: spec.label,
+            viewportWidth: spec.width,
+            viewportHeight: spec.height,
+            fullPage: spec.fullPage,
+            durationMs: Date.now() - tVar,
+            error: msg,
+          };
         } finally {
           await context.close();
         }
-        variants.push({
-          label: spec.label,
-          fileName: spec.fileName,
-          viewportWidth: spec.width,
-          viewportHeight: spec.height,
-          fullPage: spec.fullPage,
-          durationMs: Date.now() - tVar,
-        });
-      } catch (e) {
-        try {
-          await unlink(outAbs);
-        } catch {
-          /* no partial file */
-        }
-        const msg = e instanceof Error ? e.message : String(e);
-        variants.push({
-          label: spec.label,
-          viewportWidth: spec.width,
-          viewportHeight: spec.height,
-          fullPage: spec.fullPage,
-          durationMs: Date.now() - tVar,
-          error: msg,
-        });
-      }
+      }),
+    );
+    for (const r of results) {
+      variants.push(r.status === "fulfilled" ? r.value : {
+        label: "PC", viewportWidth: 0, viewportHeight: 0, fullPage: false,
+        durationMs: 0, error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      });
     }
   } finally {
     await browser.close();

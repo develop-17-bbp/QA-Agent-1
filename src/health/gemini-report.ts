@@ -76,7 +76,7 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((r) => setTimeout(r, ms));
 }
 
-async function generateGeminiText(prompt: string): Promise<string> {
+export async function generateGeminiText(prompt: string): Promise<string> {
   const key = resolveGeminiApiKey();
   if (!key) {
     throw new Error("Set GEMINI_API_KEY (or GOOGLE_AI_API_KEY) for Gemini features.");

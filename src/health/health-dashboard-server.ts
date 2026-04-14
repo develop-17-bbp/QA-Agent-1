@@ -14,6 +14,25 @@ import {
   resolveGeminiApiKey,
 } from "./gemini-report.js";
 import { orchestrateHealthCheck } from "./orchestrate-health.js";
+import { routeQuery, loadRawReportsForRun, type NlpQueryRequest } from "./nlp-query-engine.js";
+import { analyzeSiteAudit } from "./modules/site-audit-analyzer.js";
+import { analyzePositions } from "./modules/position-tracker.js";
+import { analyzeDomain, analyzeOrganicRankings } from "./modules/domain-analyzer.js";
+import { analyzeTopPages, compareDomains } from "./modules/competitive-analyzer.js";
+import { analyzeKeywordGap, analyzeBacklinkGap } from "./modules/gap-analyzer.js";
+import { extractKeywords, generateMagicKeywords } from "./modules/keyword-analyzer.js";
+import { buildKeywordStrategy } from "./modules/keyword-strategy.js";
+import { analyzeWritingAssistant, generateContentTemplate } from "./modules/content-optimizer.js";
+import { researchTopic } from "./modules/topic-researcher.js";
+import { analyzeBacklinks, analyzeReferringDomains, auditBacklinks } from "./modules/link-analyzer.js";
+import { analyzeTraffic } from "./modules/traffic-analyzer.js";
+import { auditContent } from "./modules/content-auditor.js";
+import { trackPosts } from "./modules/post-tracker.js";
+import { analyzeBrandPresence } from "./modules/brand-monitor.js";
+import { analyzeLogFile } from "./modules/log-analyzer.js";
+import { analyzeLocalSeo } from "./modules/local-seo-analyzer.js";
+import { checkOnPageSeo } from "./modules/onpage-seo-checker.js";
+import { loadKeywordLists, saveKeywordList, deleteKeywordList, analyzeKeywordList } from "./modules/keyword-manager.js";
 import { extractUrlsFromPdfBuffer } from "./pdf-urls.js";
 import type { SiteHealthReport } from "./types.js";
 
@@ -1485,6 +1504,369 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── SEMrush Feature Endpoints ──────────────────────────────────
+
+      // Helper: load reports for a runId from POST body
+      const semrushEndpoint = async (
+        pathname: string,
+        handler: (reports: SiteHealthReport[], payload: any) => any | Promise<any>,
+      ) => {
+        if (req.method === "POST" && url.pathname === pathname) {
+          let body: string;
+          try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return true; }
+          let payload: any;
+          try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return true; }
+
+          try {
+            let reports: SiteHealthReport[] = [];
+            const runIdParam = typeof payload.runId === "string" ? payload.runId : "";
+            if (!runIdParam || !isSafeRunIdSegment(runIdParam)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad runId" })); return true; }
+            const raw = await loadRawReportsForRun(outRoot, runIdParam);
+            if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return true; }
+            reports = raw.reports;
+            const result = await handler(reports, payload);
+            res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+            res.end(JSON.stringify(result));
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ error: msg }));
+          }
+          return true;
+        }
+        return false;
+      };
+
+      if (await semrushEndpoint("/api/site-audit", (reports) => analyzeSiteAudit(reports))) return;
+      if (await semrushEndpoint("/api/position-tracking", (reports) => analyzePositions(reports))) return;
+      if (await semrushEndpoint("/api/domain-overview", (reports) => analyzeDomain(reports))) return;
+      if (await semrushEndpoint("/api/organic-rankings", (reports) => analyzeOrganicRankings(reports))) return;
+      if (await semrushEndpoint("/api/top-pages", (reports) => analyzeTopPages(reports))) return;
+      if (await semrushEndpoint("/api/backlinks", (reports) => analyzeBacklinks(reports))) return;
+      if (await semrushEndpoint("/api/referring-domains", (reports) => analyzeReferringDomains(reports))) return;
+      if (await semrushEndpoint("/api/backlink-audit", (reports) => auditBacklinks(reports))) return;
+      if (await semrushEndpoint("/api/keyword-overview", (reports) => extractKeywords(reports))) return;
+      if (await semrushEndpoint("/api/keyword-strategy", (reports) => buildKeywordStrategy(reports))) return;
+      if (await semrushEndpoint("/api/traffic-analytics", (reports) => analyzeTraffic(reports))) return;
+      if (await semrushEndpoint("/api/content-audit", (reports) => auditContent(reports))) return;
+
+      // Compare domains (multi-run)
+      if (req.method === "POST" && url.pathname === "/api/compare-domains") {
+        let body: string;
+        try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { runIds?: string[] };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const runIds = Array.isArray(payload.runIds) ? payload.runIds.filter((id): id is string => typeof id === "string" && isSafeRunIdSegment(id)) : [];
+        if (runIds.length < 2) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Need at least 2 runIds" })); return; }
+        try {
+          const sets = [];
+          for (const rid of runIds) {
+            const raw = await loadRawReportsForRun(outRoot, rid);
+            if (raw) sets.push({ runId: rid, reports: raw.reports });
+          }
+          const result = compareDomains(sets);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // Gap endpoints (need two runs)
+      for (const [ep, fn] of [["/api/keyword-gap", analyzeKeywordGap], ["/api/backlink-gap", analyzeBacklinkGap]] as const) {
+        if (req.method === "POST" && url.pathname === ep) {
+          let body: string;
+          try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+          let payload: { runIdA?: string; runIdB?: string };
+          try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+          const ridA = typeof payload.runIdA === "string" ? payload.runIdA : "";
+          const ridB = typeof payload.runIdB === "string" ? payload.runIdB : "";
+          if (!ridA || !ridB || !isSafeRunIdSegment(ridA) || !isSafeRunIdSegment(ridB)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Need runIdA and runIdB" })); return; }
+          try {
+            const rawA = await loadRawReportsForRun(outRoot, ridA);
+            const rawB = await loadRawReportsForRun(outRoot, ridB);
+            if (!rawA || !rawB) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return; }
+            const result = fn(rawA.reports, rawB.reports);
+            res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+            res.end(JSON.stringify(result));
+          } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+          return;
+        }
+      }
+
+      // Keyword Magic (Gemini-powered, seed keyword only)
+      if (req.method === "POST" && url.pathname === "/api/keyword-magic") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { seedKeyword?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const seed = typeof payload.seedKeyword === "string" ? payload.seedKeyword.trim() : "";
+        if (!seed) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "seedKeyword required" })); return; }
+        try {
+          const result = await generateMagicKeywords(seed);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // SEO Writing Assistant (needs runId + url)
+      if (req.method === "POST" && url.pathname === "/api/seo-writing-assistant") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { runId?: string; url?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const runIdP = typeof payload.runId === "string" ? payload.runId : "";
+        const urlP = typeof payload.url === "string" ? payload.url.trim() : "";
+        if (!runIdP || !isSafeRunIdSegment(runIdP) || !urlP) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "runId and url required" })); return; }
+        try {
+          const raw = await loadRawReportsForRun(outRoot, runIdP);
+          if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return; }
+          const result = await analyzeWritingAssistant(urlP, raw.reports);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // SEO Content Template (Gemini-powered, keyword only)
+      if (req.method === "POST" && url.pathname === "/api/seo-content-template") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { keyword?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const kw = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
+        if (!kw) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keyword required" })); return; }
+        try {
+          const result = await generateContentTemplate(kw);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // Topic Research (Gemini-powered, optional runId)
+      if (req.method === "POST" && url.pathname === "/api/topic-research") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { topic?: string; runId?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const topic = typeof payload.topic === "string" ? payload.topic.trim() : "";
+        if (!topic) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "topic required" })); return; }
+        try {
+          let reports: SiteHealthReport[] | undefined;
+          const runIdP = typeof payload.runId === "string" ? payload.runId : "";
+          if (runIdP && isSafeRunIdSegment(runIdP)) {
+            const raw = await loadRawReportsForRun(outRoot, runIdP);
+            if (raw) reports = raw.reports;
+          }
+          const result = await researchTopic(topic, reports);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // On-Page SEO Checker (needs runId + url)
+      if (req.method === "POST" && url.pathname === "/api/onpage-seo-checker") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { runId?: string; url?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const runIdP = typeof payload.runId === "string" ? payload.runId : "";
+        const urlP = typeof payload.url === "string" ? payload.url.trim() : "";
+        if (!runIdP || !isSafeRunIdSegment(runIdP)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "runId required" })); return; }
+        try {
+          const raw = await loadRawReportsForRun(outRoot, runIdP);
+          if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return; }
+          const result = await checkOnPageSeo(urlP, raw.reports);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // Post Tracking (needs runId, optional baselineRunId)
+      if (req.method === "POST" && url.pathname === "/api/post-tracking") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { runId?: string; baselineRunId?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const runIdP = typeof payload.runId === "string" ? payload.runId : "";
+        if (!runIdP || !isSafeRunIdSegment(runIdP)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "runId required" })); return; }
+        try {
+          const raw = await loadRawReportsForRun(outRoot, runIdP);
+          if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return; }
+          let baseline: SiteHealthReport[] | undefined;
+          const bId = typeof payload.baselineRunId === "string" ? payload.baselineRunId : "";
+          if (bId && isSafeRunIdSegment(bId)) {
+            const rawB = await loadRawReportsForRun(outRoot, bId);
+            if (rawB) baseline = rawB.reports;
+          }
+          const result = await trackPosts(raw.reports, baseline);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // Brand Monitoring (needs brandName + runId)
+      if (req.method === "POST" && url.pathname === "/api/brand-monitor") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { brandName?: string; runId?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const brand = typeof payload.brandName === "string" ? payload.brandName.trim() : "";
+        const runIdP = typeof payload.runId === "string" ? payload.runId : "";
+        if (!brand || !runIdP || !isSafeRunIdSegment(runIdP)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "brandName and runId required" })); return; }
+        try {
+          const raw = await loadRawReportsForRun(outRoot, runIdP);
+          if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return; }
+          const result = await analyzeBrandPresence(brand, raw.reports);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // Log File Analyzer (no run needed)
+      if (req.method === "POST" && url.pathname === "/api/log-analyzer") {
+        let body: string;
+        try { body = await readBody(req, 1_000_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { logContent?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const content = typeof payload.logContent === "string" ? payload.logContent : "";
+        if (!content.trim()) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "logContent required" })); return; }
+        try {
+          const result = await analyzeLogFile(content);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // Local SEO (Gemini-powered, optional runId)
+      if (req.method === "POST" && url.pathname === "/api/local-seo") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { businessName?: string; location?: string; runId?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const biz = typeof payload.businessName === "string" ? payload.businessName.trim() : "";
+        const loc = typeof payload.location === "string" ? payload.location.trim() : "";
+        if (!biz || !loc) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "businessName and location required" })); return; }
+        try {
+          let reports: SiteHealthReport[] | undefined;
+          const runIdP = typeof payload.runId === "string" ? payload.runId : "";
+          if (runIdP && isSafeRunIdSegment(runIdP)) {
+            const raw = await loadRawReportsForRun(outRoot, runIdP);
+            if (raw) reports = raw.reports;
+          }
+          const result = await analyzeLocalSeo(biz, loc, reports);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // Keyword Manager endpoints
+      if (req.method === "POST" && url.pathname === "/api/keyword-lists") {
+        try {
+          const result = await loadKeywordLists();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/keyword-lists/save") {
+        let body: string;
+        try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { name?: string; keywords?: string[] };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const name = typeof payload.name === "string" ? payload.name.trim() : "";
+        const keywords = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string") : [];
+        if (!name) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "name required" })); return; }
+        try {
+          const result = await saveKeywordList(name, keywords);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/keyword-lists/delete") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { name?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const name = typeof payload.name === "string" ? payload.name.trim() : "";
+        if (!name) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "name required" })); return; }
+        try {
+          const result = await deleteKeywordList(name);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/keyword-lists/analyze") {
+        let body: string;
+        try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { keywords?: string[] };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const keywords = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string") : [];
+        if (keywords.length === 0) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keywords required" })); return; }
+        try {
+          const result = await analyzeKeywordList(keywords);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── NLP Query Lab ─────────────────────────────────────────────
+      if (req.method === "POST" && url.pathname === "/api/query") {
+        let body: string;
+        try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: NlpQueryRequest;
+        try { payload = JSON.parse(body) as NlpQueryRequest; } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const queryText = typeof payload.query === "string" ? payload.query.trim().slice(0, 4000) : "";
+        const runIdParam = typeof payload.runId === "string" ? payload.runId : "";
+        const history = Array.isArray(payload.history) ? payload.history.slice(-6) : [];
+        if (!queryText) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "query required" })); return; }
+        if (!runIdParam || !isSafeRunIdSegment(runIdParam)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad runId" })); return; }
+        if (!resolveGeminiApiKey()) { res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Gemini API key not configured" })); return; }
+        const rawData = await loadRawReportsForRun(outRoot, runIdParam);
+        if (!rawData) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run data not found" })); return; }
+        try {
+          const result = await routeQuery(queryText, runIdParam, rawData.reports, rawData.generatedAt, history);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: msg }));
+        }
+        return;
+      }
+
+      // ── Keyword Research (Gemini-powered, no run needed) ──────────
+      if (req.method === "POST" && url.pathname === "/api/keyword-research") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { keyword?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const kw = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
+        if (!kw) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keyword required" })); return; }
+        try {
+          const { researchKeyword } = await import("./modules/keyword-research.js");
+          const result = await researchKeyword(kw);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: msg }));
+        }
+        return;
+      }
+
       if (req.method === "POST" && url.pathname === "/api/run") {
         if (runInFlight) {
           res.writeHead(409, { "Content-Type": "text/plain; charset=utf-8" });
@@ -1505,6 +1887,10 @@ export async function runHealthDashboard(options: {
           pageSpeedBoth?: boolean;
           viewportCheck?: boolean;
           gemini?: boolean;
+          seoAudit?: boolean;
+          useFirecrawl?: boolean;
+          smartAnalysis?: boolean;
+          maxPages?: number;
         };
         try {
           payload = JSON.parse(body) as typeof payload;
@@ -1536,7 +1922,7 @@ export async function runHealthDashboard(options: {
             enabled: true,
             strategies: ["mobile", "desktop"],
             maxUrls: ps?.maxUrls ?? 25,
-            concurrency: ps?.concurrency ?? 1,
+            concurrency: ps?.concurrency ?? 3,
             timeoutMs: ps?.timeoutMs ?? 120_000,
           };
         }
@@ -1546,11 +1932,17 @@ export async function runHealthDashboard(options: {
             enabled: true,
             maxUrls: vc?.maxUrls ?? 15,
             timeoutMs: vc?.timeoutMs ?? 60_000,
-            concurrency: vc?.concurrency ?? 1,
+            concurrency: vc?.concurrency ?? 2,
           };
         }
         if (payload.gemini) {
           runExtra.gemini = true;
+        }
+        // seoAudit: requires seo-audit module (available on main branch)
+        if (payload.useFirecrawl) runExtra.useFirecrawl = true;
+        if (payload.smartAnalysis) runExtra.smartAnalysis = true;
+        if (typeof payload.maxPages === "number" && payload.maxPages > 0) {
+          runExtra.maxPages = payload.maxPages;
         }
 
         runInFlight = true;

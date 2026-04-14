@@ -1,8 +1,6 @@
 export type HealthRunMeta = {
   runId: string;
-  /** ISO start time (newer runs). */
   startedAt?: string;
-  /** Wall-clock run duration in ms (newer runs). */
   durationMsTotal?: number;
   generatedAt: string;
   urlsSource: string;
@@ -17,9 +15,9 @@ export type HealthRunMeta = {
     brokenLinks: number;
     durationMs: number;
     reportHtmlHref: string;
+    seoAuditHtmlHref?: string;
   }[];
   masterHtmlHref: string;
-  /** Compact stats HTML for small run-level PDFs; omitted on older runs. */
   runSummaryHtmlHref?: string;
   indexHtmlHref: string;
   geminiSummaryHref?: string;
@@ -27,6 +25,7 @@ export type HealthRunMeta = {
   features?: {
     pageSpeedStrategies?: string[];
     viewportCheck?: boolean;
+    seoAudit?: boolean;
   };
 };
 
@@ -38,7 +37,6 @@ export async function fetchHistory(): Promise<{ days: HistoryDay[] }> {
   return res.json() as Promise<{ days: HistoryDay[] }>;
 }
 
-/** Single run metadata from disk (`run-meta.json` or legacy). Prefer this for the workspace route. */
 export async function fetchRunMeta(runId: string): Promise<HealthRunMeta | null> {
   const res = await fetch(`/api/run-meta?runId=${encodeURIComponent(runId)}`);
   if (res.status === 404) return null;
@@ -54,6 +52,10 @@ export async function startRun(body: {
   pageSpeedBoth?: boolean;
   viewportCheck?: boolean;
   gemini?: boolean;
+  seoAudit?: boolean;
+  useFirecrawl?: boolean;
+  smartAnalysis?: boolean;
+  maxPages?: number;
 }): Promise<void> {
   const res = await fetch("/api/run", {
     method: "POST",
@@ -75,7 +77,6 @@ export async function fetchGeminiSummary(runId: string): Promise<string | null> 
   return res.text();
 }
 
-/** Short Gemini answer about one run (uses MASTER JSON + API key on server). */
 export async function askGeminiAboutRun(runId: string, question: string): Promise<string> {
   const res = await fetch("/api/gemini-run-chat", {
     method: "POST",
@@ -94,6 +95,109 @@ export async function askGeminiAboutRun(runId: string, question: string): Promis
   return data.answer.trim();
 }
 
+// ---------------------------------------------------------------------------
+// Keyword Research (standalone Gemini-powered)
+// ---------------------------------------------------------------------------
+
+export async function fetchKeywordResearch(keyword: string): Promise<any> {
+  const res = await fetch("/api/keyword-research", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keyword }),
+  });
+  if (!res.ok) {
+    let errMsg: string;
+    try { const d = await res.json() as { error?: string }; errMsg = d.error ?? res.statusText; } catch { errMsg = await res.text(); }
+    throw new Error(errMsg);
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// NLP Query Lab
+// ---------------------------------------------------------------------------
+
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+export type NlpQueryResponse = {
+  answer: string;
+  intent: string;
+  clarification_needed: boolean;
+  follow_up_question: string | null;
+};
+
+export async function queryNlp(
+  query: string,
+  runId: string,
+  history: ChatMessage[],
+): Promise<NlpQueryResponse> {
+  const res = await fetch("/api/query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, runId, history }),
+  });
+  const text = await res.text();
+  let data: NlpQueryResponse & { error?: string };
+  try {
+    data = JSON.parse(text) as NlpQueryResponse & { error?: string };
+  } catch {
+    throw new Error(text || res.statusText);
+  }
+  if (!res.ok) throw new Error(data.error ?? (text || res.statusText));
+  if (!data.answer?.trim()) throw new Error("Empty answer");
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// SEMrush Feature API Functions
+// ---------------------------------------------------------------------------
+
+async function postApi<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<T>;
+}
+
+// Run-based endpoints (require runId)
+export function fetchSiteAudit(runId: string) { return postApi<any>("/api/site-audit", { runId }); }
+export function fetchPositionTracking(runId: string) { return postApi<any>("/api/position-tracking", { runId }); }
+export function fetchDomainOverview(runId: string) { return postApi<any>("/api/domain-overview", { runId }); }
+export function fetchOrganicRankings(runId: string) { return postApi<any>("/api/organic-rankings", { runId }); }
+export function fetchTopPages(runId: string) { return postApi<any>("/api/top-pages", { runId }); }
+export function fetchKeywordOverview(runId: string) { return postApi<any>("/api/keyword-overview", { runId }); }
+export function fetchKeywordStrategy(runId: string) { return postApi<any>("/api/keyword-strategy", { runId }); }
+export function fetchBacklinks(runId: string) { return postApi<any>("/api/backlinks", { runId }); }
+export function fetchReferringDomains(runId: string) { return postApi<any>("/api/referring-domains", { runId }); }
+export function fetchBacklinkAudit(runId: string) { return postApi<any>("/api/backlink-audit", { runId }); }
+export function fetchTrafficAnalytics(runId: string) { return postApi<any>("/api/traffic-analytics", { runId }); }
+export function fetchContentAudit(runId: string) { return postApi<any>("/api/content-audit", { runId }); }
+export function fetchOnPageSeoChecker(runId: string, url: string) { return postApi<any>("/api/onpage-seo-checker", { runId, url }); }
+
+// Multi-run endpoints
+export function fetchCompareDomains(runIds: string[]) { return postApi<any>("/api/compare-domains", { runIds }); }
+export function fetchKeywordGap(runIdA: string, runIdB: string) { return postApi<any>("/api/keyword-gap", { runIdA, runIdB }); }
+export function fetchBacklinkGap(runIdA: string, runIdB: string) { return postApi<any>("/api/backlink-gap", { runIdA, runIdB }); }
+export function fetchPostTracking(runId: string, baselineRunId?: string) { return postApi<any>("/api/post-tracking", { runId, baselineRunId }); }
+
+// Gemini-only endpoints (no runId required)
+export function fetchKeywordMagic(seedKeyword: string) { return postApi<any>("/api/keyword-magic", { seedKeyword }); }
+export function fetchSeoWritingAssistant(runId: string, url: string) { return postApi<any>("/api/seo-writing-assistant", { runId, url }); }
+export function fetchSeoContentTemplate(keyword: string) { return postApi<any>("/api/seo-content-template", { keyword }); }
+export function fetchTopicResearch(topic: string, runId?: string) { return postApi<any>("/api/topic-research", { topic, runId }); }
+export function fetchBrandMonitoring(brandName: string, runId: string) { return postApi<any>("/api/brand-monitor", { brandName, runId }); }
+export function fetchLogAnalysis(logContent: string) { return postApi<any>("/api/log-analyzer", { logContent }); }
+export function fetchLocalSeo(businessName: string, location: string, runId?: string) { return postApi<any>("/api/local-seo", { businessName, location, runId }); }
+
+// Keyword Manager
+export function fetchKeywordLists() { return postApi<any>("/api/keyword-lists", {}); }
+export function saveKeywordListApi(name: string, keywords: string[]) { return postApi<any>("/api/keyword-lists/save", { name, keywords }); }
+export function deleteKeywordListApi(name: string) { return postApi<any>("/api/keyword-lists/delete", { name }); }
+export function analyzeKeywordListApi(keywords: string[]) { return postApi<any>("/api/keyword-lists/analyze", { keywords }); }
+
+// ---------------------------------------------------------------------------
+// File Upload
+// ---------------------------------------------------------------------------
+
 export async function parseUrlsFile(file: File): Promise<string[]> {
   const fd = new FormData();
   fd.append("file", file);
@@ -109,6 +213,10 @@ export async function parseUrlsFile(file: File): Promise<string[]> {
   return data.urls ?? [];
 }
 
+// ---------------------------------------------------------------------------
+// Report / PDF URLs
+// ---------------------------------------------------------------------------
+
 export function reportIndexUrl(runId: string): string {
   return `/reports/${encodeURIComponent(runId)}/index.html`;
 }
@@ -121,33 +229,34 @@ export function pdfUrl(runId: string, fileRel: string, opts?: { download?: boole
   return `/api/pdf?${q.toString()}`;
 }
 
-/** Strip `./` and normalize slashes for paths stored in run-meta (e.g. `./001-host/report.html`). */
 export function normalizeReportHtmlRel(rel: string): string {
   return rel.replace(/^\.\//, "").replace(/\\/g, "/");
 }
 
-/** Full combined all-sites HTML (MASTER-*.html or legacy `master.html` redirect). */
 export function combinedReportHtmlUrl(run: HealthRunMeta): string {
   const rel = run.masterHtmlHref?.trim() ? normalizeReportHtmlRel(run.masterHtmlHref) : "master.html";
   const segments = rel.split("/").map(encodeURIComponent).join("/");
   return `/reports/${encodeURIComponent(run.runId)}/${segments}`;
 }
 
-/** Compact `run-summary.html` URL when present (stats-only page). */
 export function runSummaryReportHtmlUrl(run: HealthRunMeta): string {
   const rel = run.runSummaryHtmlHref?.trim() ? normalizeReportHtmlRel(run.runSummaryHtmlHref) : "run-summary.html";
   const segments = rel.split("/").map(encodeURIComponent).join("/");
   return `/reports/${encodeURIComponent(run.runId)}/${segments}`;
 }
 
-/** Per-site `report.html` URL (HTML). */
 export function siteReportHtmlUrl(runId: string, reportHtmlHref: string): string {
   const rel = normalizeReportHtmlRel(reportHtmlHref);
   const segments = rel.split("/").map(encodeURIComponent).join("/");
   return `/reports/${encodeURIComponent(runId)}/${segments}`;
 }
 
-/** Run-level PDF: same HTML as the combined preview (`masterHtmlHref`), so the file matches what you see in the iframe. */
+export function seoAuditReportHtmlUrl(runId: string, seoAuditHtmlHref: string): string {
+  const rel = normalizeReportHtmlRel(seoAuditHtmlHref);
+  const segments = rel.split("/").map(encodeURIComponent).join("/");
+  return `/reports/${encodeURIComponent(runId)}/${segments}`;
+}
+
 export function combinedPdfUrl(run: HealthRunMeta, opts?: { download?: boolean }): string {
   const rel = run.masterHtmlHref?.trim()
     ? normalizeReportHtmlRel(run.masterHtmlHref)
@@ -157,7 +266,6 @@ export function combinedPdfUrl(run: HealthRunMeta, opts?: { download?: boolean }
   return pdfUrl(run.runId, rel, opts);
 }
 
-/** Per-site PDF: same `report.html` as **Open HTML** / the static report page (not run-summary). */
 export function sitePdfUrl(runId: string, reportHtmlHref: string, opts?: { download?: boolean }): string {
   return pdfUrl(runId, normalizeReportHtmlRel(reportHtmlHref), opts);
 }
@@ -177,7 +285,6 @@ export async function fetchSiteStatusOverrides(runId: string): Promise<SiteStatu
   return res.json() as Promise<SiteStatusOverridesPayload>;
 }
 
-/** Persists to `artifacts/health/<runId>/site-status-overrides.json` (used when regenerating PDFs). */
 export async function saveSiteStatusOverrides(
   runId: string,
   sites: Record<string, SiteStatusValue>,

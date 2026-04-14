@@ -11,6 +11,8 @@ import {
 } from "./gemini-report.js";
 import { attachPageSpeedInsights, resolvePageSpeedApiKey } from "./pagespeed-insights.js";
 import { attachViewportChecks } from "./viewport-check.js";
+import { crawlWithFirecrawl, resolveFirecrawlApiKey } from "./firecrawl-crawler.js";
+import { runSmartAnalysis } from "./ollama-agent.js";
 import type { HealthProgressEvent } from "./progress-events.js";
 import { masterReportBaseName, perSiteReportBaseName } from "./report-names.js";
 import {
@@ -94,6 +96,10 @@ export async function orchestrateHealthCheck(options: {
   };
   /** Optional Gemini Markdown executive summary (requires GEMINI_API_KEY). */
   gemini?: boolean;
+  /** Use Firecrawl for faster JS-rendered crawling (requires FIRECRAWL_API_KEY). */
+  useFirecrawl?: boolean;
+  /** Run Ollama-powered autonomous smart analysis after crawl. */
+  smartAnalysis?: boolean;
   onProgress?: (event: HealthProgressEvent) => void;
 }): Promise<{ runId: string; runDir: string; siteFailures: number }> {
   const rid = runId();
@@ -151,45 +157,68 @@ export async function orchestrateHealthCheck(options: {
     });
 
     const startedAt = new Date().toISOString();
-    let crawl;
+    let crawl: import("./types.js").CrawlSiteResult;
     try {
-      crawl = await crawlSite({
-        startUrl,
-        maxPages: options.maxPages,
-        maxLinkChecks: options.maxLinkChecks,
-        requestTimeoutMs: options.requestTimeoutMs,
-        fetchConcurrency: options.fetchConcurrency,
-      });
+      // Use Firecrawl (fast, JS-rendered) when enabled and API key is set
+      if (options.useFirecrawl && resolveFirecrawlApiKey()) {
+        crawl = await crawlWithFirecrawl(startUrl, {
+          maxPages: options.maxPages,
+        });
+      } else {
+        crawl = await crawlSite({
+          startUrl,
+          maxPages: options.maxPages,
+          maxLinkChecks: options.maxLinkChecks,
+          requestTimeoutMs: options.requestTimeoutMs,
+          fetchConcurrency: options.fetchConcurrency,
+        });
+      }
+
+      // ── Post-crawl steps run IN PARALLEL for speed ──────────────
       const siteDirEarly = path.join(runDir, outputDirName);
-      crawl.startPageScreenshot = await captureStartPageScreenshotToDir({
-        startUrl,
-        siteOutDir: siteDirEarly,
-        requestTimeoutMs: options.requestTimeoutMs,
-      });
+      const parallelTasks: Promise<void>[] = [];
+
+      // Screenshot (always)
+      parallelTasks.push(
+        captureStartPageScreenshotToDir({
+          startUrl,
+          siteOutDir: siteDirEarly,
+          requestTimeoutMs: options.requestTimeoutMs,
+        }).then((ss) => { crawl.startPageScreenshot = ss; })
+         .catch(() => { /* screenshot failure is non-fatal */ }),
+      );
+
+      // PageSpeed (optional)
       const ps = options.pageSpeed;
       if (ps?.enabled) {
         const apiKey = resolvePageSpeedApiKey();
-        if (!apiKey) {
-          throw new Error(
-            "PageSpeed Insights enabled but no API key found. Set PAGESPEED_API_KEY or GOOGLE_PAGESPEED_API_KEY (or GOOGLE_API_KEY) in the environment.",
+        if (apiKey) {
+          parallelTasks.push(
+            attachPageSpeedInsights(crawl, {
+              apiKey,
+              strategies: ps.strategies.length > 0 ? ps.strategies : ["desktop"],
+              maxUrls: ps.maxUrls,
+              concurrency: ps.concurrency,
+              timeoutMs: ps.timeoutMs,
+            }).then(() => {}),
           );
         }
-        await attachPageSpeedInsights(crawl, {
-          apiKey,
-          strategies: ps.strategies.length > 0 ? ps.strategies : ["desktop"],
-          maxUrls: ps.maxUrls,
-          concurrency: ps.concurrency,
-          timeoutMs: ps.timeoutMs,
-        });
       }
+
+      // Viewport checks (optional)
       const vc = options.viewportCheck;
       if (vc?.enabled) {
-        await attachViewportChecks(crawl, {
-          maxUrls: vc.maxUrls,
-          timeoutMs: vc.timeoutMs,
-          concurrency: vc.concurrency,
-        });
+        parallelTasks.push(
+          attachViewportChecks(crawl, {
+            maxUrls: vc.maxUrls,
+            timeoutMs: vc.timeoutMs,
+            concurrency: vc.concurrency,
+          }).then(() => {}),
+        );
       }
+
+      // Wait for ALL post-crawl steps to finish in parallel
+      await Promise.allSettled(parallelTasks);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       emit?.({
@@ -317,30 +346,48 @@ export async function orchestrateHealthCheck(options: {
     "utf8",
   );
 
+  // ── Gemini + Smart Analysis run IN PARALLEL ──────────────────
   let geminiSummaryHref: string | undefined;
   let aiSummary: HealthRunMeta["aiSummary"] | undefined;
+
+  const endTasks: Promise<void>[] = [];
 
   if (options.gemini) {
     if (!resolveGeminiApiKey()) {
       aiSummary = { skippedReason: "Gemini API key not set (GEMINI_API_KEY or GOOGLE_AI_API_KEY)" };
     } else {
-      try {
-        const cleanReports = results.map((r) => {
-          const { failed: _f, ...rep } = r;
-          return rep;
-        });
-        const payload = buildGeminiPayloadFromReports(cleanReports, rid, runFinishedAt);
-        const md = await generateGeminiQaSummary(payload);
-        await writeFile(path.join(runDir, "gemini-summary.md"), md, "utf8");
-        geminiSummaryHref = "./gemini-summary.md";
-        aiSummary = { generatedAt: new Date().toISOString() };
-      } catch (e) {
-        aiSummary = {
-          skippedReason: e instanceof Error ? e.message : String(e),
-        };
-      }
+      endTasks.push(
+        (async () => {
+          try {
+            const reps = results.map((r) => { const { failed: _f, ...rep } = r; return rep; });
+            const payload = buildGeminiPayloadFromReports(reps, rid, runFinishedAt);
+            const md = await generateGeminiQaSummary(payload);
+            await writeFile(path.join(runDir, "gemini-summary.md"), md, "utf8");
+            geminiSummaryHref = "./gemini-summary.md";
+            aiSummary = { generatedAt: new Date().toISOString() };
+          } catch (e) {
+            aiSummary = { skippedReason: e instanceof Error ? e.message : String(e) };
+          }
+        })(),
+      );
     }
   }
+
+  if (options.smartAnalysis) {
+    endTasks.push(
+      (async () => {
+        try {
+          const reportData = results.map((r) => ({ ...r, failed: undefined })) as SiteHealthReport[];
+          const smartResult = await runSmartAnalysis(reportData);
+          await writeFile(path.join(runDir, "smart-analysis.json"), JSON.stringify(smartResult, null, 2), "utf8");
+        } catch {
+          // smart analysis is optional — failure is non-fatal
+        }
+      })(),
+    );
+  }
+
+  await Promise.allSettled(endTasks);
 
   const runMeta: HealthRunMeta = {
     runId: rid,
