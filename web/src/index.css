@@ -728,3 +728,94 @@ input[type="checkbox"]:disabled {
   border-left: 3px solid var(--border);
   color: var(--muted);
 }
+
+/* ── Skeleton loading screens ───────────────────────────────── */
+
+@keyframes qa-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.qa-skeleton {
+  background: linear-gradient(90deg, var(--glass2) 25%, #e8eaed 37%, var(--glass2) 63%);
+  background-size: 200% 100%;
+  animation: qa-shimmer 1.4s ease infinite;
+  border-radius: var(--radius-sm);
+}
+
+.qa-skeleton-line {
+  height: 14px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--glass2) 25%, #e8eaed 37%, var(--glass2) 63%);
+  background-size: 200% 100%;
+  animation: qa-shimmer 1.4s ease infinite;
+}
+
+.qa-skeleton-line:last-child { width: 60%; }
+
+.qa-skeleton-block {
+  height: 120px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--glass2) 25%, #e8eaed 37%, var(--glass2) 63%);
+  background-size: 200% 100%;
+  animation: qa-shimmer 1.4s ease infinite;
+}
+
+.qa-skeleton-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--glass2) 25%, #e8eaed 37%, var(--glass2) 63%);
+  background-size: 200% 100%;
+  animation: qa-shimmer 1.4s ease infinite;
+}
+
+/* ── Spinner (CSS-only, for buttons and panels) ─────────────── */
+
+@keyframes qa-spin {
+  to { transform: rotate(360deg); }
+}
+
+.qa-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: qa-spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+
+.qa-spinner--sm { width: 14px; height: 14px; border-width: 2px; }
+.qa-spinner--lg { width: 28px; height: 28px; border-width: 3px; }
+
+/* ── Loading panel placeholder ──────────────────────────────── */
+
+.qa-loading-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+/* ── Status dot (for LLM provider indicators) ──────────────── */
+
+.qa-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.qa-status-dot--ok { background: var(--ok); }
+.qa-status-dot--warn { background: var(--warn); }
+.qa-status-dot--bad { background: var(--bad); }
+.qa-status-dot--off { background: var(--border-strong); }
