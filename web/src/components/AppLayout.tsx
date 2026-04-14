@@ -109,6 +109,12 @@ export default function AppLayout() {
           <NavLink to="/query-lab" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
             Query Lab
           </NavLink>
+          <NavLink to="/serp-analyzer" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
+            SERP Analyzer
+          </NavLink>
+          <NavLink to="/agentic-crawl" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
+            Agentic Crawl
+          </NavLink>
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Monitoring">
@@ -123,7 +129,7 @@ export default function AppLayout() {
         </nav>
 
         <div className="qa-sidebar-footer">
-          Powered by Gemini AI. All analysis uses free tier APIs only.
+          Powered by Gemini AI + Ollama. All analysis uses free tier APIs only.
         </div>
       </motion.aside>
 

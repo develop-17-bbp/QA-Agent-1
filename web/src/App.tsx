@@ -31,6 +31,8 @@ import TrafficAnalytics from "./pages/TrafficAnalytics";
 import BrandMonitoring from "./pages/BrandMonitoring";
 import LogFileAnalyzer from "./pages/LogFileAnalyzer";
 import LocalSeo from "./pages/LocalSeo";
+import SerpAnalyzer from "./pages/SerpAnalyzer";
+import AgenticCrawl from "./pages/AgenticCrawl";
 
 function DashboardRoute() {
   const { state } = useLocation();
@@ -83,6 +85,8 @@ export default function App() {
 
         {/* AI Tools */}
         <Route path="/query-lab" element={<QueryLab />} />
+        <Route path="/serp-analyzer" element={<SerpAnalyzer />} />
+        <Route path="/agentic-crawl" element={<AgenticCrawl />} />
 
         {/* Monitoring */}
         <Route path="/brand-monitoring" element={<BrandMonitoring />} />

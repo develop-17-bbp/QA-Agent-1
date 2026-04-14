@@ -35,6 +35,9 @@ import { checkOnPageSeo } from "./modules/onpage-seo-checker.js";
 import { loadKeywordLists, saveKeywordList, deleteKeywordList, analyzeKeywordList } from "./modules/keyword-manager.js";
 import { extractUrlsFromPdfBuffer } from "./pdf-urls.js";
 import type { SiteHealthReport } from "./types.js";
+import { runAgenticPipeline, runSerpAnalysis, getSession as getAgenticSession, listSessions as listAgenticSessions, deleteSession as deleteAgenticSession, type AgenticSessionConfig } from "./agentic/agent-coordinator.js";
+import { searchSerp, searchSerpBatch, analyzeCompetitors, getSerpCacheStats, clearSerpCache } from "./agentic/duckduckgo-serp.js";
+import { getRouterStats as getLlmRouterStats, checkOllamaAvailable, resetRouterStats } from "./agentic/llm-router.js";
 
 function webDistRoot(): string {
   return path.join(process.cwd(), "web", "dist");
@@ -1817,6 +1820,95 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Agentic Pipeline Endpoints ────────────────────────────────
+
+      // Start agentic pipeline
+      if (req.method === "POST" && url.pathname === "/api/agentic/start") {
+        let body: string;
+        try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { targetUrl?: string; keywords?: string[]; maxPages?: number; enableSerp?: boolean; enableSmartCrawl?: boolean; enableAnalysis?: boolean };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const targetUrl = typeof payload.targetUrl === "string" ? payload.targetUrl.trim() : "";
+        if (!targetUrl) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "targetUrl required" })); return; }
+        const config: AgenticSessionConfig = {
+          targetUrl,
+          keywords: Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string" && k.trim().length > 0) : [],
+          maxPages: typeof payload.maxPages === "number" ? payload.maxPages : undefined,
+          enableSerp: payload.enableSerp,
+          enableSmartCrawl: payload.enableSmartCrawl,
+          enableAnalysis: payload.enableAnalysis,
+        };
+        // Run pipeline in background, return session ID immediately
+        const sessionId = `agentic-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ sessionId, status: "started" }));
+        // Fire and forget — client polls /api/agentic/session
+        runAgenticPipeline(config).catch(e => console.error("[agentic] pipeline error:", e));
+        return;
+      }
+
+      // Get agentic session
+      if (req.method === "POST" && url.pathname === "/api/agentic/session") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { sessionId?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const sid = typeof payload.sessionId === "string" ? payload.sessionId : "";
+        if (!sid) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "sessionId required" })); return; }
+        const session = getAgenticSession(sid);
+        if (!session) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Session not found" })); return; }
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify(session));
+        return;
+      }
+
+      // List agentic sessions
+      if (req.method === "GET" && url.pathname === "/api/agentic/sessions") {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify(listAgenticSessions()));
+        return;
+      }
+
+      // SERP Analysis (standalone)
+      if (req.method === "POST" && url.pathname === "/api/serp-analysis") {
+        let body: string;
+        try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { keywords?: string[]; targetDomain?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const keywords = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string" && k.trim().length > 0) : [];
+        if (keywords.length === 0) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keywords required" })); return; }
+        try {
+          const result = await runSerpAnalysis(keywords, typeof payload.targetDomain === "string" ? payload.targetDomain.trim() : undefined);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // Single SERP search
+      if (req.method === "POST" && url.pathname === "/api/serp-search") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { query?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const query = typeof payload.query === "string" ? payload.query.trim() : "";
+        if (!query) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "query required" })); return; }
+        try {
+          const result = await searchSerp(query);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // LLM Router stats
+      if (req.method === "GET" && url.pathname === "/api/llm-stats") {
+        const stats = getLlmRouterStats();
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify(stats));
         return;
       }
 

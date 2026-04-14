@@ -194,6 +194,18 @@ export function saveKeywordListApi(name: string, keywords: string[]) { return po
 export function deleteKeywordListApi(name: string) { return postApi<any>("/api/keyword-lists/delete", { name }); }
 export function analyzeKeywordListApi(keywords: string[]) { return postApi<any>("/api/keyword-lists/analyze", { keywords }); }
 
+// Agentic Pipeline
+export function startAgenticPipeline(targetUrl: string, keywords: string[]) { return postApi<{ sessionId: string; status: string }>("/api/agentic/start", { targetUrl, keywords }); }
+export function fetchAgenticSession(sessionId: string) { return postApi<any>("/api/agentic/session", { sessionId }); }
+export async function fetchAgenticSessions(): Promise<any[]> { const res = await fetch("/api/agentic/sessions"); if (!res.ok) throw new Error(await res.text()); return res.json() as Promise<any[]>; }
+
+// SERP Analysis
+export function fetchSerpAnalysis(keywords: string[], targetDomain?: string) { return postApi<any>("/api/serp-analysis", { keywords, targetDomain }); }
+export function fetchSerpSearch(query: string) { return postApi<any>("/api/serp-search", { query }); }
+
+// LLM Router Stats
+export async function fetchLlmStats(): Promise<any> { const res = await fetch("/api/llm-stats"); if (!res.ok) throw new Error(await res.text()); return res.json(); }
+
 // ---------------------------------------------------------------------------
 // File Upload
 // ---------------------------------------------------------------------------
