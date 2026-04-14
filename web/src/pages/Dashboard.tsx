@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { startRun, streamUrl } from "../api";
+import { startRun, streamUrl, fetchHistory, fetchLlmStats } from "../api";
 import type { HealthSsePayload } from "../types/healthSse";
 import OptionWithTooltip from "../components/OptionWithTooltip";
 import RunProgressBanner, { type RunBannerState } from "../components/RunProgressBanner";
@@ -288,6 +288,104 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
       </motion.section>
 
       {err ? <div className="qa-alert qa-alert--error">{err}</div> : null}
+
+      {/* Quick-start feature cards */}
+      <QuickStartCards />
+
+      {/* System health */}
+      <SystemHealth />
     </div>
+  );
+}
+
+// ── Quick-start cards ────────────────────────────────────────────────────────
+
+const FEATURE_CARDS = [
+  { title: "Site Audit", desc: "Comprehensive SEO health check", path: "/site-audit", icon: "🔍" },
+  { title: "Keyword Research", desc: "AI-powered keyword analysis", path: "/keyword-overview", icon: "🔑" },
+  { title: "SERP Analyzer", desc: "DuckDuckGo search analysis", path: "/serp-analyzer", icon: "📊" },
+  { title: "Agentic Crawl", desc: "Multi-agent AI pipeline", path: "/agentic-crawl", icon: "🤖" },
+  { title: "Content Audit", desc: "Content quality assessment", path: "/content-audit", icon: "📝" },
+  { title: "Backlinks", desc: "Link profile analysis", path: "/backlinks", icon: "🔗" },
+] as const;
+
+function QuickStartCards() {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: 0.1 }}
+      style={{ marginTop: 24 }}
+    >
+      <h2 className="qa-kicker" style={{ marginBottom: 12 }}>Quick access</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
+        {FEATURE_CARDS.map((c) => (
+          <Link key={c.path} to={c.path} className="qa-panel" style={{ textDecoration: "none", padding: "16px 18px" }}>
+            <div style={{ fontSize: 22, marginBottom: 6 }}>{c.icon}</div>
+            <div style={{ fontWeight: 600, fontSize: "0.88rem", marginBottom: 2 }}>{c.title}</div>
+            <div style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{c.desc}</div>
+          </Link>
+        ))}
+      </div>
+    </motion.section>
+  );
+}
+
+// ── System health indicator ──────────────────────────────────────────────────
+
+function SystemHealth() {
+  const [stats, setStats] = useState<{
+    geminiOk?: boolean;
+    ollamaAvailable?: boolean;
+    totalRequests?: number;
+    fallbackCount?: number;
+  } | null>(null);
+  const [recentRuns, setRecentRuns] = useState<number>(0);
+
+  useEffect(() => {
+    fetchLlmStats()
+      .then((s: any) => setStats({
+        geminiOk: s.geminiConfigured,
+        ollamaAvailable: s.ollamaAvailable,
+        totalRequests: s.totalRequests ?? 0,
+        fallbackCount: s.fallbackCount ?? 0,
+      }))
+      .catch(() => {});
+    fetchHistory()
+      .then((h) => {
+        const allRuns = h.days.flatMap((d) => d.runs);
+        setRecentRuns(allRuns.length);
+      })
+      .catch(() => {});
+  }, []);
+
+  return (
+    <motion.section
+      className="qa-panel"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: 0.2 }}
+      style={{ marginTop: 16 }}
+    >
+      <h2 className="qa-kicker" style={{ marginBottom: 10 }}>System status</h2>
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: "0.85rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span className={`qa-status-dot qa-status-dot--${stats?.geminiOk ? "ok" : "off"}`} />
+          Gemini {stats?.geminiOk ? "configured" : "not configured"}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span className={`qa-status-dot qa-status-dot--${stats?.ollamaAvailable ? "ok" : "off"}`} />
+          Ollama {stats?.ollamaAvailable ? "available" : "offline"}
+        </div>
+        <div style={{ color: "var(--muted)" }}>
+          {recentRuns} past run{recentRuns !== 1 ? "s" : ""}
+        </div>
+        {stats && stats.totalRequests !== undefined && stats.totalRequests > 0 && (
+          <div style={{ color: "var(--muted)" }}>
+            {stats.totalRequests} LLM requests ({stats.fallbackCount} fallbacks)
+          </div>
+        )}
+      </div>
+    </motion.section>
   );
 }

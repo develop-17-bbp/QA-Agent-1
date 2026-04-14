@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 const DATA_DIR = path.join(process.cwd(), "keyword-lists");
 function ensureDir() { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); }
@@ -50,7 +50,7 @@ Return ONLY valid JSON (no markdown):
 
 Provide 3-6 clusters, priority for each keyword, 4-week calendar, and summary.`;
 
-  const text = await generateGeminiText(prompt);
+  const text = await generateText(prompt);
   try {
     return JSON.parse(text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim());
   } catch {

@@ -21,18 +21,18 @@ export default function Backlinks() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Backlinks</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Analyze your internal and external link structure from crawl data.</p>
+      <p className="qa-page-desc">Analyze your internal and external link structure from crawl data.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Analyzing backlinks...</div>}
-      {error && <div className="qa-panel" style={{ marginTop: 20, color: "#e53e3e" }}>{error}</div>}
+      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing backlinks...</div>}
+      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
 
       {data && !loading && (
         <>
           <div style={{ display: "flex", gap: 16, marginTop: 24, flexWrap: "wrap" }}>
             {[{ label: "Total Links", val: data.totalLinks }, { label: "Internal", val: data.internalLinks }, { label: "External", val: data.externalLinks }, { label: "Orphan Pages", val: data.summary?.orphanPageCount ?? 0, color: "#e53e3e" }].map(s => (
               <div key={s.label} className="qa-panel" style={{ flex: 1, minWidth: 120, padding: 16, textAlign: "center" }}>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.label}</div>
+                <div className="qa-kicker">{s.label}</div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: (s as any).color ?? "var(--text-primary)" }}>{s.val}</div>
               </div>
             ))}
@@ -41,7 +41,7 @@ export default function Backlinks() {
           <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
             {healthData.length > 0 && (
               <div className="qa-panel" style={{ padding: 16, width: 260 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Link Health</div>
+                <div className="qa-panel-title">Link Health</div>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart><Pie data={healthData} dataKey="value" cx="50%" cy="50%" outerRadius={70} innerRadius={40}>
                     {healthData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -51,7 +51,7 @@ export default function Backlinks() {
             )}
             {(data.topLinked ?? []).length > 0 && (
               <div className="qa-panel" style={{ padding: 16, flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Most Linked Pages</div>
+                <div className="qa-panel-title">Most Linked Pages</div>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={(data.topLinked ?? []).slice(0, 10)} layout="vertical"><XAxis type="number" fontSize={11} /><YAxis type="category" dataKey="url" width={180} fontSize={10} tickFormatter={(v: string) => v.length > 30 ? v.slice(0, 27) + "..." : v} /><Tooltip /><Bar dataKey="inboundLinks" fill="#5a67d8" radius={[0,4,4,0]} /></BarChart>
                 </ResponsiveContainer>
@@ -61,16 +61,16 @@ export default function Backlinks() {
 
           {(data.orphanPages ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: "#e53e3e" }}>Orphan Pages ({data.orphanPages.length})</div>
+              <div className="qa-panel-title" style={{ color: "#e53e3e" }}>Orphan Pages ({data.orphanPages.length})</div>
               {data.orphanPages.slice(0, 15).map((p: any) => <div key={p.url} style={{ fontSize: 12, padding: "4px 0", borderBottom: "1px solid var(--border)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title || p.url}</div>)}
             </div>
           )}
 
           {(data.brokenLinks ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: "#e53e3e" }}>Broken Links ({data.brokenLinks.length})</div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead><tr>{["Source", "Target", "Status", "Error"].map(h => <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>{h}</th>)}</tr></thead>
+              <div className="qa-panel-title" style={{ color: "#e53e3e" }}>Broken Links ({data.brokenLinks.length})</div>
+              <table className="qa-table">
+                <thead><tr>{["Source", "Target", "Status", "Error"].map(h => <th key={h}>{h}</th>)}</tr></thead>
                 <tbody>{(data.brokenLinks ?? []).slice(0, 20).map((bl: any, i: number) => (
                   <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={bl.source}>{bl.source}</td>

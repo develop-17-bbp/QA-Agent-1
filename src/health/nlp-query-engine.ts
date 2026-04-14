@@ -5,10 +5,9 @@
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import {
-  buildGeminiPayloadFromReports,
-  generateGeminiText,
-} from "./gemini-report.js";
+import { buildGeminiPayloadFromReports } from "./gemini-report.js";
+import { generateText } from "./llm.js";
+import { buildIndex, retrieve, hasIndex } from "./agentic/rag-engine.js";
 import type { HealthRunMeta } from "./orchestrate-health.js";
 import type { SiteHealthReport } from "./types.js";
 
@@ -131,7 +130,7 @@ ${historyBlock ? historyBlock + "\n" : ""}Current user question:
 ${query}`;
 
   try {
-    const raw = await generateGeminiText(prompt);
+    const raw = await generateText(prompt);
     const data = extractJson(raw) as Record<string, unknown> | null;
     if (!data) throw new Error("No JSON in response");
 
@@ -207,7 +206,7 @@ User question: ${query}
 SEO data (${capped.length} of ${pages.length} total pages):
 ${JSON.stringify(capped, null, 2)}`;
 
-  return generateGeminiText(prompt);
+  return generateText(prompt);
 }
 
 async function handlePerformanceAnalysis(
@@ -262,7 +261,7 @@ User question: ${query}
 Performance data (${capped.length} of ${entries.length} total pages):
 ${JSON.stringify(capped, null, 2)}`;
 
-  return generateGeminiText(prompt);
+  return generateText(prompt);
 }
 
 async function handleBrokenLinks(
@@ -298,7 +297,7 @@ User question: ${query}
 Broken links data:
 ${JSON.stringify(data, null, 2)}`;
 
-  return generateGeminiText(prompt);
+  return generateText(prompt);
 }
 
 async function handleContentAnalysis(
@@ -356,7 +355,7 @@ ${JSON.stringify(capped, null, 2)}
 Duplicate titles:
 ${JSON.stringify(issues.duplicateTitles, null, 2)}`;
 
-  return generateGeminiText(prompt);
+  return generateText(prompt);
 }
 
 function findDuplicates(arr: string[]): { title: string; count: number }[] {
@@ -419,7 +418,7 @@ User question: ${query}
 Issue summary:
 ${JSON.stringify(summary, null, 2)}`;
 
-  return generateGeminiText(prompt);
+  return generateText(prompt);
 }
 
 async function handleGeneralQuestion(
@@ -429,11 +428,34 @@ async function handleGeneralQuestion(
   generatedAt: string,
   history: ChatMessage[],
 ): Promise<string> {
+  // Use RAG retrieval for targeted context instead of dumping the full payload
+  if (!hasIndex(runId)) buildIndex(runId, reports);
+  const chunks = retrieve(runId, query, 20);
+  const historyCtx = buildHistoryContext(history);
+
+  if (chunks.length > 0) {
+    const contextData = chunks.map(c => c.text).join("\n\n");
+    const prompt = `You answer questions about ONE website health crawl run. Use ONLY the data below — do not invent URLs, scores, counts, or issues.
+
+Rules:
+- 2-4 sentences OR up to 6 bullet points. No preamble.
+- Cite exact numbers from the data when relevant.
+- If the data does not contain enough info to answer, say "Not in this run's report data."
+
+${historyCtx}
+User question: ${query}
+
+Retrieved context (${chunks.length} most relevant pages):
+${contextData}`;
+
+    return generateText(prompt);
+  }
+
+  // Fallback to full payload if RAG returns nothing
   const payload = buildGeminiPayloadFromReports(reports, runId, generatedAt, {
     pageSpeedSampleLimit: 80,
     pageSpeedPreferAnalyzed: true,
   });
-  const historyCtx = buildHistoryContext(history);
 
   const prompt = `You answer questions about ONE website health crawl run. Use ONLY the JSON below — do not invent URLs, scores, counts, or issues.
 
@@ -448,7 +470,7 @@ User question: ${query}
 Run data:
 ${JSON.stringify(payload, null, 2)}`;
 
-  return generateGeminiText(prompt);
+  return generateText(prompt);
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +484,9 @@ export async function routeQuery(
   generatedAt: string,
   history: ChatMessage[],
 ): Promise<NlpQueryResponse> {
+  // Ensure RAG index exists for this run
+  if (!hasIndex(runId)) buildIndex(runId, reports);
+
   const classification = await classifyIntent(query, history);
 
   if (classification.clarification_needed && classification.follow_up_question) {

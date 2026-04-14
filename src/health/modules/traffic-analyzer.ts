@@ -1,5 +1,5 @@
 import type { SiteHealthReport } from "../types.js";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 export async function analyzeTraffic(reports: SiteHealthReport[]) {
   const allPages = reports.flatMap(r => r.crawl.pages);
@@ -32,7 +32,7 @@ Estimate 6-month trend, top 5 pages, geo, device breakdown, and 4-5 actionable i
 
   let geminiData: any = {};
   try {
-    const text = await generateGeminiText(prompt);
+    const text = await generateText(prompt);
     geminiData = JSON.parse(text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim());
   } catch { /* use defaults */ }
 

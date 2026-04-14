@@ -1,5 +1,5 @@
 import type { SiteHealthReport } from "../types.js";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 export async function buildKeywordStrategy(reports: SiteHealthReport[]) {
   const allPages = reports.flatMap(r => r.crawl.pages);
@@ -36,7 +36,7 @@ Return ONLY valid JSON (no markdown, no backticks):
 
 Generate 10 priority keywords, 5 content gaps, 4 topic clusters, 3-phase action plan, and competitive insights.`;
 
-  const text = await generateGeminiText(prompt);
+  const text = await generateText(prompt);
   try {
     const clean = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const data = JSON.parse(clean);

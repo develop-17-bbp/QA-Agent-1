@@ -1,5 +1,5 @@
 import type { SiteHealthReport } from "../types.js";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 export async function researchTopic(topic: string, reports?: SiteHealthReport[]) {
   let contextBlock = "";
@@ -24,7 +24,7 @@ Return ONLY valid JSON (no markdown):
 
 Generate 8-10 subtopics, 10 questions, 5 angles, 5 coverage areas, competitive landscape, and 4-week calendar.`;
 
-  const text = await generateGeminiText(prompt);
+  const text = await generateText(prompt);
   try {
     const clean = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     return JSON.parse(clean);

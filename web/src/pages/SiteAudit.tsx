@@ -7,6 +7,12 @@ import { fetchSiteAudit } from "../api";
 const SEV_COLORS = { critical: "#e53e3e", warning: "#dd6b20", info: "#3182ce" };
 const CAT_LABELS: Record<string, string> = { seo: "SEO", technical: "Technical", performance: "Performance", content: "Content", links: "Links" };
 
+const SEV_LOZENGE: Record<string, string> = {
+  critical: "qa-lozenge qa-lozenge--danger",
+  warning: "qa-lozenge qa-lozenge--neutral",
+  info: "qa-lozenge qa-lozenge--neutral",
+};
+
 function ScoreRing({ score, size = 120 }: { score: number; size?: number }) {
   const r = (size - 12) / 2;
   const circ = 2 * Math.PI * r;
@@ -48,22 +54,27 @@ export default function SiteAudit() {
   const catData = data?.categories ? Object.entries(data.categories).map(([k, v]: [string, any]) => ({ name: CAT_LABELS[k] ?? k, score: v.score })) : [];
 
   return (
-    <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
+    <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <h1 className="qa-page-title">Site Audit</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Comprehensive technical SEO and health analysis of your crawled site.</p>
+      <p className="qa-page-desc">Comprehensive technical SEO and health analysis of your crawled site.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Analyzing...</div>}
-      {error && <div className="qa-panel" style={{ marginTop: 20, color: "#e53e3e" }}>{error}</div>}
+      {loading && (
+        <div className="qa-panel qa-loading-panel" style={{ marginTop: 20 }}>
+          <span className="qa-spinner" />
+          <span>Analyzing...</span>
+        </div>
+      )}
+      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
 
       {data && !loading && (
         <>
           <div style={{ display: "flex", gap: 24, marginTop: 24, flexWrap: "wrap" }}>
-            <div className="qa-panel" style={{ textAlign: "center", padding: 24, minWidth: 160 }}>
+            <div className="qa-panel" style={{ textAlign: "center", minWidth: 160 }}>
               <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>Health Score</div>
               <ScoreRing score={data.score} />
             </div>
-            <div className="qa-panel" style={{ flex: 1, padding: 24, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
+            <div className="qa-panel" style={{ flex: 1, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
               {catData.map((c: any) => (
                 <div key={c.name} style={{ textAlign: "center", minWidth: 100 }}>
                   <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{c.name}</div>
@@ -78,7 +89,7 @@ export default function SiteAudit() {
 
           <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
             {[{ label: "Total Pages", val: data.summary.totalPages }, { label: "OK Pages", val: data.summary.okPages }, { label: "Critical", val: data.summary.criticalIssues, color: "#e53e3e" }, { label: "Warnings", val: data.summary.warnings, color: "#dd6b20" }].map(s => (
-              <div key={s.label} className="qa-panel" style={{ flex: 1, minWidth: 120, padding: 16, textAlign: "center" }}>
+              <div key={s.label} className="qa-panel" style={{ flex: 1, minWidth: 120, textAlign: "center" }}>
                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.label}</div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: (s as any).color ?? "var(--text-primary)" }}>{s.val}</div>
               </div>
@@ -87,8 +98,10 @@ export default function SiteAudit() {
 
           <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
             {pieData.length > 0 && (
-              <div className="qa-panel" style={{ padding: 16, width: 260 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Issue Distribution</div>
+              <div className="qa-panel" style={{ width: 260 }}>
+                <div className="qa-panel-head">
+                  <div className="qa-panel-title">Issue Distribution</div>
+                </div>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart><Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={70} innerRadius={40}>
                     {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -100,8 +113,10 @@ export default function SiteAudit() {
               </div>
             )}
             {catData.length > 0 && (
-              <div className="qa-panel" style={{ padding: 16, flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Category Scores</div>
+              <div className="qa-panel" style={{ flex: 1 }}>
+                <div className="qa-panel-head">
+                  <div className="qa-panel-title">Category Scores</div>
+                </div>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={catData}><XAxis dataKey="name" fontSize={12} /><YAxis domain={[0, 100]} fontSize={12} /><Tooltip /><Bar dataKey="score" fill="#5a67d8" radius={[4,4,0,0]} /></BarChart>
                 </ResponsiveContainer>
@@ -109,9 +124,9 @@ export default function SiteAudit() {
             )}
           </div>
 
-          <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
+          <div className="qa-panel" style={{ marginTop: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Issues ({filtered.length})</div>
+              <div className="qa-panel-title">Issues ({filtered.length})</div>
               <select className="qa-select" value={severityFilter} onChange={e => setSeverityFilter(e.target.value)} style={{ width: 140 }}>
                 <option value="all">All severities</option>
                 <option value="critical">Critical</option>
@@ -123,8 +138,8 @@ export default function SiteAudit() {
               {filtered.map((issue: any, i: number) => (
                 <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: SEV_COLORS[issue.severity as keyof typeof SEV_COLORS] + "20", color: SEV_COLORS[issue.severity as keyof typeof SEV_COLORS] }}>{issue.severity.toUpperCase()}</span>
-                    <span style={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase" }}>{issue.category}</span>
+                    <span className={SEV_LOZENGE[issue.severity] ?? "qa-lozenge qa-lozenge--neutral"}>{issue.severity.toUpperCase()}</span>
+                    <span className="qa-kicker">{issue.category}</span>
                     <span style={{ fontWeight: 600, fontSize: 14 }}>{issue.title}</span>
                   </div>
                   <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 4 }}>{issue.description}</div>
@@ -136,7 +151,7 @@ export default function SiteAudit() {
                   )}
                 </div>
               ))}
-              {filtered.length === 0 && <div style={{ textAlign: "center", padding: 20, color: "var(--text-secondary)" }}>No issues found</div>}
+              {filtered.length === 0 && <div className="qa-empty">No issues found</div>}
             </div>
           </div>
         </>

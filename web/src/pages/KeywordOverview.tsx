@@ -56,15 +56,13 @@ export default function KeywordOverview() {
       {/* Search Bar */}
       <div className="qa-panel" style={{ padding: 16, marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
         <input
+          className="qa-input"
           type="text"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !loading && research()}
           placeholder="Enter keyword for research..."
-          style={{
-            flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)",
-            background: "var(--bg-card)", color: "var(--text)", fontSize: 14,
-          }}
+          style={{ flex: 1, padding: "10px 14px" }}
         />
         <button className="qa-btn-primary" onClick={research} disabled={loading || !keyword.trim()} style={{ padding: "10px 24px" }}>
           {loading ? "Analyzing..." : "Research"}
@@ -73,8 +71,8 @@ export default function KeywordOverview() {
 
       {error && <div className="qa-alert qa-alert--error">{error}</div>}
       {loading && (
-        <div className="qa-panel" style={{ padding: 60, textAlign: "center", color: "var(--muted)" }}>
-          Analyzing keyword with Gemini AI...
+        <div className="qa-panel">
+          <div className="qa-loading-panel">Analyzing keyword with Gemini AI...</div>
         </div>
       )}
 
@@ -91,10 +89,10 @@ export default function KeywordOverview() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>
             {/* Volume */}
             <div className="qa-panel" style={{ padding: 16 }}>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Volume</div>
+              <div className="qa-kicker" style={{ marginBottom: 4 }}>Volume</div>
               <div style={{ fontSize: 28, fontWeight: 700 }}>{formatVolume(data.volume)}</div>
               <div style={{ borderTop: "3px solid var(--accent)", marginTop: 8 }} />
-              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>Keyword Difficulty</div>
+              <div className="qa-kicker" style={{ marginTop: 8 }}>Keyword Difficulty</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                 <svg width={48} height={48} viewBox="0 0 48 48">
                   <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border)" strokeWidth="4" />
@@ -113,7 +111,7 @@ export default function KeywordOverview() {
 
             {/* Global Volume + Country Breakdown */}
             <div className="qa-panel" style={{ padding: 16 }}>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Global Volume</div>
+              <div className="qa-kicker" style={{ marginBottom: 4 }}>Global Volume</div>
               <div style={{ fontSize: 28, fontWeight: 700 }}>{formatVolume(data.globalVolume)}</div>
               <div style={{ marginTop: 8 }}>
                 {(data.countryVolumes ?? []).slice(0, 6).map((cv: any) => {
@@ -133,7 +131,7 @@ export default function KeywordOverview() {
 
             {/* Intent */}
             <div className="qa-panel" style={{ padding: 16 }}>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Intent</div>
+              <div className="qa-kicker" style={{ marginBottom: 4 }}>Intent</div>
               <span style={{
                 display: "inline-block", padding: "4px 12px", borderRadius: 12, fontSize: 13, fontWeight: 600,
                 background: `${INTENT_COLORS[data.intent] ?? "#888"}20`,
@@ -142,7 +140,7 @@ export default function KeywordOverview() {
               }}>
                 {(data.intent ?? "informational").charAt(0).toUpperCase() + (data.intent ?? "informational").slice(1)}
               </span>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 16, marginBottom: 4 }}>Trend (12 months)</div>
+              <div className="qa-kicker" style={{ marginTop: 16, marginBottom: 4 }}>Trend (12 months)</div>
               <ResponsiveContainer width="100%" height={60}>
                 <BarChart data={trendData}>
                   <Bar dataKey="volume" fill="var(--accent)" radius={[2, 2, 0, 0]} />
@@ -152,13 +150,13 @@ export default function KeywordOverview() {
 
             {/* CPC + Competitive Density */}
             <div className="qa-panel" style={{ padding: 16 }}>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>CPC</div>
+              <div className="qa-kicker" style={{ marginBottom: 4 }}>CPC</div>
               <div style={{ fontSize: 28, fontWeight: 700 }}>${data.cpc?.toFixed(2) ?? "0.00"}</div>
-              <div style={{ borderTop: "1px solid var(--border)", margin: "12px 0" }} />
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Competitive Density</div>
+              <hr className="qa-divider" />
+              <div className="qa-kicker" style={{ marginBottom: 4 }}>Competitive Density</div>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{data.competitiveDensity?.toFixed(2) ?? "0.00"}</div>
-              <div style={{ borderTop: "1px solid var(--border)", margin: "12px 0" }} />
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Results</div>
+              <hr className="qa-divider" />
+              <div className="qa-kicker" style={{ marginBottom: 4 }}>Results</div>
               <div style={{ fontSize: 18, fontWeight: 700 }}>{data.totalResults}</div>
             </div>
           </div>
@@ -167,27 +165,27 @@ export default function KeywordOverview() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
             {/* Variations */}
             <div className="qa-panel" style={{ padding: 16 }}>
-              <h3 style={{ margin: "0 0 4px", fontSize: 14, color: "var(--muted)" }}>Keyword Variations</h3>
+              <h3 className="qa-panel-title" style={{ color: "var(--muted)" }}>Keyword Variations</h3>
               <div style={{ fontSize: 22, fontWeight: 700, color: "var(--accent)" }}>
                 {formatVolume(data.variationsTotalCount)}
                 <span style={{ fontSize: 12, fontWeight: 400, color: "var(--muted)", marginLeft: 8 }}>
                   Total Volume: {formatVolume(data.variationsTotalVolume)}
                 </span>
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
+              <table className="qa-table" style={{ marginTop: 12 }}>
                 <thead>
                   <tr>
-                    <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 11, color: "var(--muted)", borderBottom: "1px solid var(--border)" }}>Keywords</th>
-                    <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 11, color: "var(--muted)", borderBottom: "1px solid var(--border)" }}>Volume</th>
-                    <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 11, color: "var(--muted)", borderBottom: "1px solid var(--border)" }}>KD %</th>
+                    <th>Keywords</th>
+                    <th style={{ textAlign: "right" }}>Volume</th>
+                    <th style={{ textAlign: "right" }}>KD %</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data.variations ?? []).slice(0, 5).map((v: any, i: number) => (
-                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "6px 8px", fontSize: 13, color: "var(--accent)" }}>{v.keyword}</td>
-                      <td style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}>{formatVolume(v.volume)}</td>
-                      <td style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}>
+                    <tr key={i}>
+                      <td style={{ color: "var(--accent)" }}>{v.keyword}</td>
+                      <td style={{ textAlign: "right" }}>{formatVolume(v.volume)}</td>
+                      <td style={{ textAlign: "right" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                           {v.difficulty}
                           <span style={{ width: 8, height: 8, borderRadius: "50%", background: DIFF_COLORS(v.difficulty) }} />
@@ -201,27 +199,27 @@ export default function KeywordOverview() {
 
             {/* Questions */}
             <div className="qa-panel" style={{ padding: 16 }}>
-              <h3 style={{ margin: "0 0 4px", fontSize: 14, color: "var(--muted)" }}>Questions</h3>
+              <h3 className="qa-panel-title" style={{ color: "var(--muted)" }}>Questions</h3>
               <div style={{ fontSize: 22, fontWeight: 700, color: "var(--accent)" }}>
                 {formatVolume(data.questionsTotalCount)}
                 <span style={{ fontSize: 12, fontWeight: 400, color: "var(--muted)", marginLeft: 8 }}>
                   Total Volume: {formatVolume(data.questionsTotalVolume)}
                 </span>
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
+              <table className="qa-table" style={{ marginTop: 12 }}>
                 <thead>
                   <tr>
-                    <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 11, color: "var(--muted)", borderBottom: "1px solid var(--border)" }}>Keywords</th>
-                    <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 11, color: "var(--muted)", borderBottom: "1px solid var(--border)" }}>Volume</th>
-                    <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 11, color: "var(--muted)", borderBottom: "1px solid var(--border)" }}>KD %</th>
+                    <th>Keywords</th>
+                    <th style={{ textAlign: "right" }}>Volume</th>
+                    <th style={{ textAlign: "right" }}>KD %</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data.questions ?? []).slice(0, 5).map((q: any, i: number) => (
-                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "6px 8px", fontSize: 13, color: "var(--accent)" }}>{q.keyword}</td>
-                      <td style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}>{formatVolume(q.volume)}</td>
-                      <td style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}>
+                    <tr key={i}>
+                      <td style={{ color: "var(--accent)" }}>{q.keyword}</td>
+                      <td style={{ textAlign: "right" }}>{formatVolume(q.volume)}</td>
+                      <td style={{ textAlign: "right" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                           {q.difficulty}
                           <span style={{ width: 8, height: 8, borderRadius: "50%", background: DIFF_COLORS(q.difficulty) }} />
@@ -235,8 +233,8 @@ export default function KeywordOverview() {
 
             {/* Keyword Strategy (Clusters) */}
             <div className="qa-panel" style={{ padding: 16 }}>
-              <h3 style={{ margin: "0 0 4px", fontSize: 14, color: "var(--muted)" }}>Keyword Strategy</h3>
-              <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--muted)" }}>Topic clusters and related terms</p>
+              <h3 className="qa-panel-title" style={{ color: "var(--muted)" }}>Keyword Strategy</h3>
+              <p className="qa-panel-subtitle" style={{ marginBottom: 12 }}>Topic clusters and related terms</p>
               <div style={{ paddingLeft: 8 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--muted)" }} />
@@ -255,7 +253,7 @@ export default function KeywordOverview() {
           {/* ── SERP Analysis ────────────────────────────────────── */}
           {(data.serp ?? []).length > 0 && (
             <div className="qa-panel" style={{ padding: 16, marginBottom: 24 }}>
-              <h3 style={{ margin: "0 0 4px" }}>SERP Analysis</h3>
+              <h3 className="qa-panel-title">SERP Analysis</h3>
               <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 12 }}>
                 <span style={{ fontSize: 13, color: "var(--muted)" }}>Results: <strong style={{ color: "var(--text)" }}>{data.totalResults}</strong></span>
                 {data.serpFeatures?.length > 0 && (
@@ -264,19 +262,19 @@ export default function KeywordOverview() {
                   </span>
                 )}
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="qa-table">
                 <thead>
                   <tr>
-                    <th style={{ padding: "8px 12px", textAlign: "left", fontSize: 12, color: "var(--muted)", borderBottom: "2px solid var(--border)", width: 40 }}>#</th>
-                    <th style={{ padding: "8px 12px", textAlign: "left", fontSize: 12, color: "var(--muted)", borderBottom: "2px solid var(--border)" }}>URL</th>
+                    <th style={{ width: 40 }}>#</th>
+                    <th>URL</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data.serp ?? []).map((s: any) => (
-                    <tr key={s.position} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "8px 12px", fontWeight: 600, color: "var(--muted)" }}>{s.position}</td>
-                      <td style={{ padding: "8px 12px" }}>
-                        <div style={{ fontSize: 13 }}>{s.url}</div>
+                    <tr key={s.position}>
+                      <td style={{ fontWeight: 600, color: "var(--muted)" }}>{s.position}</td>
+                      <td>
+                        <div>{s.url}</div>
                         <div style={{ fontSize: 12, color: "var(--ok)", fontWeight: 600 }}>{s.domain}</div>
                       </td>
                     </tr>
@@ -289,21 +287,21 @@ export default function KeywordOverview() {
           {/* ── Full Variations Table ────────────────────────────── */}
           {(data.variations ?? []).length > 5 && (
             <div className="qa-panel" style={{ padding: 16, overflowX: "auto" }}>
-              <h3 style={{ margin: "0 0 12px" }}>All Keyword Variations</h3>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <h3 className="qa-panel-title" style={{ marginBottom: 12 }}>All Keyword Variations</h3>
+              <table className="qa-table">
                 <thead>
                   <tr>
-                    <th style={{ padding: "8px 12px", textAlign: "left", borderBottom: "2px solid var(--border)" }}>Keyword</th>
-                    <th style={{ padding: "8px 12px", textAlign: "right", borderBottom: "2px solid var(--border)" }}>Volume</th>
-                    <th style={{ padding: "8px 12px", textAlign: "right", borderBottom: "2px solid var(--border)" }}>KD %</th>
+                    <th>Keyword</th>
+                    <th style={{ textAlign: "right" }}>Volume</th>
+                    <th style={{ textAlign: "right" }}>KD %</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data.variations ?? []).map((v: any, i: number) => (
-                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "8px 12px", fontWeight: 600, color: "var(--accent)" }}>{v.keyword}</td>
-                      <td style={{ padding: "8px 12px", textAlign: "right" }}>{formatVolume(v.volume)}</td>
-                      <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                    <tr key={i}>
+                      <td style={{ fontWeight: 600, color: "var(--accent)" }}>{v.keyword}</td>
+                      <td style={{ textAlign: "right" }}>{formatVolume(v.volume)}</td>
+                      <td style={{ textAlign: "right" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                           {v.difficulty}
                           <span style={{ width: 8, height: 8, borderRadius: "50%", background: DIFF_COLORS(v.difficulty) }} />

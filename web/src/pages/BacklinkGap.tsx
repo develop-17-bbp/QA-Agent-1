@@ -135,7 +135,7 @@ export default function BacklinkGap() {
       style={{ padding: 32 }}
     >
       <h1 className="qa-page-title">Backlink Gap</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>
+      <p className="qa-page-desc">
         Compare link profiles between two runs to discover link-building
         opportunities.
       </p>
@@ -159,26 +159,22 @@ export default function BacklinkGap() {
           <RunSelector value={runIdB} onChange={setRunIdB} label="Run B" />
         </div>
         <button
-          className="qa-btn"
+          className="qa-btn-primary"
           onClick={analyze}
           disabled={loading || !runIdA || !runIdB || runIdA === runIdB}
-          style={{ padding: "8px 24px" }}
         >
           {loading ? "Analyzing..." : "Analyze Gap"}
         </button>
       </div>
 
       {error && (
-        <div className="qa-panel" style={{ marginTop: 16, color: "#e53e3e" }}>
+        <div className="qa-alert qa-alert--error" style={{ marginTop: 16 }}>
           {error}
         </div>
       )}
       {loading && (
-        <div
-          className="qa-panel"
-          style={{ marginTop: 20, textAlign: "center", padding: 40 }}
-        >
-          Analyzing backlink gap...
+        <div className="qa-loading-panel" style={{ marginTop: 20 }}>
+          <div className="qa-spinner" />Analyzing backlink gap...
         </div>
       )}
 
@@ -223,7 +219,7 @@ export default function BacklinkGap() {
                   textAlign: "center",
                 }}
               >
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                <div className="qa-kicker">
                   {s.label}
                 </div>
                 <div
@@ -248,17 +244,10 @@ export default function BacklinkGap() {
               className="qa-panel"
               style={{ padding: 16, overflowX: "auto" }}
             >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  color: "#5a67d8",
-                }}
-              >
+              <div className="qa-panel-title" style={{ color: "#5a67d8" }}>
                 Only in Run A ({onlyA.length})
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="qa-table">
                 <thead>
                   <tr>
                     <SortHeader
@@ -332,17 +321,10 @@ export default function BacklinkGap() {
               className="qa-panel"
               style={{ padding: 16, overflowX: "auto" }}
             >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  color: "#38a169",
-                }}
-              >
+              <div className="qa-panel-title" style={{ color: "#38a169" }}>
                 Shared ({shared.length})
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="qa-table">
                 <thead>
                   <tr>
                     <SortHeader
@@ -442,17 +424,10 @@ export default function BacklinkGap() {
               className="qa-panel"
               style={{ padding: 16, overflowX: "auto" }}
             >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  color: "#e53e3e",
-                }}
-              >
+              <div className="qa-panel-title" style={{ color: "#e53e3e" }}>
                 Only in Run B ({onlyB.length})
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="qa-table">
                 <thead>
                   <tr>
                     <SortHeader

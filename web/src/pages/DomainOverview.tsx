@@ -19,16 +19,21 @@ export default function DomainOverview() {
   };
 
   return (
-    <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
+    <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <h1 className="qa-page-title">Domain Overview</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Comprehensive domain health analysis across SEO, performance, content, technical, and link dimensions.</p>
+      <p className="qa-page-desc">Comprehensive domain health analysis across SEO, performance, content, technical, and link dimensions.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Analyzing...</div>}
-      {error && <div className="qa-panel" style={{ marginTop: 20, color: "#e53e3e" }}>{error}</div>}
+      {loading && (
+        <div className="qa-panel qa-loading-panel" style={{ marginTop: 20 }}>
+          <span className="qa-spinner" />
+          <span>Analyzing...</span>
+        </div>
+      )}
+      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
       {data && !loading && (data.sites ?? []).map((site: any) => {
         const radarData = Object.entries(site.scores).filter(([k]) => k !== "overall").map(([k, v]) => ({ dim: k.charAt(0).toUpperCase() + k.slice(1), score: v as number, fullMark: 100 }));
         return (
-          <div key={site.hostname} className="qa-panel" style={{ marginTop: 16, padding: 24 }}>
+          <div key={site.hostname} className="qa-panel" style={{ marginTop: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>{site.hostname}</div>

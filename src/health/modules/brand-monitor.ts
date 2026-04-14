@@ -1,5 +1,5 @@
 import type { SiteHealthReport } from "../types.js";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 export async function analyzeBrandPresence(brandName: string, reports: SiteHealthReport[]) {
   const allPages = reports.flatMap(r => r.crawl.pages);
@@ -33,7 +33,7 @@ Provide visibility score, sentiment breakdown, brand strength metrics, top menti
 
   let geminiData: any = {};
   try {
-    const text = await generateGeminiText(prompt);
+    const text = await generateText(prompt);
     geminiData = JSON.parse(text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim());
   } catch { /* fallback below */ }
 

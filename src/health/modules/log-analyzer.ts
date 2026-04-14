@@ -1,4 +1,4 @@
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 export async function analyzeLogFile(logContent: string) {
   const lines = logContent.split("\n").filter(l => l.trim());
@@ -60,7 +60,7 @@ Bot traffic: ${JSON.stringify(botTraffic)}
 Methods: ${JSON.stringify(methods)}
 
 Return ONLY a JSON array of 5-8 specific SEO insights as strings. Focus on crawl budget, bot behavior, error patterns, and optimization opportunities. No markdown.`;
-    const text = await generateGeminiText(prompt);
+    const text = await generateText(prompt);
     seoInsights = JSON.parse(text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim());
   } catch { seoInsights = ["Review 4xx errors for broken links", "Monitor bot crawl frequency"]; }
 

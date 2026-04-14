@@ -68,7 +68,7 @@ export default function AgenticCrawl() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Agentic Crawl Intelligence</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>
+      <p className="qa-page-desc">
         Multi-agent AI pipeline: SERP collection, smart crawl planning, and automated SEO analysis. Powered by Gemini with Ollama fallback.
       </p>
 
@@ -76,13 +76,15 @@ export default function AgenticCrawl() {
       {llmStats && (
         <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
           <div className="qa-panel" style={{ padding: "8px 16px", display: "flex", gap: 16, alignItems: "center", fontSize: 12 }}>
-            <span style={{ color: llmStats.gemini?.circuitOpen ? "#e53e3e" : "#38a169", fontWeight: 600 }}>Gemini: {llmStats.gemini?.circuitOpen ? "Circuit Open" : "OK"}</span>
-            <span style={{ color: "var(--text-secondary)" }}>Reqs: {llmStats.gemini?.requests ?? 0}</span>
-            <span style={{ color: "var(--text-secondary)" }}>Avg: {llmStats.gemini?.avgLatencyMs ?? 0}ms</span>
+            <span className={`qa-status-dot qa-status-dot--${llmStats.gemini?.circuitOpen ? "bad" : "ok"}`} />
+            <span style={{ fontWeight: 600 }}>Gemini: {llmStats.gemini?.circuitOpen ? "Circuit Open" : "OK"}</span>
+            <span style={{ color: "var(--muted)" }}>Reqs: {llmStats.gemini?.requests ?? 0}</span>
+            <span style={{ color: "var(--muted)" }}>Avg: {llmStats.gemini?.avgLatencyMs ?? 0}ms</span>
           </div>
           <div className="qa-panel" style={{ padding: "8px 16px", display: "flex", gap: 16, alignItems: "center", fontSize: 12 }}>
-            <span style={{ color: llmStats.ollama?.available ? "#38a169" : "#888", fontWeight: 600 }}>Ollama: {llmStats.ollama?.available ? "Available" : "Offline"}</span>
-            <span style={{ color: "var(--text-secondary)" }}>Reqs: {llmStats.ollama?.requests ?? 0}</span>
+            <span className={`qa-status-dot qa-status-dot--${llmStats.ollama?.available ? "ok" : "off"}`} />
+            <span style={{ fontWeight: 600 }}>Ollama: {llmStats.ollama?.available ? "Available" : "Offline"}</span>
+            <span style={{ color: "var(--muted)" }}>Reqs: {llmStats.ollama?.requests ?? 0}</span>
           </div>
         </div>
       )}

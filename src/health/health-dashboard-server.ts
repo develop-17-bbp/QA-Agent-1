@@ -38,6 +38,7 @@ import type { SiteHealthReport } from "./types.js";
 import { runAgenticPipeline, runSerpAnalysis, getSession as getAgenticSession, listSessions as listAgenticSessions, deleteSession as deleteAgenticSession, type AgenticSessionConfig } from "./agentic/agent-coordinator.js";
 import { searchSerp, searchSerpBatch, analyzeCompetitors, getSerpCacheStats, clearSerpCache } from "./agentic/duckduckgo-serp.js";
 import { getRouterStats as getLlmRouterStats, checkOllamaAvailable, resetRouterStats } from "./agentic/llm-router.js";
+import { ReportCache, type CachedReportData } from "./cache.js";
 
 function webDistRoot(): string {
   return path.join(process.cwd(), "web", "dist");
@@ -1524,11 +1525,17 @@ export async function runHealthDashboard(options: {
             let reports: SiteHealthReport[] = [];
             const runIdParam = typeof payload.runId === "string" ? payload.runId : "";
             if (!runIdParam || !isSafeRunIdSegment(runIdParam)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad runId" })); return true; }
-            const raw = await loadRawReportsForRun(outRoot, runIdParam);
-            if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return true; }
-            reports = raw.reports;
+            // Cache-first: check ReportCache before reading disk
+            let cached = ReportCache.get(runIdParam);
+            if (!cached) {
+              const raw = await loadRawReportsForRun(outRoot, runIdParam);
+              if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return true; }
+              cached = { reports: raw.reports, generatedAt: raw.generatedAt };
+              ReportCache.set(runIdParam, cached);
+            }
+            reports = cached.reports;
             const result = await handler(reports, payload);
-            res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+            res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=60" });
             res.end(JSON.stringify(result));
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);

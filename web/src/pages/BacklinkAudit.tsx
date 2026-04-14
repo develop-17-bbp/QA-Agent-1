@@ -24,18 +24,18 @@ export default function BacklinkAudit() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Backlink Audit</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Audit your link profile health and identify toxic or broken links.</p>
+      <p className="qa-page-desc">Audit your link profile health and identify toxic or broken links.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Auditing backlinks...</div>}
-      {error && <div className="qa-panel" style={{ marginTop: 20, color: "#e53e3e" }}>{error}</div>}
+      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Auditing backlinks...</div>}
+      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
 
       {data && !loading && (
         <>
           <div style={{ display: "flex", gap: 16, marginTop: 24, flexWrap: "wrap" }}>
             {[{ label: "Overall Score", val: data.overallScore, color: data.overallScore >= 80 ? "#38a169" : data.overallScore >= 60 ? "#dd6b20" : "#e53e3e" }, { label: "Total Checked", val: data.summary?.totalChecked ?? 0 }, { label: "Healthy", val: data.healthy, color: "#38a169" }, { label: "Broken", val: data.broken, color: "#e53e3e" }, { label: "Toxic %", val: `${data.toxicPercent}%`, color: data.toxicPercent > 10 ? "#e53e3e" : "#dd6b20" }].map(s => (
               <div key={s.label} className="qa-panel" style={{ flex: 1, minWidth: 110, padding: 16, textAlign: "center" }}>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.label}</div>
+                <div className="qa-kicker">{s.label}</div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: (s as any).color ?? "var(--text-primary)" }}>{s.val}</div>
               </div>
             ))}
@@ -44,7 +44,7 @@ export default function BacklinkAudit() {
           {statusData.length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Status Distribution</div>
+                <div className="qa-panel-title">Status Distribution</div>
                 <ResponsiveContainer width={240} height={200}>
                   <PieChart><Pie data={statusData} dataKey="value" cx="50%" cy="50%" outerRadius={70} innerRadius={40}>
                     {statusData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -59,9 +59,9 @@ export default function BacklinkAudit() {
 
           {(data.links ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16, overflowX: "auto" }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Issues Found ({data.links.length})</div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead><tr>{["URL", "Status", "Health", "Reason"].map(h => <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>{h}</th>)}</tr></thead>
+              <div className="qa-panel-title">Issues Found ({data.links.length})</div>
+              <table className="qa-table">
+                <thead><tr>{["URL", "Status", "Health", "Reason"].map(h => <th key={h}>{h}</th>)}</tr></thead>
                 <tbody>{data.links.map((l: any, i: number) => (
                   <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={l.url}>{l.url}</td>

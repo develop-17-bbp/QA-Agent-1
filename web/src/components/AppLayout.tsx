@@ -1,5 +1,36 @@
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { fetchLlmStats } from "../api";
+
+function NavBadge({ count }: { count: number }) {
+  return (
+    <span className="qa-lozenge qa-lozenge--neutral" style={{ marginLeft: "auto", fontSize: "0.68rem", padding: "1px 6px" }}>
+      {count}
+    </span>
+  );
+}
+
+function LlmStatusFooter() {
+  const [status, setStatus] = useState<{ gemini: boolean; ollama: boolean } | null>(null);
+  useEffect(() => {
+    fetchLlmStats()
+      .then((s: any) => setStatus({ gemini: !!s.geminiConfigured, ollama: !!s.ollamaAvailable }))
+      .catch(() => {});
+  }, []);
+
+  return (
+    <div className="qa-sidebar-footer">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, fontSize: "0.72rem" }}>
+        <span className={`qa-status-dot qa-status-dot--${status?.gemini ? "ok" : "off"}`} />
+        Gemini
+        <span className={`qa-status-dot qa-status-dot--${status?.ollama ? "ok" : "warn"}`} style={{ marginLeft: 8 }} />
+        Ollama
+      </div>
+      <div>28 tools · Free tier APIs · Gemini + Ollama</div>
+    </div>
+  );
+}
 
 export default function AppLayout() {
   const { pathname } = useLocation();
@@ -63,14 +94,14 @@ export default function AppLayout() {
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Site Audit">
-          <div className="qa-nav-section">On Page &amp; Tech SEO</div>
+          <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>On Page &amp; Tech SEO<NavBadge count={3} /></div>
           <NavLink to="/site-audit" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Site Audit</NavLink>
           <NavLink to="/onpage-seo-checker" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>On-Page SEO Checker</NavLink>
           <NavLink to="/position-tracking" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Position Tracking</NavLink>
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Competitive Analysis">
-          <div className="qa-nav-section">Competitive Analysis</div>
+          <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>Competitive Analysis<NavBadge count={7} /></div>
           <NavLink to="/domain-overview" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Domain Overview</NavLink>
           <NavLink to="/organic-rankings" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Organic Rankings</NavLink>
           <NavLink to="/top-pages" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Top Pages</NavLink>
@@ -81,7 +112,7 @@ export default function AppLayout() {
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Keyword Research">
-          <div className="qa-nav-section">Keyword Research</div>
+          <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>Keyword Research<NavBadge count={4} /></div>
           <NavLink to="/keyword-overview" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Overview</NavLink>
           <NavLink to="/keyword-magic-tool" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Magic Tool</NavLink>
           <NavLink to="/keyword-strategy" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Strategy Builder</NavLink>
@@ -89,7 +120,7 @@ export default function AppLayout() {
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Content Marketing">
-          <div className="qa-nav-section">Content Marketing</div>
+          <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>Content Marketing<NavBadge count={5} /></div>
           <NavLink to="/seo-writing-assistant" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>SEO Writing Assistant</NavLink>
           <NavLink to="/topic-research" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Topic Research</NavLink>
           <NavLink to="/seo-content-template" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>SEO Content Template</NavLink>
@@ -98,14 +129,14 @@ export default function AppLayout() {
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Link Building">
-          <div className="qa-nav-section">Link Building</div>
+          <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>Link Building<NavBadge count={3} /></div>
           <NavLink to="/backlinks" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Backlinks</NavLink>
           <NavLink to="/referring-domains" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Referring Domains</NavLink>
           <NavLink to="/backlink-audit" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Backlink Audit</NavLink>
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="AI Tools">
-          <div className="qa-nav-section">AI Tools</div>
+          <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>AI Tools<NavBadge count={3} /></div>
           <NavLink to="/query-lab" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
             Query Lab
           </NavLink>
@@ -128,9 +159,7 @@ export default function AppLayout() {
           <NavLink to="/local-seo" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Local SEO Tools</NavLink>
         </nav>
 
-        <div className="qa-sidebar-footer">
-          Powered by Gemini AI + Ollama. All analysis uses free tier APIs only.
-        </div>
+        <LlmStatusFooter />
       </motion.aside>
 
       <div className="qa-main">

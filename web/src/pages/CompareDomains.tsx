@@ -83,7 +83,7 @@ export default function CompareDomains() {
       style={{ padding: 32 }}
     >
       <h1 className="qa-page-title">Compare Domains</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>
+      <p className="qa-page-desc">
         Select two or more runs to compare domain health scores side by side.
       </p>
 

@@ -18,20 +18,20 @@ export default function SeoContentTemplate() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">SEO Content Template</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Generate a complete content template with optimized headings, keywords, outline, and SEO checklist.</p>
+      <p className="qa-page-desc">Generate a complete content template with optimized headings, keywords, outline, and SEO checklist.</p>
 
       <div className="qa-panel" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <input className="qa-input" value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={e => e.key === "Enter" && generate()} placeholder="Enter target keyword..." style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
-        <button className="qa-btn" onClick={generate} disabled={loading || !keyword.trim()} style={{ padding: "8px 24px" }}>{loading ? "Generating..." : "Generate Template"}</button>
+        <button className="qa-btn-primary" onClick={generate} disabled={loading || !keyword.trim()}>{loading ? "Generating..." : "Generate Template"}</button>
       </div>
 
-      {error && <div className="qa-panel" style={{ marginTop: 16, color: "#e53e3e", padding: 16 }}>{error}</div>}
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Generating content template...</div>}
+      {error && <div className="qa-alert qa-alert--error">{error}</div>}
+      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Generating content template...</div>}
 
       {data && !loading && (
         <>
           <div className="qa-panel" style={{ marginTop: 24, padding: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Title & Meta</div>
+            <div className="qa-panel-title">Title & Meta</div>
             <div style={{ padding: "8px 12px", background: "var(--bg-card, rgba(90,103,216,0.04))", borderRadius: 6, marginBottom: 8 }}>
               <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Title</div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "#1a0dab" }}>{data.title}</div>
@@ -44,7 +44,7 @@ export default function SeoContentTemplate() {
 
           {(data.headings ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Heading Structure</div>
+              <div className="qa-panel-title">Heading Structure</div>
               {data.headings.map((h: any, i: number) => (
                 <div key={i} style={{ padding: "4px 0", paddingLeft: h.level === "h1" ? 0 : h.level === "h2" ? 16 : 32 }}>
                   <span style={{ fontSize: 10, fontWeight: 600, color: "#5a67d8", marginRight: 8, textTransform: "uppercase" }}>{h.level}</span>
@@ -56,7 +56,7 @@ export default function SeoContentTemplate() {
 
           {data.keywords && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Keywords</div>
+              <div className="qa-panel-title">Keywords</div>
               {["primary", "secondary", "lsi"].map(type => (data.keywords[type] ?? []).length > 0 && (
                 <div key={type} style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "capitalize", marginBottom: 4 }}>{type}</div>
@@ -70,7 +70,7 @@ export default function SeoContentTemplate() {
 
           {(data.outline ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Content Outline</div>
+              <div className="qa-panel-title">Content Outline</div>
               {data.outline.map((s: any, i: number) => (
                 <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -85,7 +85,7 @@ export default function SeoContentTemplate() {
 
           {(data.seoChecklist ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>SEO Checklist</div>
+              <div className="qa-panel-title">SEO Checklist</div>
               {data.seoChecklist.map((item: string, i: number) => (
                 <div key={i} style={{ padding: "6px 0", fontSize: 13, display: "flex", gap: 8, alignItems: "center", borderBottom: "1px solid var(--border)" }}>
                   <span style={{ color: "var(--text-secondary)" }}>{i + 1}.</span> {item}

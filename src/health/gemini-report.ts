@@ -223,7 +223,9 @@ Format (strict):
 JSON:
 ${JSON.stringify(payload, null, 2)}`;
 
-  return generateGeminiText(prompt);
+  // Use unified LLM adapter (Gemini → Ollama fallback with caching)
+  const { generateText } = await import("./llm.js");
+  return generateText(prompt);
 }
 
 /**
@@ -250,5 +252,7 @@ ${q}
 Run data:
 ${JSON.stringify(payload, null, 2)}`;
 
-  return generateGeminiText(prompt);
+  // Use unified LLM adapter (Gemini → Ollama fallback with caching)
+  const { generateText } = await import("./llm.js");
+  return generateText(prompt);
 }

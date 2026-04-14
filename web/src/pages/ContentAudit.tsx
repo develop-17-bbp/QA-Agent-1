@@ -29,18 +29,18 @@ export default function ContentAudit() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Content Audit</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Evaluate content quality across all crawled pages with AI-powered recommendations.</p>
+      <p className="qa-page-desc">Evaluate content quality across all crawled pages with AI-powered recommendations.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Auditing content...</div>}
-      {error && <div className="qa-panel" style={{ marginTop: 20, color: "#e53e3e" }}>{error}</div>}
+      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Auditing content...</div>}
+      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
 
       {data && !loading && (
         <>
           <div style={{ display: "flex", gap: 16, marginTop: 24, flexWrap: "wrap" }}>
             {[{ label: "Total Pages", val: data.summary?.totalPages ?? 0 }, { label: "Avg Score", val: data.summary?.avgScore ?? 0, color: (data.summary?.avgScore ?? 0) >= 70 ? "#38a169" : "#dd6b20" }, { label: "Good", val: data.summary?.good ?? 0, color: "#38a169" }, { label: "Poor", val: data.summary?.poor ?? 0, color: "#e53e3e" }].map(s => (
               <div key={s.label} className="qa-panel" style={{ flex: 1, minWidth: 120, padding: 16, textAlign: "center" }}>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.label}</div>
+                <div className="qa-kicker">{s.label}</div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: (s as any).color ?? "var(--text-primary)" }}>{s.val}</div>
               </div>
             ))}
@@ -49,7 +49,7 @@ export default function ContentAudit() {
           <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
             {qualityData.length > 0 && (
               <div className="qa-panel" style={{ padding: 16, width: 260 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Quality Distribution</div>
+                <div className="qa-panel-title">Quality Distribution</div>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart><Pie data={qualityData} dataKey="value" cx="50%" cy="50%" outerRadius={70} innerRadius={40}>
                     {qualityData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -59,7 +59,7 @@ export default function ContentAudit() {
             )}
             {issueData.length > 0 && (
               <div className="qa-panel" style={{ padding: 16, flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Top Issues</div>
+                <div className="qa-panel-title">Top Issues</div>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={issueData} layout="vertical"><XAxis type="number" fontSize={11} /><YAxis type="category" dataKey="issue" width={150} fontSize={10} /><Tooltip /><Bar dataKey="count" fill="#e53e3e" radius={[0,4,4,0]} /></BarChart>
                 </ResponsiveContainer>
@@ -69,14 +69,14 @@ export default function ContentAudit() {
 
           {(data.recommendations ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>AI Recommendations</div>
+              <div className="qa-panel-title">AI Recommendations</div>
               <ul style={{ margin: 0, paddingLeft: 20 }}>{data.recommendations.map((r: string, i: number) => <li key={i} style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text-secondary)" }}>{r}</li>)}</ul>
             </div>
           )}
 
           <div className="qa-panel" style={{ marginTop: 16, padding: 16, overflowX: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Pages ({filtered.length})</div>
+              <div className="qa-panel-title">Pages ({filtered.length})</div>
               <select className="qa-select" value={filter} onChange={e => setFilter(e.target.value)} style={{ width: 160 }}>
                 <option value="all">All</option>
                 <option value="good">Good</option>
@@ -84,8 +84,8 @@ export default function ContentAudit() {
                 <option value="poor">Poor</option>
               </select>
             </div>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr>{["URL", "Quality", "Score", "Issues"].map(h => <th key={h} style={{ padding: "8px 10px", textAlign: h === "URL" || h === "Issues" ? "left" : "center", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>{h}</th>)}</tr></thead>
+            <table className="qa-table">
+              <thead><tr>{["URL", "Quality", "Score", "Issues"].map(h => <th key={h} style={{ textAlign: h === "URL" || h === "Issues" ? "left" : "center" }}>{h}</th>)}</tr></thead>
               <tbody>{filtered.slice(0, 30).map((p: any, i: number) => (
                 <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={{ padding: "6px 10px", fontSize: 12, maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.url}>{p.title || p.url}</td>

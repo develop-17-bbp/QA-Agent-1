@@ -20,22 +20,22 @@ export default function TopicResearch() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Topic Research</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Discover subtopics, questions, content angles, and a content calendar for any topic.</p>
+      <p className="qa-page-desc">Discover subtopics, questions, content angles, and a content calendar for any topic.</p>
 
       <div style={{ marginBottom: 12 }}><RunSelector value={runId} onChange={setRunId} label="Context run (optional)" /></div>
       <div className="qa-panel" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <input className="qa-input" value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === "Enter" && research()} placeholder="Enter topic to research..." style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
-        <button className="qa-btn" onClick={research} disabled={loading || !topic.trim()} style={{ padding: "8px 24px" }}>{loading ? "Researching..." : "Research"}</button>
+        <button className="qa-btn-primary" onClick={research} disabled={loading || !topic.trim()}>{loading ? "Researching..." : "Research"}</button>
       </div>
 
-      {error && <div className="qa-panel" style={{ marginTop: 16, color: "#e53e3e", padding: 16 }}>{error}</div>}
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Researching topic...</div>}
+      {error && <div className="qa-alert qa-alert--error">{error}</div>}
+      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Researching topic...</div>}
 
       {data && !loading && (
         <>
           {(data.subtopics ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 24, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Subtopics</div>
+              <div className="qa-panel-title">Subtopics</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 {data.subtopics.map((st: any, i: number) => (
                   <div key={i} style={{ flex: "1 1 250px", padding: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-card, rgba(90,103,216,0.04))" }}>
@@ -53,7 +53,7 @@ export default function TopicResearch() {
 
           {(data.questions ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Questions People Ask</div>
+              <div className="qa-panel-title">Questions People Ask</div>
               {data.questions.map((q: any, i: number) => (
                 <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", display: "flex", gap: 12, alignItems: "center" }}>
                   <span style={{ fontWeight: 500, fontSize: 13, flex: 1 }}>{q.question}</span>
@@ -66,7 +66,7 @@ export default function TopicResearch() {
 
           {(data.angles ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Content Angles</div>
+              <div className="qa-panel-title">Content Angles</div>
               {data.angles.map((a: any, i: number) => (
                 <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{a.angle}</div>
@@ -78,9 +78,9 @@ export default function TopicResearch() {
 
           {(data.contentCalendar ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Content Calendar</div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead><tr>{["Week", "Topic", "Format", "Target Keyword"].map(h => <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>{h}</th>)}</tr></thead>
+              <div className="qa-panel-title">Content Calendar</div>
+              <table className="qa-table">
+                <thead><tr>{["Week", "Topic", "Format", "Target Keyword"].map(h => <th key={h}>{h}</th>)}</tr></thead>
                 <tbody>{data.contentCalendar.map((c: any, i: number) => (
                   <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={{ padding: "6px 10px", fontSize: 13, fontWeight: 600 }}>Week {c.week}</td>

@@ -39,7 +39,7 @@ export default function SerpAnalyzer() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">SERP Analyzer</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>
+      <p className="qa-page-desc">
         Real search results from DuckDuckGo — track rankings, analyze competitors, and find opportunities. No API keys required.
       </p>
 
@@ -48,11 +48,11 @@ export default function SerpAnalyzer() {
           <input className="qa-input" value={targetDomain} onChange={e => setTargetDomain(e.target.value)} placeholder="Your domain (e.g. example.com) — optional" style={{ flex: 1, padding: "8px 12px" }} />
         </div>
         <textarea className="qa-input" value={keywords} onChange={e => setKeywords(e.target.value)} placeholder="Enter keywords (one per line)..." style={{ width: "100%", padding: "8px 12px", minHeight: 100, resize: "vertical", fontFamily: "monospace", fontSize: 12 }} />
-        <button className="qa-btn" onClick={analyze} disabled={loading || !keywords.trim()} style={{ marginTop: 8, padding: "8px 24px" }}>{loading ? "Searching..." : "Analyze SERPs"}</button>
+        <button className="qa-btn-primary" onClick={analyze} disabled={loading || !keywords.trim()} style={{ marginTop: 8, padding: "8px 24px" }}>{loading ? "Searching..." : "Analyze SERPs"}</button>
       </div>
 
-      {error && <div className="qa-panel" style={{ marginTop: 16, color: "#e53e3e", padding: 16 }}>{error}</div>}
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Scraping search results...</div>}
+      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 16 }}>{error}</div>}
+      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Scraping search results...</div>}
 
       {data && !loading && (
         <>

@@ -1,5 +1,5 @@
 import type { SiteHealthReport } from "../types.js";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 interface OnPageCheck {
   element: string;
@@ -112,7 +112,7 @@ export async function checkOnPageSeo(url: string, reports: SiteHealthReport[]) {
 ${checks.map(c => `- ${c.element}: ${c.status} (${c.value})`).join("\n")}
 
 Provide 3-5 specific, actionable improvement recommendations in markdown bullet points. Be concise (max 150 words total). Focus on the highest-impact changes.`;
-    recommendations = await generateGeminiText(prompt);
+    recommendations = await generateText(prompt);
   } catch {
     recommendations = checks.filter(c => c.status !== "pass").map(c => `- **${c.element}**: ${c.recommendation}`).join("\n");
   }

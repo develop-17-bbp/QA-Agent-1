@@ -2,7 +2,7 @@
  * SEMrush-style keyword research powered entirely by Gemini AI (free tier).
  * No paid APIs required — uses Gemini's knowledge for keyword analysis.
  */
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -96,7 +96,7 @@ Rules:
 - difficulty should reflect how competitive the keyword actually is`;
 
   try {
-    const raw = await generateGeminiText(prompt);
+    const raw = await generateText(prompt);
     let text = raw.trim();
     if (text.startsWith("```")) {
       const lines = text.split("\n");

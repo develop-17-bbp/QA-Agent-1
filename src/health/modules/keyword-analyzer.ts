@@ -1,5 +1,5 @@
 import type { SiteHealthReport } from "../types.js";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 export function extractKeywords(reports: SiteHealthReport[]) {
   const allPages = reports.flatMap(r => r.crawl.pages);
@@ -65,7 +65,7 @@ Generate exactly 25 keywords covering: 5 exact/phrase match variations, 5 questi
 Group into 4-6 thematic clusters.
 Volume: "0-100", "100-1K", "1K-10K", "10K-100K", "100K+". Difficulty: "Easy", "Medium", "Hard", "Very Hard". Intent: "Informational", "Commercial", "Transactional", "Navigational". Trend: "Rising", "Stable", "Declining".`;
 
-  const text = await generateGeminiText(prompt);
+  const text = await generateText(prompt);
   try {
     const clean = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const data = JSON.parse(clean);

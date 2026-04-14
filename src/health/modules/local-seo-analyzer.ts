@@ -1,5 +1,5 @@
 import type { SiteHealthReport } from "../types.js";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 export async function analyzeLocalSeo(businessName: string, location: string, reports?: SiteHealthReport[]) {
   let siteContext = "";
@@ -54,7 +54,7 @@ Return ONLY valid JSON (no markdown):
 
 Generate: 10 local keywords, 5 listing recommendations, 8 GBP tips, NAP analysis, 6 ranking factors, review strategy, 10 citation sources, competitor analysis, and schema markup guidance.`;
 
-  const text = await generateGeminiText(prompt);
+  const text = await generateText(prompt);
   try {
     const clean = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     return { businessName, location, ...JSON.parse(clean) };

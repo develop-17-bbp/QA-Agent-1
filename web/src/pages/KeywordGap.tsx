@@ -109,7 +109,7 @@ export default function KeywordGap() {
       style={{ padding: 32 }}
     >
       <h1 className="qa-page-title">Keyword Gap</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>
+      <p className="qa-page-desc" style={{ marginBottom: 16 }}>
         Compare title-derived keywords between two runs to find content gaps and
         opportunities.
       </p>
@@ -143,16 +143,13 @@ export default function KeywordGap() {
       </div>
 
       {error && (
-        <div className="qa-panel" style={{ marginTop: 16, color: "#e53e3e" }}>
+        <div className="qa-alert qa-alert--error" style={{ marginTop: 16 }}>
           {error}
         </div>
       )}
       {loading && (
-        <div
-          className="qa-panel"
-          style={{ marginTop: 20, textAlign: "center", padding: 40 }}
-        >
-          Analyzing keyword gap...
+        <div className="qa-panel" style={{ marginTop: 20 }}>
+          <div className="qa-loading-panel">Analyzing keyword gap...</div>
         </div>
       )}
 
@@ -197,7 +194,7 @@ export default function KeywordGap() {
                   textAlign: "center",
                 }}
               >
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                <div className="qa-kicker">
                   {s.label}
                 </div>
                 <div
@@ -222,17 +219,10 @@ export default function KeywordGap() {
               className="qa-panel"
               style={{ padding: 16, overflowX: "auto" }}
             >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  color: "#5a67d8",
-                }}
-              >
+              <div className="qa-panel-title" style={{ marginBottom: 8, color: "#5a67d8" }}>
                 Only in Run A ({onlyA.length})
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="qa-table">
                 <thead>
                   <tr>
                     <SortHeader
@@ -263,41 +253,18 @@ export default function KeywordGap() {
                 </thead>
                 <tbody>
                   {onlyA.map((kw: any) => (
-                    <tr
-                      key={kw.keyword}
-                      style={{ borderBottom: "1px solid var(--border)" }}
-                    >
-                      <td
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: 13,
-                          fontWeight: 500,
-                        }}
-                      >
+                    <tr key={kw.keyword}>
+                      <td style={{ fontWeight: 500 }}>
                         {kw.keyword}
                       </td>
-                      <td
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: 13,
-                          textAlign: "right",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
+                      <td style={{ textAlign: "right", color: "var(--text-secondary)" }}>
                         {kw.score}
                       </td>
                     </tr>
                   ))}
                   {onlyA.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={2}
-                        style={{
-                          padding: 16,
-                          textAlign: "center",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
+                      <td colSpan={2} className="qa-empty">
                         None
                       </td>
                     </tr>
@@ -311,17 +278,10 @@ export default function KeywordGap() {
               className="qa-panel"
               style={{ padding: 16, overflowX: "auto" }}
             >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  color: "#38a169",
-                }}
-              >
+              <div className="qa-panel-title" style={{ marginBottom: 8, color: "#38a169" }}>
                 Shared ({shared.length})
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="qa-table">
                 <thead>
                   <tr>
                     <SortHeader
@@ -352,41 +312,18 @@ export default function KeywordGap() {
                 </thead>
                 <tbody>
                   {shared.map((kw: any) => (
-                    <tr
-                      key={kw.keyword}
-                      style={{ borderBottom: "1px solid var(--border)" }}
-                    >
-                      <td
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: 13,
-                          fontWeight: 500,
-                        }}
-                      >
+                    <tr key={kw.keyword}>
+                      <td style={{ fontWeight: 500 }}>
                         {kw.keyword}
                       </td>
-                      <td
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: 13,
-                          textAlign: "right",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
+                      <td style={{ textAlign: "right", color: "var(--text-secondary)" }}>
                         {kw.score}
                       </td>
                     </tr>
                   ))}
                   {shared.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={2}
-                        style={{
-                          padding: 16,
-                          textAlign: "center",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
+                      <td colSpan={2} className="qa-empty">
                         None
                       </td>
                     </tr>
@@ -400,17 +337,10 @@ export default function KeywordGap() {
               className="qa-panel"
               style={{ padding: 16, overflowX: "auto" }}
             >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  color: "#e53e3e",
-                }}
-              >
+              <div className="qa-panel-title" style={{ marginBottom: 8, color: "#e53e3e" }}>
                 Only in Run B ({onlyB.length})
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="qa-table">
                 <thead>
                   <tr>
                     <SortHeader
@@ -441,41 +371,18 @@ export default function KeywordGap() {
                 </thead>
                 <tbody>
                   {onlyB.map((kw: any) => (
-                    <tr
-                      key={kw.keyword}
-                      style={{ borderBottom: "1px solid var(--border)" }}
-                    >
-                      <td
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: 13,
-                          fontWeight: 500,
-                        }}
-                      >
+                    <tr key={kw.keyword}>
+                      <td style={{ fontWeight: 500 }}>
                         {kw.keyword}
                       </td>
-                      <td
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: 13,
-                          textAlign: "right",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
+                      <td style={{ textAlign: "right", color: "var(--text-secondary)" }}>
                         {kw.score}
                       </td>
                     </tr>
                   ))}
                   {onlyB.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={2}
-                        style={{
-                          padding: 16,
-                          textAlign: "center",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
+                      <td colSpan={2} className="qa-empty">
                         None
                       </td>
                     </tr>

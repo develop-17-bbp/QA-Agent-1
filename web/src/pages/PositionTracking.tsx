@@ -26,10 +26,10 @@ export default function PositionTracking() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Position Tracking</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Track keyword SEO optimization scores across your crawled pages.</p>
+      <p className="qa-page-desc">Track keyword SEO optimization scores across your crawled pages.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Analyzing positions...</div>}
+      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing positions...</div>}
       {error && <div className="qa-panel" style={{ marginTop: 20, color: "#e53e3e" }}>{error}</div>}
 
       {data && !loading && (

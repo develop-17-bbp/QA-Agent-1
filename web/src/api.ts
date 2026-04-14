@@ -1,3 +1,54 @@
+// ── Request Deduplication & Caching ──────────────────────────────────────────
+
+const inflight = new Map<string, Promise<unknown>>();
+const apiCache = new Map<string, { data: unknown; expiresAt: number }>();
+
+function cacheKey(path: string, body?: Record<string, unknown>): string {
+  return body ? `${path}:${JSON.stringify(body)}` : path;
+}
+
+function getCached<T>(key: string): T | undefined {
+  const entry = apiCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) { apiCache.delete(key); return undefined; }
+  return entry.data as T;
+}
+
+function setCache(key: string, data: unknown, ttlMs: number): void {
+  if (apiCache.size > 200) {
+    const first = apiCache.keys().next().value;
+    if (first !== undefined) apiCache.delete(first);
+  }
+  apiCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
+
+/** Clear all cached API responses (call after mutations). */
+export function clearApiCache(): void {
+  apiCache.clear();
+}
+
+async function dedupFetch<T>(key: string, fetcher: () => Promise<T>, ttlMs: number = 30_000): Promise<T> {
+  const cached = getCached<T>(key);
+  if (cached !== undefined) return cached;
+
+  const existing = inflight.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const promise = fetcher().then(data => {
+    inflight.delete(key);
+    setCache(key, data, ttlMs);
+    return data;
+  }).catch(err => {
+    inflight.delete(key);
+    throw err;
+  });
+
+  inflight.set(key, promise);
+  return promise;
+}
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export type HealthRunMeta = {
   runId: string;
   startedAt?: string;
@@ -31,10 +82,12 @@ export type HealthRunMeta = {
 
 export type HistoryDay = { date: string; runs: HealthRunMeta[] };
 
-export async function fetchHistory(): Promise<{ days: HistoryDay[] }> {
-  const res = await fetch("/api/history");
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<{ days: HistoryDay[] }>;
+export function fetchHistory(): Promise<{ days: HistoryDay[] }> {
+  return dedupFetch("/api/history", async () => {
+    const res = await fetch("/api/history");
+    if (!res.ok) throw new Error(await res.text());
+    return res.json() as Promise<{ days: HistoryDay[] }>;
+  }, 15_000);
 }
 
 export async function fetchRunMeta(runId: string): Promise<HealthRunMeta | null> {
@@ -152,10 +205,15 @@ export async function queryNlp(
 // SEMrush Feature API Functions
 // ---------------------------------------------------------------------------
 
-async function postApi<T>(path: string, body: Record<string, unknown>): Promise<T> {
+async function postApiRaw<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<T>;
+}
+
+function postApi<T>(path: string, body: Record<string, unknown>, ttlMs: number = 30_000): Promise<T> {
+  const key = cacheKey(path, body);
+  return dedupFetch<T>(key, () => postApiRaw<T>(path, body), ttlMs);
 }
 
 // Run-based endpoints (require runId)
@@ -204,7 +262,13 @@ export function fetchSerpAnalysis(keywords: string[], targetDomain?: string) { r
 export function fetchSerpSearch(query: string) { return postApi<any>("/api/serp-search", { query }); }
 
 // LLM Router Stats
-export async function fetchLlmStats(): Promise<any> { const res = await fetch("/api/llm-stats"); if (!res.ok) throw new Error(await res.text()); return res.json(); }
+export function fetchLlmStats(): Promise<any> {
+  return dedupFetch("/api/llm-stats", async () => {
+    const res = await fetch("/api/llm-stats");
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }, 10_000);
+}
 
 // ---------------------------------------------------------------------------
 // File Upload

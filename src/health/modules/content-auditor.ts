@@ -1,5 +1,5 @@
 import type { SiteHealthReport } from "../types.js";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 export async function auditContent(reports: SiteHealthReport[]) {
   const allPages = reports.flatMap(r => r.crawl.pages);
@@ -74,7 +74,7 @@ Top issues: ${sortedIssues.map(([i, c]) => `${i} (${c} pages)`).join(", ")}
 Good: ${good}, Needs improvement: ${needsWork}, Poor: ${poor}
 
 Return ONLY a JSON array of 5-7 specific actionable recommendations as strings. No markdown.`;
-      const text = await generateGeminiText(prompt);
+      const text = await generateText(prompt);
       recommendations = JSON.parse(text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim());
     } catch { recommendations = ["Review pages with missing titles", "Add meta descriptions to all pages", "Improve thin content pages"]; }
   }

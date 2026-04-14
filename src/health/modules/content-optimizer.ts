@@ -1,5 +1,5 @@
 import type { SiteHealthReport } from "../types.js";
-import { generateGeminiText } from "../gemini-report.js";
+import { generateText } from "../llm.js";
 
 export async function analyzeWritingAssistant(url: string, reports: SiteHealthReport[]) {
   const allPages = reports.flatMap(r => r.crawl.pages);
@@ -32,7 +32,7 @@ Return ONLY valid JSON (no markdown):
 
 Provide 8-10 specific recommendations covering title, meta, headings, content length, keywords, readability, internal linking, and technical SEO.`;
 
-  const text = await generateGeminiText(prompt);
+  const text = await generateText(prompt);
   try {
     const clean = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     return { url: page.url, ...JSON.parse(clean) };
@@ -58,7 +58,7 @@ Return ONLY valid JSON (no markdown):
 
 Create a detailed template with 8-12 headings, 5-7 outline sections, and 8-10 checklist items.`;
 
-  const text = await generateGeminiText(prompt);
+  const text = await generateText(prompt);
   try {
     const clean = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     return JSON.parse(clean);

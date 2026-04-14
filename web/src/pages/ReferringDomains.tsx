@@ -23,23 +23,23 @@ export default function ReferringDomains() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Referring Domains</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Analyze external domains linking to your sites.</p>
+      <p className="qa-page-desc">Analyze external domains linking to your sites.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-panel" style={{ marginTop: 20, textAlign: "center", padding: 40 }}>Analyzing domains...</div>}
-      {error && <div className="qa-panel" style={{ marginTop: 20, color: "#e53e3e" }}>{error}</div>}
+      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing domains...</div>}
+      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
 
       {data && !loading && (
         <>
           <div style={{ display: "flex", gap: 16, marginTop: 24, flexWrap: "wrap" }}>
-            <div className="qa-panel" style={{ flex: 1, minWidth: 130, padding: 16, textAlign: "center" }}><div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Total Domains</div><div style={{ fontSize: 24, fontWeight: 700 }}>{data.totalDomains}</div></div>
-            <div className="qa-panel" style={{ flex: 1, minWidth: 130, padding: 16, textAlign: "center" }}><div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Avg Trust Score</div><div style={{ fontSize: 24, fontWeight: 700, color: (data.summary?.avgTrustScore ?? 0) >= 70 ? "#38a169" : "#dd6b20" }}>{data.summary?.avgTrustScore ?? 0}</div></div>
+            <div className="qa-panel" style={{ flex: 1, minWidth: 130, padding: 16, textAlign: "center" }}><div className="qa-kicker">Total Domains</div><div style={{ fontSize: 24, fontWeight: 700 }}>{data.totalDomains}</div></div>
+            <div className="qa-panel" style={{ flex: 1, minWidth: 130, padding: 16, textAlign: "center" }}><div className="qa-kicker">Avg Trust Score</div><div style={{ fontSize: 24, fontWeight: 700, color: (data.summary?.avgTrustScore ?? 0) >= 70 ? "#38a169" : "#dd6b20" }}>{data.summary?.avgTrustScore ?? 0}</div></div>
           </div>
 
           <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
             {authData.length > 0 && (
               <div className="qa-panel" style={{ padding: 16, width: 260 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Authority Distribution</div>
+                <div className="qa-panel-title">Authority Distribution</div>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart><Pie data={authData} dataKey="value" cx="50%" cy="50%" outerRadius={70} innerRadius={40}>
                     {authData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -53,9 +53,9 @@ export default function ReferringDomains() {
           </div>
 
           <div className="qa-panel" style={{ marginTop: 16, padding: 16, overflowX: "auto" }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Referring Domains ({(data.sections ?? []).length})</div>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr>{["Domain", "Total Links", "Healthy", "Broken", "Trust Score"].map(h => <th key={h} style={{ padding: "8px 10px", textAlign: h === "Domain" ? "left" : "center", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>{h}</th>)}</tr></thead>
+            <div className="qa-panel-title">Referring Domains ({(data.sections ?? []).length})</div>
+            <table className="qa-table">
+              <thead><tr>{["Domain", "Total Links", "Healthy", "Broken", "Trust Score"].map(h => <th key={h} style={{ textAlign: h === "Domain" ? "left" : "center" }}>{h}</th>)}</tr></thead>
               <tbody>{(data.sections ?? []).map((s: any) => (
                 <tr key={s.domain} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={{ padding: "6px 10px", fontSize: 13, fontWeight: 500 }}>{s.domain}</td>
