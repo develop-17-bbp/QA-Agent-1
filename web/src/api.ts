@@ -71,7 +71,8 @@ export type HealthRunMeta = {
   masterHtmlHref: string;
   runSummaryHtmlHref?: string;
   indexHtmlHref: string;
-  geminiSummaryHref?: string;
+  /** Link to the AI-generated summary markdown for this run, if one was produced. */
+  aiSummaryHref?: string;
   aiSummary?: { generatedAt?: string; skippedReason?: string };
   features?: {
     pageSpeedStrategies?: string[];
@@ -97,14 +98,19 @@ export async function fetchRunMeta(runId: string): Promise<HealthRunMeta | null>
     const t = await res.text();
     throw new Error(t || res.statusText);
   }
-  return res.json() as Promise<HealthRunMeta>;
+  const raw = (await res.json()) as HealthRunMeta & { geminiSummaryHref?: string };
+  // Back-compat: legacy run-meta.json files stored this under an older key.
+  if (!raw.aiSummaryHref && raw.geminiSummaryHref) {
+    raw.aiSummaryHref = raw.geminiSummaryHref;
+  }
+  return raw;
 }
 
 export async function startRun(body: {
   urlsText: string;
   pageSpeedBoth?: boolean;
   viewportCheck?: boolean;
-  gemini?: boolean;
+  aiSummary?: boolean;
   seoAudit?: boolean;
   useFirecrawl?: boolean;
   smartAnalysis?: boolean;
@@ -123,19 +129,26 @@ export function streamUrl(): string {
   return `${window.location.origin}/api/stream`;
 }
 
-export async function fetchGeminiSummary(runId: string): Promise<string | null> {
-  const res = await fetch(`/api/gemini-summary?runId=${encodeURIComponent(runId)}`);
+export async function fetchAiSummary(runId: string): Promise<string | null> {
+  // Try the new endpoint first, fall back to the legacy alias for older server builds.
+  const tryFetch = async (path: string) => fetch(`${path}?runId=${encodeURIComponent(runId)}`);
+  let res = await tryFetch("/api/ai-summary");
+  if (res.status === 404 || res.status === 405) res = await tryFetch("/api/gemini-summary");
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(await res.text());
   return res.text();
 }
 
-export async function askGeminiAboutRun(runId: string, question: string): Promise<string> {
-  const res = await fetch("/api/gemini-run-chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ runId, question }),
-  });
+export async function askAiAboutRun(runId: string, question: string): Promise<string> {
+  // Prefer the new endpoint; fall back to the legacy alias for older server builds.
+  const tryPost = async (path: string) =>
+    fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId, question }),
+    });
+  let res = await tryPost("/api/ai-run-chat");
+  if (res.status === 404 || res.status === 405) res = await tryPost("/api/gemini-run-chat");
   const text = await res.text();
   let data: { answer?: string; error?: string };
   try {
@@ -149,7 +162,7 @@ export async function askGeminiAboutRun(runId: string, question: string): Promis
 }
 
 // ---------------------------------------------------------------------------
-// Keyword Research (standalone Gemini-powered)
+// Keyword Research (standalone, LLM-assisted)
 // ---------------------------------------------------------------------------
 
 export async function fetchKeywordResearch(keyword: string): Promise<any> {
@@ -237,7 +250,7 @@ export function fetchKeywordGap(runIdA: string, runIdB: string) { return postApi
 export function fetchBacklinkGap(runIdA: string, runIdB: string) { return postApi<any>("/api/backlink-gap", { runIdA, runIdB }); }
 export function fetchPostTracking(runId: string, baselineRunId?: string) { return postApi<any>("/api/post-tracking", { runId, baselineRunId }); }
 
-// Gemini-only endpoints (no runId required)
+// Standalone LLM-assisted endpoints (no runId required)
 export function fetchKeywordMagic(seedKeyword: string) { return postApi<any>("/api/keyword-magic", { seedKeyword }); }
 export function fetchSeoWritingAssistant(runId: string, url: string) { return postApi<any>("/api/seo-writing-assistant", { runId, url }); }
 export function fetchSeoContentTemplate(keyword: string) { return postApi<any>("/api/seo-content-template", { keyword }); }
@@ -265,7 +278,17 @@ export function fetchSerpSearch(query: string) { return postApi<any>("/api/serp-
 export function fetchExternalBacklinks(domain: string) { return postApi<any>("/api/external-backlinks", { domain }); }
 
 // Position tracker sweep (records into history-db)
-export function trackPositions(pairs: { domain: string; keyword: string }[], delayMs?: number) { return postApi<any>("/api/position-track", { pairs, delayMs }); }
+// strictHost: when false (default), wikipedia.org matches en.wikipedia.org. When true, exact host equality only.
+export function trackPositions(
+  pairs: { domain: string; keyword: string; strictHost?: boolean }[],
+  opts?: { delayMs?: number; strictHost?: boolean },
+) {
+  return postApi<any>("/api/position-track", {
+    pairs,
+    delayMs: opts?.delayMs,
+    strictHost: opts?.strictHost,
+  });
+}
 
 // History readers (JSON time series)
 export async function fetchKeywordHistory(domain: string, keyword: string): Promise<any> {

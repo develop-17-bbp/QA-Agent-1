@@ -35,7 +35,7 @@ export default function QueryLab() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32, display: "flex", flexDirection: "column", height: "calc(100vh - 64px)" }}>
       <h1 className="qa-page-title">Query Lab</h1>
-      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Ask natural language questions about your crawl data. Powered by Gemini AI.</p>
+      <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>Ask natural language questions about your crawl data. Powered by your local AI model.</p>
       <RunSelector value={runId} onChange={setRunId} label="Select run" />
 
       <div className="qa-panel" style={{ flex: 1, marginTop: 16, padding: 16, display: "flex", flexDirection: "column", overflow: "hidden" }}>

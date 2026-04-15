@@ -56,6 +56,8 @@ export interface HealthRunMeta {
   runSummaryHtmlHref?: string;
   indexHtmlHref: string;
   /** Relative path to Markdown AI summary when generated. */
+  aiSummaryHref?: string;
+  /** @deprecated Legacy alias for `aiSummaryHref`. Still written for older UI clients. */
   geminiSummaryHref?: string;
   aiSummary?: {
     generatedAt?: string;
@@ -356,7 +358,7 @@ export async function orchestrateHealthCheck(options: {
   );
 
   // ── AI summary (local Ollama) + Smart Analysis run IN PARALLEL ──
-  let geminiSummaryHref: string | undefined;
+  let aiSummaryHref: string | undefined;
   let aiSummary: HealthRunMeta["aiSummary"] | undefined;
 
   const endTasks: Promise<void>[] = [];
@@ -377,8 +379,9 @@ export async function orchestrateHealthCheck(options: {
           const reps = results.map((r) => { const { failed: _f, ...rep } = r; return rep; });
           const payload = buildGeminiPayloadFromReports(reps, rid, runFinishedAt);
           const md = await generateGeminiQaSummary(payload);
+          // File is still named `gemini-summary.md` on disk for backwards-compat with existing runs.
           await writeFile(path.join(runDir, "gemini-summary.md"), md, "utf8");
-          geminiSummaryHref = "./gemini-summary.md";
+          aiSummaryHref = "./gemini-summary.md";
           aiSummary = { generatedAt: new Date().toISOString() };
         } catch (e) {
           aiSummary = { skippedReason: e instanceof Error ? e.message : String(e) };
@@ -424,7 +427,9 @@ export async function orchestrateHealthCheck(options: {
     masterHtmlHref: `./${masterBase}.html`,
     runSummaryHtmlHref: "./run-summary.html",
     indexHtmlHref: "./index.html",
-    geminiSummaryHref,
+    aiSummaryHref,
+    // Legacy alias for UI builds older than the aiSummaryHref rename.
+    geminiSummaryHref: aiSummaryHref,
     aiSummary,
     features: {
       pageSpeedStrategies: options.pageSpeed?.enabled ? options.pageSpeed.strategies : undefined,

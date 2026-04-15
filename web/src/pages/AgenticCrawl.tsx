@@ -69,25 +69,28 @@ export default function AgenticCrawl() {
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Agentic Crawl Intelligence</h1>
       <p className="qa-page-desc">
-        Multi-agent AI pipeline: SERP collection, smart crawl planning, and automated SEO analysis. Powered by Gemini with Ollama fallback.
+        Multi-agent AI pipeline: SERP collection, smart crawl planning, and automated SEO analysis. Powered by your local Ollama model.
       </p>
 
       {/* LLM Status Bar */}
-      {llmStats && (
+      {llmStats && (() => {
+        const remote = llmStats.remote ?? {};
+        return (
         <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
           <div className="qa-panel" style={{ padding: "8px 16px", display: "flex", gap: 16, alignItems: "center", fontSize: 12 }}>
-            <span className={`qa-status-dot qa-status-dot--${llmStats.gemini?.circuitOpen ? "bad" : "ok"}`} />
-            <span style={{ fontWeight: 600 }}>Gemini: {llmStats.gemini?.circuitOpen ? "Circuit Open" : "OK"}</span>
-            <span style={{ color: "var(--muted)" }}>Reqs: {llmStats.gemini?.requests ?? 0}</span>
-            <span style={{ color: "var(--muted)" }}>Avg: {llmStats.gemini?.avgLatencyMs ?? 0}ms</span>
+            <span className={`qa-status-dot qa-status-dot--${remote.circuitOpen ? "bad" : "ok"}`} />
+            <span style={{ fontWeight: 600 }}>Remote router: {remote.circuitOpen ? "Circuit Open" : "OK"}</span>
+            <span style={{ color: "var(--muted)" }}>Reqs: {remote.requests ?? 0}</span>
+            <span style={{ color: "var(--muted)" }}>Avg: {remote.avgLatencyMs ?? 0}ms</span>
           </div>
           <div className="qa-panel" style={{ padding: "8px 16px", display: "flex", gap: 16, alignItems: "center", fontSize: 12 }}>
             <span className={`qa-status-dot qa-status-dot--${llmStats.ollama?.available ? "ok" : "off"}`} />
-            <span style={{ fontWeight: 600 }}>Ollama: {llmStats.ollama?.available ? "Available" : "Offline"}</span>
+            <span style={{ fontWeight: 600 }}>Ollama (local): {llmStats.ollama?.available ? "Available" : "Offline"}</span>
             <span style={{ color: "var(--muted)" }}>Reqs: {llmStats.ollama?.requests ?? 0}</span>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Input Form */}
       <div className="qa-panel" style={{ padding: 16 }}>

@@ -2,10 +2,10 @@ import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  askGeminiAboutRun,
+  askAiAboutRun,
   combinedPdfUrl,
   combinedReportHtmlUrl,
-  fetchGeminiSummary,
+  fetchAiSummary,
   fetchRunMeta,
   normalizeReportHtmlRel,
   reportIndexUrl,
@@ -29,7 +29,7 @@ export default function RunDetail() {
   const rawParam = useParams().runId;
   const runId = decodeRunIdParam(rawParam);
   const [run, setRun] = useState<HealthRunMeta | null>(null);
-  const [gemini, setGemini] = useState<string | null>(null);
+  const [aiSummaryText, setAiSummaryText] = useState<string | null>(null);
   const [runChatQuestion, setRunChatQuestion] = useState("");
   const [runChatAnswer, setRunChatAnswer] = useState<string | null>(null);
   const [runChatLoading, setRunChatLoading] = useState(false);
@@ -44,7 +44,7 @@ export default function RunDetail() {
     setLoading(true);
     setErr(null);
     setRun(null);
-    setGemini(null);
+    setAiSummaryText(null);
     setRunChatQuestion("");
     setRunChatAnswer(null);
     setRunChatErr(null);
@@ -66,12 +66,12 @@ export default function RunDetail() {
           return;
         }
         setRun(meta);
-        if (meta.geminiSummaryHref) {
+        if (meta.aiSummaryHref) {
           try {
-            const g = await fetchGeminiSummary(runId);
-            if (!cancelled) setGemini(g);
+            const g = await fetchAiSummary(runId);
+            if (!cancelled) setAiSummaryText(g);
           } catch {
-            if (!cancelled) setGemini(null);
+            if (!cancelled) setAiSummaryText(null);
           }
         }
       } catch (e) {
@@ -240,9 +240,9 @@ export default function RunDetail() {
           </motion.section>
 
           {run.aiSummary?.skippedReason ? (
-            <p style={{ color: "var(--bad)", marginTop: 24 }}>Gemini: {run.aiSummary.skippedReason}</p>
+            <p style={{ color: "var(--bad)", marginTop: 24 }}>AI summary: {run.aiSummary.skippedReason}</p>
           ) : null}
-          {gemini ? (
+          {aiSummaryText ? (
             <motion.article
               className="qa-panel"
               initial={{ opacity: 0, y: 10 }}
@@ -258,14 +258,14 @@ export default function RunDetail() {
                 AI summary
               </h2>
               <p style={{ margin: "0 0 12px", color: "var(--muted)", fontSize: "0.85rem" }}>
-                Saved when the run was started with Gemini enabled — bullet-style snapshot for a quick read.
+                Saved when the run was started with AI summary enabled — bullet-style snapshot for a quick read.
               </p>
-              <MarkdownBody markdown={gemini} />
+              <MarkdownBody markdown={aiSummaryText} />
             </motion.article>
-          ) : run.geminiSummaryHref ? (
+          ) : run.aiSummaryHref ? (
             <p style={{ color: "var(--muted)", marginTop: 24 }}>Loading AI summary…</p>
           ) : (
-            <p style={{ color: "var(--muted)", marginTop: 24 }}>No saved AI summary for this run (enable Gemini when starting a crawl).</p>
+            <p style={{ color: "var(--muted)", marginTop: 24 }}>No saved AI summary for this run (enable AI summary when starting a crawl).</p>
           )}
 
           <motion.section
@@ -278,9 +278,7 @@ export default function RunDetail() {
               Ask about this run
             </h2>
             <p style={{ margin: "0 0 14px", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.5 }}>
-              Short answers from Gemini using this run’s crawl data (same JSON as the combined report). Needs{" "}
-              <code style={{ fontSize: "0.82em" }}>GEMINI_API_KEY</code> or{" "}
-              <code style={{ fontSize: "0.82em" }}>GOOGLE_AI_API_KEY</code> on the server.
+              Short answers from your local LLM (Ollama) using this run’s crawl data (same JSON as the combined report). Needs Ollama running locally.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "stretch" }}>
               <input
@@ -298,7 +296,7 @@ export default function RunDetail() {
                       setRunChatErr(null);
                       setRunChatAnswer(null);
                       try {
-                        const a = await askGeminiAboutRun(run.runId, q);
+                        const a = await askAiAboutRun(run.runId, q);
                         setRunChatAnswer(a);
                       } catch (ex) {
                         setRunChatErr(ex instanceof Error ? ex.message : String(ex));
@@ -330,7 +328,7 @@ export default function RunDetail() {
                     setRunChatErr(null);
                     setRunChatAnswer(null);
                     try {
-                      const a = await askGeminiAboutRun(run.runId, q);
+                      const a = await askAiAboutRun(run.runId, q);
                       setRunChatAnswer(a);
                     } catch (ex) {
                       setRunChatErr(ex instanceof Error ? ex.message : String(ex));

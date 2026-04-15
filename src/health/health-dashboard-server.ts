@@ -1175,7 +1175,10 @@ export async function runHealthDashboard(options: {
         return;
       }
 
-      if (req.method === "GET" && url.pathname === "/api/gemini-summary") {
+      if (
+        req.method === "GET" &&
+        (url.pathname === "/api/ai-summary" || url.pathname === "/api/gemini-summary")
+      ) {
         const runId = url.searchParams.get("runId");
         if (!runId || !isSafeRunIdSegment(runId)) {
           res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
@@ -1202,7 +1205,10 @@ export async function runHealthDashboard(options: {
         return;
       }
 
-      if (req.method === "POST" && url.pathname === "/api/gemini-run-chat") {
+      if (
+        req.method === "POST" &&
+        (url.pathname === "/api/ai-run-chat" || url.pathname === "/api/gemini-run-chat")
+      ) {
         let body: string;
         try {
           body = await readBody(req, 32_000);
@@ -1992,12 +1998,19 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/position-track") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { pairs?: { domain?: string; keyword?: string }[]; delayMs?: number };
+        let payload: { pairs?: { domain?: string; keyword?: string; strictHost?: boolean }[]; delayMs?: number; strictHost?: boolean };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const batchStrict = payload.strictHost === true;
         const pairs = Array.isArray(payload.pairs)
-          ? payload.pairs.filter((p): p is { domain: string; keyword: string } =>
-              !!p && typeof p.domain === "string" && p.domain.trim().length > 0 &&
-              typeof p.keyword === "string" && p.keyword.trim().length > 0)
+          ? payload.pairs
+              .filter((p): p is { domain: string; keyword: string; strictHost?: boolean } =>
+                !!p && typeof p.domain === "string" && p.domain.trim().length > 0 &&
+                typeof p.keyword === "string" && p.keyword.trim().length > 0)
+              .map((p) => ({
+                domain: p.domain,
+                keyword: p.keyword,
+                strictHost: typeof p.strictHost === "boolean" ? p.strictHost : batchStrict,
+              }))
           : [];
         if (pairs.length === 0) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "pairs required" })); return; }
         if (pairs.length > 50) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Max 50 pairs per sweep" })); return; }
@@ -2094,6 +2107,9 @@ export async function runHealthDashboard(options: {
           urls?: string[];
           pageSpeedBoth?: boolean;
           viewportCheck?: boolean;
+          /** Preferred name for the AI summary toggle. */
+          aiSummary?: boolean;
+          /** @deprecated Legacy alias for `aiSummary`. */
           gemini?: boolean;
           seoAudit?: boolean;
           useFirecrawl?: boolean;
@@ -2143,7 +2159,7 @@ export async function runHealthDashboard(options: {
             concurrency: vc?.concurrency ?? 2,
           };
         }
-        if (payload.gemini) {
+        if (payload.aiSummary || payload.gemini) {
           runExtra.gemini = true;
         }
         // seoAudit: requires seo-audit module (available on main branch)

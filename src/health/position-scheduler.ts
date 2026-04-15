@@ -17,6 +17,12 @@ import { recordKeywordPosition } from "./history-db.js";
 export interface TrackPair {
   domain: string;
   keyword: string;
+  /**
+   * When false (default), matches the target domain OR any of its subdomains —
+   * so tracking `wikipedia.org` for "claude shannon" correctly matches
+   * `en.wikipedia.org`. When true, only an exact hostname equality counts.
+   */
+  strictHost?: boolean;
 }
 
 export interface TrackResult {
@@ -37,13 +43,27 @@ function normalizeHost(url: string): string {
 }
 
 /**
+ * Host match for position tracking. Default mode treats the target as the
+ * registrable parent and allows any subdomain to count (e.g. `wikipedia.org`
+ * matches `en.wikipedia.org`). Strict mode requires an exact equality. The
+ * old code used strict equality and silently returned `position: null` for
+ * legitimate subdomain hits.
+ */
+function hostMatches(resultHost: string, targetHost: string, strict: boolean): boolean {
+  if (!resultHost || !targetHost) return false;
+  if (strict) return resultHost === targetHost;
+  return resultHost === targetHost || resultHost.endsWith("." + targetHost);
+}
+
+/**
  * Check a single (domain, keyword) pair.
  */
 export async function trackOne(pair: TrackPair): Promise<TrackResult> {
   const targetHost = pair.domain.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+  const strict = pair.strictHost === true;
   try {
     const serp = await searchSerp(pair.keyword);
-    const matchIdx = serp.results.findIndex((r) => normalizeHost(r.url) === targetHost);
+    const matchIdx = serp.results.findIndex((r) => hostMatches(normalizeHost(r.url), targetHost, strict));
     const matched = matchIdx >= 0 ? serp.results[matchIdx]! : null;
     const topResult = serp.results[0] ?? null;
     const result: TrackResult = {

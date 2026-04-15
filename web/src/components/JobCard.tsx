@@ -61,7 +61,7 @@ export default function JobCard({ run, defaultOpen, titleNavigatesToRun = true }
         <div style={{ color: "var(--muted)", fontSize: "0.82rem", marginTop: 10 }}>
           {run.aiSummary?.skippedReason ? (
             <span style={{ color: "var(--bad)" }}>AI: {run.aiSummary.skippedReason}</span>
-          ) : run.geminiSummaryHref ? (
+          ) : run.aiSummaryHref ? (
             <span style={{ color: "var(--ok)" }}>AI summary</span>
           ) : null}
         </div>

@@ -1,7 +1,7 @@
 /**
  * LLM Router — Local Ollama only.
  *
- * Gemini was removed to eliminate paid-API quota dependencies.
+ * Remote providers were removed to eliminate paid-API quota dependencies.
  * Every LLM call in the system now routes to a local Ollama instance.
  *
  * Still exports the same surface (routeLlm, routeLlmJson, getRouterStats) so
@@ -23,12 +23,13 @@ export interface LlmResponse {
   provider: "ollama";
   model: string;
   latencyMs: number;
-  /** Always false — kept for interface compatibility with old Gemini→Ollama router. */
+  /** Always false — kept for interface compatibility with the old remote→Ollama router. */
   fromFallback: boolean;
 }
 
 export interface LlmRouterStats {
-  gemini: { requests: number; failures: number; avgLatencyMs: number; circuitOpen: boolean };
+  /** Remote-provider metrics. Always zeroed today — router is Ollama-only, slot kept for legacy UIs. */
+  remote: { requests: number; failures: number; avgLatencyMs: number; circuitOpen: boolean };
   ollama: { requests: number; failures: number; avgLatencyMs: number; available: boolean };
   totalRequests: number;
 }
@@ -188,8 +189,8 @@ export function getRouterStats(): LlmRouterStats {
       ? Math.round(ollamaTotalLatency / Math.max(1, ollamaTotalRequests - ollamaTotalFailures))
       : 0;
   return {
-    // Kept for interface parity — no Gemini traffic is ever recorded.
-    gemini: { requests: 0, failures: 0, avgLatencyMs: 0, circuitOpen: false },
+    // Kept for interface parity — no remote-provider traffic is ever recorded.
+    remote: { requests: 0, failures: 0, avgLatencyMs: 0, circuitOpen: false },
     ollama: {
       requests: ollamaTotalRequests,
       failures: ollamaTotalFailures,

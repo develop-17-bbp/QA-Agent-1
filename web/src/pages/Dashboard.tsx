@@ -11,7 +11,7 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
   const [runBanner, setRunBanner] = useState<RunBannerState>({ kind: "idle" });
   const [pageSpeedBoth, setPageSpeedBoth] = useState(true);
   const [viewportCheck, setViewportCheck] = useState(true);
-  const [gemini, setGemini] = useState(true);
+  const [aiSummary, setAiSummary] = useState(true);
   const [seoAudit, setSeoAudit] = useState(false);
   const [useFirecrawl, setUseFirecrawl] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState(false);
@@ -116,7 +116,7 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
         urlsText,
         pageSpeedBoth,
         viewportCheck,
-        gemini,
+        aiSummary,
         seoAudit,
         useFirecrawl,
         smartAnalysis,
@@ -145,7 +145,7 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
       >
         <h1 className="qa-page-title">New run</h1>
         <p className="qa-page-desc">
-          Queue a crawl from root URLs. Optional Lighthouse, viewport checks, and Gemini run after the crawl. See{" "}
+          Queue a crawl from root URLs. Optional Lighthouse, viewport checks, and a local AI summary run after the crawl. See{" "}
           <Link to="/history">run history</Link> for past jobs and <Link to="/reports">reports</Link> for exports.
         </p>
       </motion.div>
@@ -165,7 +165,7 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
         <div className="qa-panel-head">
           <h2 className="qa-panel-title">Start a crawl</h2>
           <p className="qa-panel-subtitle">
-            Paste root URLs (one per line). The crawler discovers same-site pages, checks links, then optionally runs PageSpeed, viewport smoke loads, and Gemini.
+            Paste root URLs (one per line). The crawler discovers same-site pages, checks links, then optionally runs PageSpeed, viewport smoke loads, and a local AI summary.
           </p>
         </div>
         <label className="qa-label-field">Root URLs (one per line)</label>
@@ -205,13 +205,13 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
               Viewport loads (Chromium)
             </label>
           </OptionWithTooltip>
-          <OptionWithTooltip hint="After the crawl finishes, sends a compact JSON summary of the run to Google Gemini and saves a short Markdown executive summary (gemini-summary.md) for the run workspace and dashboard. Requires GEMINI_API_KEY or GOOGLE_AI_API_KEY. Does not run PageSpeed for you—it only narrates results.">
+          <OptionWithTooltip hint="After the crawl finishes, sends a compact JSON summary of the run to the local LLM (Ollama) and saves a short Markdown executive summary (ai-summary.md) for the run workspace and dashboard. Requires Ollama running locally. Does not run PageSpeed for you—it only narrates results.">
             <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
-              <input type="checkbox" checked={gemini} disabled={runInFlight} onChange={(e) => setGemini(e.target.checked)} />
-              Gemini summary
+              <input type="checkbox" checked={aiSummary} disabled={runInFlight} onChange={(e) => setAiSummary(e.target.checked)} />
+              AI summary
             </label>
           </OptionWithTooltip>
-          <OptionWithTooltip hint="After the crawl, discovers XML sitemaps (sitemap.xml, robots.txt), HEAD-checks every URL for 404s and redirects, then classifies URLs with Gemini LLM to find old versions, drafts, duplicates, and test pages.">
+          <OptionWithTooltip hint="After the crawl, discovers XML sitemaps (sitemap.xml, robots.txt), HEAD-checks every URL for 404s and redirects, then classifies URLs with the local LLM to find old versions, drafts, duplicates, and test pages.">
             <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
               <input type="checkbox" checked={seoAudit} disabled={runInFlight} onChange={(e) => setSeoAudit(e.target.checked)} />
               SEO URL audit
@@ -283,7 +283,7 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
           </motion.button>
         </div>
         <p className="qa-footnote" style={{ marginTop: 18 }}>
-          Large sites: disable PageSpeed, viewport, or Gemini for faster runs. Tune <code>QA_AGENT_FETCH_CONCURRENCY</code> in <code>.env</code> for heavier parallel HTTP.
+          Large sites: disable PageSpeed, viewport, or AI summary for faster runs. Tune <code>QA_AGENT_FETCH_CONCURRENCY</code> in <code>.env</code> for heavier parallel HTTP.
         </p>
       </motion.section>
 
@@ -335,7 +335,6 @@ function QuickStartCards() {
 
 function SystemHealth() {
   const [stats, setStats] = useState<{
-    geminiOk?: boolean;
     ollamaAvailable?: boolean;
     totalRequests?: number;
     fallbackCount?: number;
@@ -345,8 +344,7 @@ function SystemHealth() {
   useEffect(() => {
     fetchLlmStats()
       .then((s: any) => setStats({
-        geminiOk: s.geminiConfigured,
-        ollamaAvailable: s.ollamaAvailable,
+        ollamaAvailable: !!s.ollama?.available,
         totalRequests: s.totalRequests ?? 0,
         fallbackCount: s.fallbackCount ?? 0,
       }))
@@ -369,10 +367,6 @@ function SystemHealth() {
     >
       <h2 className="qa-kicker" style={{ marginBottom: 10 }}>System status</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: "0.85rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span className={`qa-status-dot qa-status-dot--${stats?.geminiOk ? "ok" : "off"}`} />
-          Gemini {stats?.geminiOk ? "configured" : "not configured"}
-        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span className={`qa-status-dot qa-status-dot--${stats?.ollamaAvailable ? "ok" : "off"}`} />
           Ollama {stats?.ollamaAvailable ? "available" : "offline"}

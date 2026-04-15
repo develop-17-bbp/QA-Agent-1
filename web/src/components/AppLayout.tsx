@@ -3,6 +3,115 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { fetchLlmStats } from "../api";
 
+/**
+ * Data-honesty classification for every sidebar feature. Drives the colored
+ * dot rendered next to each nav link so the user can see at a glance whether
+ * a tool shows real numbers, LLM commentary, or a mix.
+ *
+ *   "real"     — every numeric field comes from a real signal (crawl, DDG SERP,
+ *                free-tier provider like Google Suggest / Wikipedia / OpenPageRank
+ *                / Wayback / Common Crawl / URLScan). No fabricated numbers.
+ *   "llm-safe" — the LLM only produces qualitative commentary, summaries,
+ *                clustering or planning. No numeric output that could be
+ *                mistaken for a measurement.
+ *   "mixed"    — some fields are real, some are estimated by the LLM. The
+ *                corresponding page must show per-field provenance badges
+ *                (source + confidence), and estimated fields must be
+ *                clearly labeled as such.
+ */
+type SourceClass = "real" | "llm-safe" | "mixed";
+
+const SOURCE_MAP: Record<string, SourceClass> = {
+  // Workspace
+  "/": "real",
+  "/history": "real",
+  "/reports": "real",
+  // Import
+  "/upload": "real",
+  // On-Page & Tech SEO
+  "/site-audit": "real",
+  "/onpage-seo-checker": "mixed",
+  "/position-tracking": "real",
+  // Competitive Analysis (all computed from crawl reports)
+  "/domain-overview": "real",
+  "/organic-rankings": "real",
+  "/top-pages": "real",
+  "/compare-domains": "real",
+  "/keyword-gap": "real",
+  "/backlink-gap": "real",
+  "/traffic-analytics": "mixed",
+  // Keyword Research
+  "/keyword-overview": "mixed",
+  "/keyword-magic-tool": "mixed",
+  "/keyword-strategy": "mixed",
+  "/keyword-manager": "real",
+  // Content Marketing
+  "/seo-writing-assistant": "mixed",
+  "/topic-research": "mixed",
+  "/seo-content-template": "mixed",
+  "/content-audit": "mixed",
+  "/post-tracking": "real",
+  // Link Building
+  "/backlinks": "real",
+  "/referring-domains": "real",
+  "/backlink-audit": "real",
+  // AI Tools
+  "/query-lab": "mixed",
+  "/serp-analyzer": "real",
+  "/agentic-crawl": "llm-safe",
+  // Monitoring
+  "/brand-monitoring": "mixed",
+  "/log-file-analyzer": "mixed",
+  // Local SEO
+  "/local-seo": "mixed",
+};
+
+const DOT_COLORS: Record<SourceClass, string> = {
+  real: "#22c55e",
+  "llm-safe": "#3b82f6",
+  mixed: "#eab308",
+};
+
+const DOT_TITLES: Record<SourceClass, string> = {
+  real: "Real data — every number sourced from crawl, DDG SERP, or a free-tier provider",
+  "llm-safe": "LLM-safe — only qualitative commentary, no numeric output",
+  mixed: "Mixed — some numbers are estimated; check per-field provenance badges on the page",
+};
+
+function SourceDot({ to }: { to: string }) {
+  const cls: SourceClass = SOURCE_MAP[to] ?? "real";
+  return (
+    <span
+      aria-hidden
+      title={DOT_TITLES[cls]}
+      style={{
+        display: "inline-block",
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        background: DOT_COLORS[cls],
+        marginRight: 10,
+        flexShrink: 0,
+        boxShadow: "0 0 0 1px rgba(9, 30, 66, 0.08)",
+      }}
+    />
+  );
+}
+
+function NavItem({ to, label, end }: { to: string; label: string; end?: boolean }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}
+      style={{ display: "flex", alignItems: "center" }}
+    >
+      <SourceDot to={to} />
+      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+    </NavLink>
+  );
+}
+
 function NavBadge({ count }: { count: number }) {
   return (
     <span className="qa-lozenge qa-lozenge--neutral" style={{ marginLeft: "auto", fontSize: "0.68rem", padding: "1px 6px" }}>
@@ -11,23 +120,62 @@ function NavBadge({ count }: { count: number }) {
   );
 }
 
+function DataHonestyLegend() {
+  const entries: { cls: SourceClass; label: string }[] = [
+    { cls: "real", label: "Real data" },
+    { cls: "llm-safe", label: "LLM-safe" },
+    { cls: "mixed", label: "Mixed" },
+  ];
+  return (
+    <div
+      style={{
+        padding: "10px 16px",
+        margin: "8px 0 0",
+        borderTop: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        fontSize: "0.66rem",
+        color: "var(--muted)",
+      }}
+      aria-label="Data source legend"
+    >
+      <div style={{ textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Data source</div>
+      {entries.map((e) => (
+        <div key={e.cls} style={{ display: "flex", alignItems: "center", gap: 8 }} title={DOT_TITLES[e.cls]}>
+          <span
+            aria-hidden
+            style={{
+              display: "inline-block",
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: DOT_COLORS[e.cls],
+              flexShrink: 0,
+            }}
+          />
+          <span>{e.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LlmStatusFooter() {
-  const [status, setStatus] = useState<{ gemini: boolean; ollama: boolean } | null>(null);
+  const [ollamaReady, setOllamaReady] = useState<boolean | null>(null);
   useEffect(() => {
     fetchLlmStats()
-      .then((s: any) => setStatus({ gemini: !!s.geminiConfigured, ollama: !!s.ollamaAvailable }))
-      .catch(() => {});
+      .then((s: any) => setOllamaReady(!!s.ollama?.available))
+      .catch(() => setOllamaReady(false));
   }, []);
 
   return (
     <div className="qa-sidebar-footer">
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, fontSize: "0.72rem" }}>
-        <span className={`qa-status-dot qa-status-dot--${status?.gemini ? "ok" : "off"}`} />
-        Gemini
-        <span className={`qa-status-dot qa-status-dot--${status?.ollama ? "ok" : "warn"}`} style={{ marginLeft: 8 }} />
-        Ollama
+        <span className={`qa-status-dot qa-status-dot--${ollamaReady ? "ok" : "warn"}`} />
+        Ollama {ollamaReady ? "ready" : "offline"}
       </div>
-      <div>28 tools · Free tier APIs · Gemini + Ollama</div>
+      <div>28 tools · Free tier APIs · Local LLM (Ollama)</div>
     </div>
   );
 }
@@ -75,90 +223,77 @@ export default function AppLayout() {
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 2, paddingTop: 4 }} aria-label="Main">
           <div className="qa-nav-section">Workspace</div>
-          <NavLink to="/" end className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
-            Dashboard
-          </NavLink>
-          <NavLink to="/history" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
-            Run history
-          </NavLink>
-          <NavLink to="/reports" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
-            Reports
-          </NavLink>
+          <NavItem to="/" label="Dashboard" end />
+          <NavItem to="/history" label="Run history" />
+          <NavItem to="/reports" label="Reports" />
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Import">
           <div className="qa-nav-section">Import</div>
-          <NavLink to="/upload" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
-            URL lists
-          </NavLink>
+          <NavItem to="/upload" label="URL lists" />
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Site Audit">
           <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>On Page &amp; Tech SEO<NavBadge count={3} /></div>
-          <NavLink to="/site-audit" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Site Audit</NavLink>
-          <NavLink to="/onpage-seo-checker" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>On-Page SEO Checker</NavLink>
-          <NavLink to="/position-tracking" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Position Tracking</NavLink>
+          <NavItem to="/site-audit" label="Site Audit" />
+          <NavItem to="/onpage-seo-checker" label="On-Page SEO Checker" />
+          <NavItem to="/position-tracking" label="Position Tracking" />
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Competitive Analysis">
           <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>Competitive Analysis<NavBadge count={7} /></div>
-          <NavLink to="/domain-overview" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Domain Overview</NavLink>
-          <NavLink to="/organic-rankings" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Organic Rankings</NavLink>
-          <NavLink to="/top-pages" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Top Pages</NavLink>
-          <NavLink to="/compare-domains" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Compare Domains</NavLink>
-          <NavLink to="/keyword-gap" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Gap</NavLink>
-          <NavLink to="/backlink-gap" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Backlink Gap</NavLink>
-          <NavLink to="/traffic-analytics" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Traffic Analytics</NavLink>
+          <NavItem to="/domain-overview" label="Domain Overview" />
+          <NavItem to="/organic-rankings" label="Organic Rankings" />
+          <NavItem to="/top-pages" label="Top Pages" />
+          <NavItem to="/compare-domains" label="Compare Domains" />
+          <NavItem to="/keyword-gap" label="Keyword Gap" />
+          <NavItem to="/backlink-gap" label="Backlink Gap" />
+          <NavItem to="/traffic-analytics" label="Traffic Analytics" />
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Keyword Research">
           <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>Keyword Research<NavBadge count={4} /></div>
-          <NavLink to="/keyword-overview" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Overview</NavLink>
-          <NavLink to="/keyword-magic-tool" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Magic Tool</NavLink>
-          <NavLink to="/keyword-strategy" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Strategy Builder</NavLink>
-          <NavLink to="/keyword-manager" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Keyword Manager</NavLink>
+          <NavItem to="/keyword-overview" label="Keyword Overview" />
+          <NavItem to="/keyword-magic-tool" label="Keyword Magic Tool" />
+          <NavItem to="/keyword-strategy" label="Keyword Strategy Builder" />
+          <NavItem to="/keyword-manager" label="Keyword Manager" />
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Content Marketing">
           <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>Content Marketing<NavBadge count={5} /></div>
-          <NavLink to="/seo-writing-assistant" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>SEO Writing Assistant</NavLink>
-          <NavLink to="/topic-research" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Topic Research</NavLink>
-          <NavLink to="/seo-content-template" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>SEO Content Template</NavLink>
-          <NavLink to="/content-audit" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Content Audit</NavLink>
-          <NavLink to="/post-tracking" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Post Tracking</NavLink>
+          <NavItem to="/seo-writing-assistant" label="SEO Writing Assistant" />
+          <NavItem to="/topic-research" label="Topic Research" />
+          <NavItem to="/seo-content-template" label="SEO Content Template" />
+          <NavItem to="/content-audit" label="Content Audit" />
+          <NavItem to="/post-tracking" label="Post Tracking" />
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Link Building">
           <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>Link Building<NavBadge count={3} /></div>
-          <NavLink to="/backlinks" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Backlinks</NavLink>
-          <NavLink to="/referring-domains" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Referring Domains</NavLink>
-          <NavLink to="/backlink-audit" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Backlink Audit</NavLink>
+          <NavItem to="/backlinks" label="Backlinks" />
+          <NavItem to="/referring-domains" label="Referring Domains" />
+          <NavItem to="/backlink-audit" label="Backlink Audit" />
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="AI Tools">
           <div className="qa-nav-section" style={{ display: "flex", alignItems: "center" }}>AI Tools<NavBadge count={3} /></div>
-          <NavLink to="/query-lab" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
-            Query Lab
-          </NavLink>
-          <NavLink to="/serp-analyzer" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
-            SERP Analyzer
-          </NavLink>
-          <NavLink to="/agentic-crawl" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>
-            Agentic Crawl
-          </NavLink>
+          <NavItem to="/query-lab" label="Query Lab" />
+          <NavItem to="/serp-analyzer" label="SERP Analyzer" />
+          <NavItem to="/agentic-crawl" label="Agentic Crawl" />
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Monitoring">
           <div className="qa-nav-section">Monitoring</div>
-          <NavLink to="/brand-monitoring" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Brand Monitoring</NavLink>
-          <NavLink to="/log-file-analyzer" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Log File Analyzer</NavLink>
+          <NavItem to="/brand-monitoring" label="Brand Monitoring" />
+          <NavItem to="/log-file-analyzer" label="Log File Analyzer" />
         </nav>
 
         <nav style={{ marginTop: 6 }} aria-label="Local SEO">
           <div className="qa-nav-section">Local SEO</div>
-          <NavLink to="/local-seo" className={({ isActive }) => `qa-nav-link${isActive ? " qa-nav-link--active" : ""}`}>Local SEO Tools</NavLink>
+          <NavItem to="/local-seo" label="Local SEO Tools" />
         </nav>
 
+        <DataHonestyLegend />
         <LlmStatusFooter />
       </motion.aside>
 

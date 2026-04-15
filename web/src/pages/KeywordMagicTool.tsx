@@ -26,7 +26,7 @@ export default function KeywordMagicTool() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Keyword Magic Tool</h1>
-      <p className="qa-page-desc" style={{ marginBottom: 16 }}>Enter a seed keyword to discover related keywords, search volumes, and clusters powered by Gemini AI.</p>
+      <p className="qa-page-desc" style={{ marginBottom: 16 }}>Enter a seed keyword to discover related keywords, search volumes, and clusters powered by your local AI model.</p>
 
       <div className="qa-panel" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <input className="qa-input" value={seed} onChange={e => setSeed(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Enter seed keyword..." style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
