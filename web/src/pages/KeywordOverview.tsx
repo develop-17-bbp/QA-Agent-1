@@ -1,7 +1,21 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { BarChart, Bar, ResponsiveContainer } from "recharts";
-import { fetchKeywordResearch } from "../api";
+import { fetchKeywordResearch, fetchGscKeywordStats, type GscSite } from "../api";
+import { useGoogleOverlay } from "../lib/google-overlay";
+
+/**
+ * Per-site GSC stats for the queried keyword. Each entry is what Google
+ * actually reported for the user's own verified property over the last
+ * 28 days — not a scrape, not an estimate.
+ */
+type PerSiteGscStat = {
+  site: GscSite;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
 
 const INTENT_COLORS: Record<string, string> = {
   informational: "#3b82f6",
@@ -27,17 +41,58 @@ export default function KeywordOverview() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Google overlay — when connected, query the keyword against every
+  // verified GSC property in parallel so the user sees their own sites'
+  // real performance for it.
+  const overlay = useGoogleOverlay();
+  const [perSiteGsc, setPerSiteGsc] = useState<PerSiteGscStat[]>([]);
+  const [gscLoading, setGscLoading] = useState(false);
+
   const research = async () => {
     const kw = keyword.trim();
     if (!kw) return;
     setLoading(true);
     setError(null);
+    setPerSiteGsc([]);
     try {
       setData(await fetchKeywordResearch(kw));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+    }
+
+    // In parallel, ask each connected GSC site whether it has any
+    // impressions for this exact keyword in the last 28 days. Sites
+    // with zero impressions are quietly skipped.
+    if (overlay.connected && overlay.gscSites.length > 0) {
+      setGscLoading(true);
+      try {
+        const results = await Promise.all(
+          overlay.gscSites.map(async (site) => {
+            try {
+              const stats = await fetchGscKeywordStats(site.siteUrl, kw, 28);
+              if (!stats) return null;
+              return {
+                site,
+                clicks: stats.clicks?.value ?? 0,
+                impressions: stats.impressions?.value ?? 0,
+                ctr: stats.ctr?.value ?? 0,
+                position: stats.position?.value ?? 0,
+              } as PerSiteGscStat;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        setPerSiteGsc(
+          results
+            .filter((r): r is PerSiteGscStat => r !== null && r.impressions > 0)
+            .sort((a, b) => b.impressions - a.impressions),
+        );
+      } finally {
+        setGscLoading(false);
+      }
     }
   };
 
@@ -184,6 +239,59 @@ export default function KeywordOverview() {
               <div style={{ fontSize: 18, fontWeight: 700 }}>{data.totalResults}</div>
             </div>
           </div>
+
+          {/* ── Your real GSC performance for this keyword ───────── */}
+          {overlay.loaded && !overlay.connected && (
+            <div className="qa-panel" style={{ padding: 10, marginBottom: 16, fontSize: 12, display: "flex", alignItems: "center", gap: 8, background: "var(--bg-app)" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#94a3b8" }} />
+              <span>
+                Connect Google to see real impressions, clicks, and average position for <strong>{data.keyword}</strong> on your own sites.
+                <a href="/google-connections" style={{ marginLeft: 6, color: "var(--accent, #5a67d8)" }}>Connect →</a>
+              </span>
+            </div>
+          )}
+          {overlay.connected && gscLoading && (
+            <div className="qa-panel" style={{ padding: 10, marginBottom: 16, fontSize: 12, color: "var(--muted)" }}>
+              Checking your verified Google Search Console properties for <strong>{data.keyword}</strong>…
+            </div>
+          )}
+          {overlay.connected && !gscLoading && perSiteGsc.length > 0 && (
+            <div className="qa-panel" style={{ padding: 16, marginBottom: 16, borderLeft: "3px solid #38a169" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#38a169", marginBottom: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e" }} />
+                Your real performance for &quot;{data.keyword}&quot; (last 28 days · Google Search Console)
+              </div>
+              <table className="qa-table">
+                <thead>
+                  <tr>
+                    <th>Site</th>
+                    <th style={{ textAlign: "right" }}>Impressions</th>
+                    <th style={{ textAlign: "right" }}>Clicks</th>
+                    <th style={{ textAlign: "right" }}>CTR</th>
+                    <th style={{ textAlign: "right" }}>Avg position</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {perSiteGsc.map((r) => (
+                    <tr key={r.site.siteUrl}>
+                      <td style={{ fontWeight: 600 }}>{r.site.siteUrl}</td>
+                      <td style={{ textAlign: "right" }}>{r.impressions.toLocaleString()}</td>
+                      <td style={{ textAlign: "right" }}>{r.clicks.toLocaleString()}</td>
+                      <td style={{ textAlign: "right" }}>{r.ctr.toFixed(2)}%</td>
+                      <td style={{ textAlign: "right", fontWeight: 700, color: r.position <= 3 ? "#38a169" : r.position <= 10 ? "#dd6b20" : "#e53e3e" }}>
+                        {r.position.toFixed(1)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {overlay.connected && !gscLoading && perSiteGsc.length === 0 && overlay.gscSites.length > 0 && (
+            <div className="qa-panel" style={{ padding: 10, marginBottom: 16, fontSize: 12, color: "var(--muted)" }}>
+              None of your {overlay.gscSites.length} verified site{overlay.gscSites.length === 1 ? "" : "s"} had impressions for <strong>{data.keyword}</strong> in the last 28 days.
+            </div>
+          )}
 
           {/* ── Keyword Ideas ────────────────────────────────────── */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>

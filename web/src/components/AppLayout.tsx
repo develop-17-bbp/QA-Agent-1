@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { fetchLlmStats } from "../api";
+import { fetchGoogleAuthStatus, fetchLlmStats } from "../api";
 
 /**
  * Data-honesty classification for every sidebar feature. Drives the colored
@@ -64,8 +64,6 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/log-file-analyzer": "mixed",
   // Local SEO
   "/local-seo": "mixed",
-  // Integrations
-  "/google-connections": "real",
 };
 
 const DOT_COLORS: Record<SourceClass, string> = {
@@ -165,11 +163,30 @@ function DataHonestyLegend() {
 
 function LlmStatusFooter() {
   const [ollamaReady, setOllamaReady] = useState<boolean | null>(null);
+  const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; configured: boolean } | null>(null);
+
   useEffect(() => {
     fetchLlmStats()
       .then((s: any) => setOllamaReady(!!s.ollama?.available))
       .catch(() => setOllamaReady(false));
+    fetchGoogleAuthStatus()
+      .then((s) => setGoogleStatus({ connected: s.connected, configured: s.configured }))
+      .catch(() => setGoogleStatus({ connected: false, configured: false }));
   }, []);
+
+  const googleLabel = !googleStatus
+    ? "…"
+    : googleStatus.connected
+      ? "connected"
+      : googleStatus.configured
+        ? "connect →"
+        : "not set up";
+  const googleDotClass = googleStatus?.connected ? "ok" : googleStatus?.configured ? "warn" : "warn";
+  const googleTitle = googleStatus?.connected
+    ? "Google Search Console + GA4 connected — real first-party data is overlaid on every feature that supports it"
+    : googleStatus?.configured
+      ? "OAuth credentials are set but you haven't connected yet — click to authorize and get real GSC + GA4 data"
+      : "Set GOOGLE_OAUTH_CLIENT_ID / SECRET in .env to enable real GSC + GA4 data on keyword, page, and traffic features";
 
   return (
     <div className="qa-sidebar-footer">
@@ -177,6 +194,22 @@ function LlmStatusFooter() {
         <span className={`qa-status-dot qa-status-dot--${ollamaReady ? "ok" : "warn"}`} />
         Ollama {ollamaReady ? "ready" : "offline"}
       </div>
+      <Link
+        to="/google-connections"
+        title={googleTitle}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 4,
+          fontSize: "0.72rem",
+          color: "inherit",
+          textDecoration: "none",
+        }}
+      >
+        <span className={`qa-status-dot qa-status-dot--${googleDotClass}`} />
+        Google {googleLabel}
+      </Link>
       <div>28 tools · Free tier APIs · Local LLM (Ollama)</div>
     </div>
   );
@@ -293,11 +326,6 @@ export default function AppLayout() {
         <nav style={{ marginTop: 6 }} aria-label="Local SEO">
           <div className="qa-nav-section">Local SEO</div>
           <NavItem to="/local-seo" label="Local SEO Tools" />
-        </nav>
-
-        <nav style={{ marginTop: 6 }} aria-label="Integrations">
-          <div className="qa-nav-section">Integrations</div>
-          <NavItem to="/google-connections" label="Google (GSC + GA4)" />
         </nav>
 
         <DataHonestyLegend />
