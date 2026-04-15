@@ -64,6 +64,8 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/log-file-analyzer": "mixed",
   // Local SEO
   "/local-seo": "mixed",
+  // Integrations
+  "/google-connections": "real",
 };
 
 const DOT_COLORS: Record<SourceClass, string> = {
@@ -291,6 +293,11 @@ export default function AppLayout() {
         <nav style={{ marginTop: 6 }} aria-label="Local SEO">
           <div className="qa-nav-section">Local SEO</div>
           <NavItem to="/local-seo" label="Local SEO Tools" />
+        </nav>
+
+        <nav style={{ marginTop: 6 }} aria-label="Integrations">
+          <div className="qa-nav-section">Integrations</div>
+          <NavItem to="/google-connections" label="Google (GSC + GA4)" />
         </nav>
 
         <DataHonestyLegend />

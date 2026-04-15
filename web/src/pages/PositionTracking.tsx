@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart,
@@ -16,7 +16,15 @@ import {
   Legend,
 } from "recharts";
 import RunSelector from "../components/RunSelector";
-import { fetchPositionTracking, trackPositions, fetchKeywordHistory } from "../api";
+import {
+  fetchPositionTracking,
+  trackPositions,
+  fetchKeywordHistory,
+  fetchGoogleAuthStatus,
+  fetchGscSites,
+  fetchGscKeywordStats,
+  type GscSite,
+} from "../api";
 
 const COLORS = ["#38a169", "#5a67d8", "#dd6b20", "#e53e3e"];
 const HISTORY_COLORS = ["#5a67d8", "#38a169", "#dd6b20", "#e53e3e", "#805ad5", "#d69e2e"];
@@ -33,6 +41,40 @@ type LiveResult = {
 type HistoryPoint = { at: string; position: number | null };
 type HistorySeries = { key: string; label: string; points: HistoryPoint[] };
 
+type GscStat = {
+  clicks?: { value: number; source?: string; confidence?: string; note?: string };
+  impressions?: { value: number; source?: string; confidence?: string; note?: string };
+  ctr?: { value: number; source?: string; confidence?: string; note?: string };
+  position?: { value: number; source?: string; confidence?: string; note?: string };
+};
+
+/**
+ * Find the GSC site entry that matches a user-supplied domain. GSC sites
+ * come in two shapes: domain properties like `sc-domain:example.com` and
+ * URL-prefix properties like `https://www.example.com/`. We strip both
+ * forms down to a hostname and compare. The subdomain-or-exact rule
+ * matches the host-matching used by the DDG scraper.
+ */
+function findMatchingGscSite(sites: GscSite[], domain: string): GscSite | null {
+  const clean = domain.trim().toLowerCase().replace(/^www\./, "");
+  if (!clean) return null;
+  for (const s of sites) {
+    const url = s.siteUrl;
+    let host = "";
+    if (url.startsWith("sc-domain:")) {
+      host = url.slice("sc-domain:".length).toLowerCase();
+    } else {
+      try {
+        host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+      } catch {
+        continue;
+      }
+    }
+    if (host === clean || clean.endsWith("." + host) || host.endsWith("." + clean)) return s;
+  }
+  return null;
+}
+
 export default function PositionTracking() {
   const [runId, setRunId] = useState("");
   const [data, setData] = useState<any>(null);
@@ -48,6 +90,30 @@ export default function PositionTracking() {
   const [liveResults, setLiveResults] = useState<LiveResult[] | null>(null);
   const [historySeries, setHistorySeries] = useState<HistorySeries[]>([]);
   const [sampledAt, setSampledAt] = useState<string>("");
+
+  // GSC overlay state — real impressions/clicks/position from the user's
+  // verified Search Console property for the domain being tracked.
+  const [gscConnected, setGscConnected] = useState(false);
+  const [gscSites, setGscSites] = useState<GscSite[]>([]);
+  const [gscStats, setGscStats] = useState<Map<string, GscStat>>(new Map());
+  const [gscMatchedSite, setGscMatchedSite] = useState<GscSite | null>(null);
+
+  // Load GSC connection status + site list on mount. Failures are silent —
+  // this is a bonus overlay, not a core feature.
+  useEffect(() => {
+    fetchGoogleAuthStatus()
+      .then((status) => {
+        if (status.connected) {
+          setGscConnected(true);
+          return fetchGscSites();
+        }
+        return [];
+      })
+      .then((sites) => setGscSites(sites ?? []))
+      .catch(() => {
+        /* silent — GSC overlay is optional */
+      });
+  }, []);
 
   const load = async (rid: string) => {
     setRunId(rid);
@@ -75,6 +141,8 @@ export default function PositionTracking() {
     setLiveError("");
     setLiveResults(null);
     setHistorySeries([]);
+    setGscStats(new Map());
+    setGscMatchedSite(null);
     try {
       const pairs = kws.map((kw) => ({ domain: dom, keyword: kw }));
       const resp = await trackPositions(pairs, { strictHost });
@@ -96,6 +164,29 @@ export default function PositionTracking() {
         }
       }
       setHistorySeries(series);
+
+      // GSC overlay — if the user has connected Google and has a verified
+      // site for this domain, look up the real impressions / clicks / CTR /
+      // average position for each keyword. These are first-party numbers
+      // from Google's own index, not scraped from DDG.
+      if (gscConnected && gscSites.length > 0) {
+        const match = findMatchingGscSite(gscSites, dom);
+        setGscMatchedSite(match);
+        if (match) {
+          const statsMap = new Map<string, GscStat>();
+          await Promise.all(
+            kws.map(async (kw) => {
+              try {
+                const stats = await fetchGscKeywordStats(match.siteUrl, kw, 28);
+                if (stats) statsMap.set(kw, stats);
+              } catch {
+                /* silent — GSC lookup is optional overlay */
+              }
+            }),
+          );
+          setGscStats(statsMap);
+        }
+      }
     } catch (e: any) {
       setLiveError(e.message);
     } finally {
@@ -271,29 +362,66 @@ export default function PositionTracking() {
           <div style={{ marginTop: 14 }}>
             <div className="qa-panel" style={{ padding: 12 }}>
               <div className="qa-panel-title">Sweep results</div>
+              {gscMatchedSite && (
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4, marginBottom: 8, display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+                  <span>
+                    Overlaying real Google Search Console data from <code>{gscMatchedSite.siteUrl}</code> (last 28 days, 3-day delay)
+                  </span>
+                </div>
+              )}
+              {gscConnected && !gscMatchedSite && (
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
+                  Google connected, but no verified GSC property matches this domain. DDG scrape only.
+                </div>
+              )}
               <table className="qa-table" style={{ marginTop: 8 }}>
                 <thead>
                   <tr>
-                    {["Keyword", "Position", "Matched URL", "Top result"].map((h) => (
+                    {["Keyword", "DDG position", "Matched URL", "Top result"].map((h) => (
                       <th key={h} style={{ textAlign: "left", padding: "6px 10px", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>{h}</th>
                     ))}
+                    {gscMatchedSite && (
+                      ["GSC position", "Impressions", "Clicks", "CTR"].map((h) => (
+                        <th key={h} style={{ textAlign: "right", padding: "6px 10px", fontSize: 12, color: "#38a169", borderBottom: "2px solid var(--border)" }} title="Real first-party data from Google Search Console">{h}</th>
+                      ))
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {liveResults.map((r, i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "6px 10px", fontSize: 13, fontWeight: 500 }}>{r.keyword}</td>
-                      <td style={{ padding: "6px 10px", fontSize: 13, fontWeight: 700, color: r.position == null ? "var(--muted)" : r.position <= 3 ? "#38a169" : r.position <= 10 ? "#dd6b20" : "#e53e3e" }}>
-                        {r.position ?? (r.error ? "error" : "not found")}
-                      </td>
-                      <td style={{ padding: "6px 10px", fontSize: 11, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }} title={r.url ?? ""}>
-                        {r.url ? <a href={r.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent, #5a67d8)" }}>{r.url}</a> : <span style={{ color: "var(--muted)" }}>—</span>}
-                      </td>
-                      <td style={{ padding: "6px 10px", fontSize: 11, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }} title={r.topUrl ?? ""}>
-                        {r.topUrl ?? ""}
-                      </td>
-                    </tr>
-                  ))}
+                  {liveResults.map((r, i) => {
+                    const gsc = gscStats.get(r.keyword);
+                    return (
+                      <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "6px 10px", fontSize: 13, fontWeight: 500 }}>{r.keyword}</td>
+                        <td style={{ padding: "6px 10px", fontSize: 13, fontWeight: 700, color: r.position == null ? "var(--muted)" : r.position <= 3 ? "#38a169" : r.position <= 10 ? "#dd6b20" : "#e53e3e" }}>
+                          {r.position ?? (r.error ? "error" : "not found")}
+                        </td>
+                        <td style={{ padding: "6px 10px", fontSize: 11, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }} title={r.url ?? ""}>
+                          {r.url ? <a href={r.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent, #5a67d8)" }}>{r.url}</a> : <span style={{ color: "var(--muted)" }}>—</span>}
+                        </td>
+                        <td style={{ padding: "6px 10px", fontSize: 11, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }} title={r.topUrl ?? ""}>
+                          {r.topUrl ?? ""}
+                        </td>
+                        {gscMatchedSite && (
+                          <>
+                            <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 13, fontWeight: 700, color: gsc?.position ? (gsc.position.value <= 3 ? "#38a169" : gsc.position.value <= 10 ? "#dd6b20" : "#e53e3e") : "var(--muted)" }} title={gsc?.position?.note ?? "No GSC data for this keyword"}>
+                              {gsc?.position ? gsc.position.value.toFixed(1) : "—"}
+                            </td>
+                            <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }} title={gsc?.impressions?.note ?? ""}>
+                              {gsc?.impressions ? gsc.impressions.value.toLocaleString() : "—"}
+                            </td>
+                            <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }} title={gsc?.clicks?.note ?? ""}>
+                              {gsc?.clicks ? gsc.clicks.value.toLocaleString() : "—"}
+                            </td>
+                            <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }} title={gsc?.ctr?.note ?? ""}>
+                              {gsc?.ctr ? `${gsc.ctr.value.toFixed(2)}%` : "—"}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

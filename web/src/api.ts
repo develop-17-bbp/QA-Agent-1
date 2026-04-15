@@ -328,6 +328,119 @@ export function fetchLlmStats(): Promise<any> {
 }
 
 // ---------------------------------------------------------------------------
+// Google Search Console + Google Analytics 4 integration
+// ---------------------------------------------------------------------------
+
+export type GoogleConnectionStatus = {
+  connected: boolean;
+  configured: boolean;
+  email?: string;
+  scopes: string[];
+  connectedAt?: string;
+};
+
+export async function fetchGoogleAuthStatus(): Promise<GoogleConnectionStatus> {
+  const res = await fetch("/api/auth/google/status", { cache: "no-store" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<GoogleConnectionStatus>;
+}
+
+/** Starts OAuth flow by navigating the browser to the /api/auth/google/start redirect. */
+export function startGoogleAuth(): void {
+  window.location.href = "/api/auth/google/start";
+}
+
+export async function disconnectGoogleAuth(): Promise<void> {
+  const res = await fetch("/api/auth/google/disconnect", { method: "POST" });
+  if (!res.ok) throw new Error(await res.text());
+  clearApiCache();
+}
+
+export type GscSite = { siteUrl: string; permissionLevel: string };
+
+export async function fetchGscSites(): Promise<GscSite[]> {
+  return dedupFetch("/api/gsc/sites", async () => {
+    const res = await fetch("/api/gsc/sites");
+    if (!res.ok) throw new Error(await res.text());
+    const data = (await res.json()) as { sites?: GscSite[] };
+    return data.sites ?? [];
+  }, 60_000);
+}
+
+export async function queryGscAnalytics(body: {
+  siteUrl: string;
+  startDate?: string;
+  endDate?: string;
+  dimensions?: ("query" | "page" | "country" | "device" | "searchAppearance")[];
+  filter?: { dimension: "query" | "page"; operator: "contains" | "equals" | "notContains"; expression: string };
+  rowLimit?: number;
+  startRow?: number;
+}): Promise<any[]> {
+  const resp = await postApi<{ rows?: any[] }>("/api/gsc/query", body, 60_000);
+  return resp.rows ?? [];
+}
+
+export async function fetchGscKeywordStats(siteUrl: string, keyword: string, daysBack?: number): Promise<any | null> {
+  const resp = await postApi<{ stats?: any | null }>("/api/gsc/keyword", { siteUrl, keyword, daysBack }, 60_000);
+  return resp.stats ?? null;
+}
+
+export async function fetchGscPageStats(siteUrl: string, pageUrl: string, daysBack?: number): Promise<any | null> {
+  const resp = await postApi<{ stats?: any | null }>("/api/gsc/page", { siteUrl, pageUrl, daysBack }, 60_000);
+  return resp.stats ?? null;
+}
+
+export async function fetchGscPagesBatch(siteUrl: string, daysBack?: number, rowLimit?: number): Promise<any[]> {
+  const resp = await postApi<{ pages?: any[] }>("/api/gsc/pages-batch", { siteUrl, daysBack, rowLimit }, 60_000);
+  return resp.pages ?? [];
+}
+
+export type Ga4Property = { propertyId: string; displayName: string; parentAccount: string };
+
+export async function fetchGa4Properties(): Promise<Ga4Property[]> {
+  return dedupFetch("/api/ga4/properties", async () => {
+    const res = await fetch("/api/ga4/properties");
+    if (!res.ok) throw new Error(await res.text());
+    const data = (await res.json()) as { properties?: Ga4Property[] };
+    return data.properties ?? [];
+  }, 60_000);
+}
+
+export async function runGa4Report(body: {
+  propertyId: string;
+  startDate?: string;
+  endDate?: string;
+  dimensions?: string[];
+  metrics?: string[];
+  limit?: number;
+  orderByMetric?: string;
+  orderDesc?: boolean;
+  filterPagePath?: string;
+}): Promise<any[]> {
+  const resp = await postApi<{ rows?: any[] }>("/api/ga4/report", body, 60_000);
+  return resp.rows ?? [];
+}
+
+export async function fetchGa4PageTraffic(propertyId: string, pagePath: string, daysBack?: number): Promise<any | null> {
+  const resp = await postApi<{ traffic?: any | null }>("/api/ga4/page", { propertyId, pagePath, daysBack }, 60_000);
+  return resp.traffic ?? null;
+}
+
+/**
+ * Returns a list of `{ page, screenPageViews, activeUsers, ... }` entries where
+ * each metric is a DataPoint<number>. `page` is the GA4 pagePath.
+ */
+export async function fetchGa4PagesBatch(propertyId: string, daysBack?: number, limit?: number): Promise<any[]> {
+  const resp = await postApi<{ pages?: any[] }>("/api/ga4/pages-batch", { propertyId, daysBack, limit }, 60_000);
+  return resp.pages ?? [];
+}
+
+export async function fetchGa4Totals(propertyId: string, daysBack?: number): Promise<any | null> {
+  const resp = await postApi<{ totals?: any | null }>("/api/ga4/totals", { propertyId, daysBack }, 60_000);
+  return resp.totals ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // File Upload
 // ---------------------------------------------------------------------------
 

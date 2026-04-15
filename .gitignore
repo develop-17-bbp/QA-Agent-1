@@ -11,6 +11,9 @@ web/dist/
 config/urls.txt
 config/sites.json
 
+# Google OAuth tokens (GSC + GA4 integration) — contains refresh_token, never commit
+data/google-tokens.json
+
 # QA-Agent outputs
 artifacts/*
 !artifacts/.gitkeep

@@ -33,6 +33,7 @@ import LogFileAnalyzer from "./pages/LogFileAnalyzer";
 import LocalSeo from "./pages/LocalSeo";
 import SerpAnalyzer from "./pages/SerpAnalyzer";
 import AgenticCrawl from "./pages/AgenticCrawl";
+import GoogleConnections from "./pages/GoogleConnections";
 
 function DashboardRoute() {
   const { state } = useLocation();
@@ -94,6 +95,9 @@ export default function App() {
 
         {/* Local SEO */}
         <Route path="/local-seo" element={<LocalSeo />} />
+
+        {/* Integrations */}
+        <Route path="/google-connections" element={<GoogleConnections />} />
       </Route>
     </Routes>
   );

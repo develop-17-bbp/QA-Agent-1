@@ -32,6 +32,28 @@ import { analyzeLogFile } from "./modules/log-analyzer.js";
 import { analyzeLocalSeo } from "./modules/local-seo-analyzer.js";
 import { checkOnPageSeo } from "./modules/onpage-seo-checker.js";
 import { loadKeywordLists, saveKeywordList, deleteKeywordList, analyzeKeywordList } from "./modules/keyword-manager.js";
+import {
+  buildAuthorizeUrl,
+  clearTokens,
+  exchangeCodeForTokens,
+  getConnectionStatus,
+  getRedirectUri,
+  isOauthConfigured,
+} from "./providers/google-auth.js";
+import {
+  getGscKeywordStats,
+  getGscPageStats,
+  getGscPageStatsBatch,
+  listGscSites,
+  queryGscAnalytics,
+} from "./providers/google-search-console.js";
+import {
+  getGa4PageTraffic,
+  getGa4PageTrafficBatch,
+  getGa4PropertyTotals,
+  listGa4Properties,
+  runGa4Report,
+} from "./providers/google-analytics-4.js";
 import { extractUrlsFromPdfBuffer } from "./pdf-urls.js";
 import type { SiteHealthReport } from "./types.js";
 import { runAgenticPipeline, runSerpAnalysis, getSession as getAgenticSession, listSessions as listAgenticSessions, deleteSession as deleteAgenticSession, type AgenticSessionConfig } from "./agentic/agent-coordinator.js";
@@ -1741,6 +1763,281 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Google OAuth + GSC + GA4 ─────────────────────────────────────
+      //
+      // Connect flow: GET /api/auth/google/start → redirects the browser to
+      // Google's consent screen. Google redirects back to
+      // /api/auth/google/callback with ?code which we exchange for
+      // access + refresh tokens stored at data/google-tokens.json.
+      //
+      // All data endpoints accept JSON POST bodies and call the providers,
+      // which go through googleApiFetch() (automatic refresh).
+
+      if (req.method === "GET" && url.pathname === "/api/auth/google/status") {
+        try {
+          const status = await getConnectionStatus();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(status));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/auth/google/start") {
+        if (!isOauthConfigured()) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "Google OAuth not configured. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in .env" }));
+          return;
+        }
+        try {
+          const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+          const redirectUri = getRedirectUri(req);
+          const authUrl = buildAuthorizeUrl(state, redirectUri);
+          res.writeHead(302, { Location: authUrl, "Cache-Control": "no-store" });
+          res.end();
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/auth/google/callback") {
+        const code = url.searchParams.get("code");
+        const errParam = url.searchParams.get("error");
+        if (errParam) {
+          res.writeHead(302, { Location: `/google-connections?err=${encodeURIComponent(errParam)}` });
+          res.end();
+          return;
+        }
+        if (!code) {
+          res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Missing authorization code");
+          return;
+        }
+        try {
+          const redirectUri = getRedirectUri(req);
+          await exchangeCodeForTokens(code, redirectUri);
+          res.writeHead(302, { Location: "/google-connections?connected=1" });
+          res.end();
+        } catch (e) {
+          const msg = encodeURIComponent(e instanceof Error ? e.message : String(e));
+          res.writeHead(302, { Location: `/google-connections?err=${msg}` });
+          res.end();
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/auth/google/disconnect") {
+        try {
+          await clearTokens();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      // ── GSC ───────────────────────────────────────────────────────────
+
+      if (req.method === "GET" && url.pathname === "/api/gsc/sites") {
+        try {
+          const sites = await listGscSites();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ sites }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/gsc/query") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { siteUrl?: string; startDate?: string; endDate?: string; dimensions?: string[]; rowLimit?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const siteUrl = typeof payload.siteUrl === "string" ? payload.siteUrl : "";
+        if (!siteUrl) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "siteUrl required" })); return; }
+        try {
+          const validDims = new Set(["query", "page", "country", "device", "searchAppearance"]);
+          const dims = Array.isArray(payload.dimensions)
+            ? (payload.dimensions.filter((d) => typeof d === "string" && validDims.has(d)) as ("query" | "page" | "country" | "device" | "searchAppearance")[])
+            : undefined;
+          const rows = await queryGscAnalytics({
+            siteUrl,
+            startDate: payload.startDate,
+            endDate: payload.endDate,
+            dimensions: dims,
+            rowLimit: payload.rowLimit,
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ rows, siteUrl }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/gsc/keyword") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { siteUrl?: string; keyword?: string; daysBack?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const siteUrl = typeof payload.siteUrl === "string" ? payload.siteUrl : "";
+        const keyword = typeof payload.keyword === "string" ? payload.keyword : "";
+        if (!siteUrl || !keyword) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "siteUrl and keyword required" })); return; }
+        try {
+          const stats = await getGscKeywordStats(siteUrl, keyword, payload.daysBack);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ stats, siteUrl, keyword }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/gsc/page") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { siteUrl?: string; pageUrl?: string; daysBack?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const siteUrl = typeof payload.siteUrl === "string" ? payload.siteUrl : "";
+        const pageUrl = typeof payload.pageUrl === "string" ? payload.pageUrl : "";
+        if (!siteUrl || !pageUrl) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "siteUrl and pageUrl required" })); return; }
+        try {
+          const stats = await getGscPageStats(siteUrl, pageUrl, payload.daysBack);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ stats, siteUrl, pageUrl }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/gsc/pages-batch") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { siteUrl?: string; daysBack?: number; rowLimit?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const siteUrl = typeof payload.siteUrl === "string" ? payload.siteUrl : "";
+        if (!siteUrl) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "siteUrl required" })); return; }
+        try {
+          const map = await getGscPageStatsBatch(siteUrl, payload.daysBack, payload.rowLimit);
+          // Map values already carry `page` from GscPageStats.
+          const pages = Array.from(map.values());
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ pages, siteUrl }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      // ── GA4 ───────────────────────────────────────────────────────────
+
+      if (req.method === "GET" && url.pathname === "/api/ga4/properties") {
+        try {
+          const properties = await listGa4Properties();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ properties }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/ga4/report") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { propertyId?: string; startDate?: string; endDate?: string; dimensions?: string[]; metrics?: string[]; limit?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const propertyId = typeof payload.propertyId === "string" ? payload.propertyId : "";
+        if (!propertyId) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "propertyId required" })); return; }
+        try {
+          const rows = await runGa4Report({
+            propertyId,
+            startDate: payload.startDate,
+            endDate: payload.endDate,
+            dimensions: Array.isArray(payload.dimensions) ? payload.dimensions.filter((d) => typeof d === "string") : undefined,
+            metrics: Array.isArray(payload.metrics) ? payload.metrics.filter((m) => typeof m === "string") : undefined,
+            limit: payload.limit,
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ rows, propertyId }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/ga4/page") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { propertyId?: string; pagePath?: string; daysBack?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const propertyId = typeof payload.propertyId === "string" ? payload.propertyId : "";
+        const pagePath = typeof payload.pagePath === "string" ? payload.pagePath : "";
+        if (!propertyId || !pagePath) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "propertyId and pagePath required" })); return; }
+        try {
+          const traffic = await getGa4PageTraffic(propertyId, pagePath, payload.daysBack);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ traffic, propertyId, pagePath }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/ga4/pages-batch") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { propertyId?: string; daysBack?: number; limit?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const propertyId = typeof payload.propertyId === "string" ? payload.propertyId : "";
+        if (!propertyId) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "propertyId required" })); return; }
+        try {
+          const map = await getGa4PageTrafficBatch(propertyId, payload.daysBack, payload.limit);
+          // Map values already carry `page` from Ga4PageTraffic.
+          const pages = Array.from(map.values());
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ pages, propertyId }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/ga4/totals") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { propertyId?: string; daysBack?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const propertyId = typeof payload.propertyId === "string" ? payload.propertyId : "";
+        if (!propertyId) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "propertyId required" })); return; }
+        try {
+          const totals = await getGa4PropertyTotals(propertyId, payload.daysBack);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ totals, propertyId }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
         return;
       }
 

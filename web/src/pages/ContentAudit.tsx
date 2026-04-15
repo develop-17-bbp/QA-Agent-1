@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
-import { fetchContentAudit } from "../api";
+import {
+  fetchContentAudit,
+  fetchGa4PagesBatch,
+  fetchGa4Properties,
+  fetchGoogleAuthStatus,
+  type Ga4Property,
+} from "../api";
 
 const CLASS_COLORS: Record<string, string> = { good: "#38a169", "needs-improvement": "#dd6b20", poor: "#e53e3e" };
 
@@ -34,12 +40,78 @@ function unwrap(dp: any): any {
   return dp && typeof dp === "object" && "value" in dp ? dp.value : dp;
 }
 
+/** Extract `pathname` from a URL string. Returns the original string on parse failure. */
+function toPathname(urlOrPath: string): string {
+  try {
+    return new URL(urlOrPath).pathname || "/";
+  } catch {
+    // Already a pathname or a malformed URL
+    if (urlOrPath.startsWith("/")) return urlOrPath;
+    return urlOrPath;
+  }
+}
+
+type Ga4PageEntry = {
+  screenPageViews?: { value: number; note?: string };
+  activeUsers?: { value: number; note?: string };
+  sessions?: { value: number; note?: string };
+  averageSessionDuration?: { value: number; note?: string };
+  bounceRate?: { value: number; note?: string };
+};
+
 export default function ContentAudit() {
   const [runId, setRunId] = useState("");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
+
+  // GA4 overlay state — real sessions/users/views from the user's property
+  // layered on top of the deterministic quality score.
+  const [ga4Connected, setGa4Connected] = useState(false);
+  const [ga4Properties, setGa4Properties] = useState<Ga4Property[]>([]);
+  const [ga4PropertyId, setGa4PropertyId] = useState("");
+  const [ga4Pages, setGa4Pages] = useState<Map<string, Ga4PageEntry>>(new Map());
+  const [ga4Loading, setGa4Loading] = useState(false);
+
+  useEffect(() => {
+    fetchGoogleAuthStatus()
+      .then((status) => {
+        if (status.connected) {
+          setGa4Connected(true);
+          return fetchGa4Properties();
+        }
+        return [];
+      })
+      .then((props) => setGa4Properties(props ?? []))
+      .catch(() => {
+        /* silent — GA4 overlay is optional */
+      });
+  }, []);
+
+  const loadGa4Pages = async (propertyId: string) => {
+    setGa4PropertyId(propertyId);
+    if (!propertyId) {
+      setGa4Pages(new Map());
+      return;
+    }
+    setGa4Loading(true);
+    try {
+      const pages = await fetchGa4PagesBatch(propertyId, 28, 500);
+      // Server returns [{ page, screenPageViews, activeUsers, sessions, ... }, ...]
+      const map = new Map<string, Ga4PageEntry>();
+      for (const entry of pages) {
+        if (entry && typeof entry.page === "string") {
+          map.set(entry.page, entry as Ga4PageEntry);
+        }
+      }
+      setGa4Pages(map);
+    } catch {
+      setGa4Pages(new Map());
+    } finally {
+      setGa4Loading(false);
+    }
+  };
 
   const load = async (rid: string) => { setRunId(rid); if (!rid) return; setLoading(true); setError(""); try { setData(await fetchContentAudit(rid)); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
 
@@ -73,6 +145,31 @@ export default function ContentAudit() {
         it never invents pages, counts, or scores.
       </p>
       <RunSelector value={runId} onChange={load} label="Select run" />
+
+      {ga4Connected && ga4Properties.length > 0 && (
+        <div className="qa-panel" style={{ marginTop: 12, padding: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="qa-kicker" style={{ fontSize: 11 }}>GA4 overlay:</span>
+          <select
+            className="qa-select"
+            value={ga4PropertyId}
+            onChange={(e) => void loadGa4Pages(e.target.value)}
+            style={{ minWidth: 280 }}
+          >
+            <option value="">— None (deterministic scores only) —</option>
+            {ga4Properties.map((p) => (
+              <option key={p.propertyId} value={p.propertyId}>
+                {p.displayName} · {p.parentAccount}
+              </option>
+            ))}
+          </select>
+          {ga4Loading && <span style={{ fontSize: 11, color: "var(--muted)" }}>Loading real traffic...</span>}
+          {ga4PropertyId && !ga4Loading && ga4Pages.size > 0 && (
+            <span style={{ fontSize: 11, color: "#38a169", fontWeight: 600 }}>
+              ● {ga4Pages.size} pages with real GA4 traffic (last 28 days)
+            </span>
+          )}
+        </div>
+      )}
 
       {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Auditing content...</div>}
       {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
@@ -165,13 +262,21 @@ export default function ContentAudit() {
               </select>
             </div>
             <table className="qa-table">
-              <thead><tr>{["URL", "Quality", "Score", "Est. words", "Issues"].map(h => <th key={h} style={{ textAlign: h === "URL" || h === "Issues" ? "left" : "center" }}>{h}</th>)}</tr></thead>
+              <thead><tr>
+                {["URL", "Quality", "Score", "Est. words", "Issues"].map(h => <th key={h} style={{ textAlign: h === "URL" || h === "Issues" ? "left" : "center" }}>{h}</th>)}
+                {ga4PropertyId && ga4Pages.size > 0 && (
+                  ["Sessions", "Users", "Views"].map((h) => (
+                    <th key={h} style={{ textAlign: "right", color: "#38a169" }} title="Real first-party data from Google Analytics 4, last 28 days">{h}</th>
+                  ))
+                )}
+              </tr></thead>
               <tbody>{filtered.slice(0, 30).map((p: any, i: number) => {
                 const scoreMeta = p.qualityScore;
                 const scoreVal = unwrap(scoreMeta);
                 const wordMeta = p.estimatedWordCount;
                 const wordVal = unwrap(wordMeta);
                 const srcTitle = `Scored from crawl fields: ${(p.sourcedFields ?? []).join(", ") || "none"}`;
+                const ga4 = ga4PropertyId && ga4Pages.size > 0 ? ga4Pages.get(toPathname(p.url)) : undefined;
                 return (
                   <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={{ padding: "6px 10px", fontSize: 12, maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${p.url}\n${srcTitle}`}>{p.title || p.url}</td>
@@ -187,6 +292,19 @@ export default function ContentAudit() {
                       <ConfidenceDot confidence={wordMeta?.confidence} source={wordMeta?.source} note={wordMeta?.note} />
                     </td>
                     <td style={{ padding: "6px 10px", fontSize: 11, color: "var(--text-secondary)" }}>{(p.issues ?? []).join(", ")}</td>
+                    {ga4PropertyId && ga4Pages.size > 0 && (
+                      <>
+                        <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }} title={ga4?.sessions?.note ?? ""}>
+                          {ga4?.sessions ? ga4.sessions.value.toLocaleString() : "—"}
+                        </td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }} title={ga4?.activeUsers?.note ?? ""}>
+                          {ga4?.activeUsers ? ga4.activeUsers.value.toLocaleString() : "—"}
+                        </td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }} title={ga4?.screenPageViews?.note ?? ""}>
+                          {ga4?.screenPageViews ? ga4.screenPageViews.value.toLocaleString() : "—"}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}</tbody>
