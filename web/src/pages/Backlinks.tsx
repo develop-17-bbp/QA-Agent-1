@@ -2,15 +2,28 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
-import { fetchBacklinks } from "../api";
+import { fetchBacklinks, fetchExternalBacklinks } from "../api";
 
 export default function Backlinks() {
   const [runId, setRunId] = useState("");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [extDomain, setExtDomain] = useState("");
+  const [extData, setExtData] = useState<any>(null);
+  const [extLoading, setExtLoading] = useState(false);
+  const [extError, setExtError] = useState("");
 
   const load = async (rid: string) => { setRunId(rid); if (!rid) return; setLoading(true); setError(""); try { setData(await fetchBacklinks(rid)); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
+
+  const loadExternal = async () => {
+    const dom = extDomain.trim();
+    if (!dom) return;
+    setExtLoading(true); setExtError(""); setExtData(null);
+    try { setExtData(await fetchExternalBacklinks(dom)); }
+    catch (e: any) { setExtError(e.message); }
+    finally { setExtLoading(false); }
+  };
 
   const healthData = data?.healthDistribution ? [
     { name: "Healthy", value: data.healthDistribution.healthy, color: "#38a169" },
@@ -84,6 +97,89 @@ export default function Backlinks() {
           )}
         </>
       )}
+
+      {/* External Backlinks Discovery — competitor/any-domain backlink signal from free providers */}
+      <div className="qa-panel" style={{ marginTop: 24, padding: 16 }}>
+        <div className="qa-panel-title">External Backlink Discovery</div>
+        <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4, marginBottom: 12 }}>
+          Query real free providers (OpenPageRank, Common Crawl, URLScan, Wayback Machine) for any domain — even one you don't own.
+          Useful for competitor research. Set <code>OPR_API_KEY</code> for domain authority.
+        </p>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            type="text"
+            placeholder="e.g. example.com"
+            value={extDomain}
+            onChange={(e) => setExtDomain(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") loadExternal(); }}
+            style={{ flex: 1, minWidth: 220, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, background: "var(--panel-bg)", color: "var(--text-primary)" }}
+          />
+          <button
+            onClick={loadExternal}
+            disabled={extLoading || !extDomain.trim()}
+            className="qa-btn qa-btn--primary"
+            style={{ padding: "8px 14px" }}
+          >
+            {extLoading ? "Querying…" : "Discover"}
+          </button>
+        </div>
+
+        {extLoading && <div className="qa-loading-panel" style={{ marginTop: 14 }}><div className="qa-spinner" />Querying OpenPageRank, Common Crawl, URLScan and Wayback Machine…</div>}
+        {extError && <div className="qa-alert qa-alert--error" style={{ marginTop: 14 }}>{extError}</div>}
+
+        {extData && !extLoading && (
+          <div style={{ marginTop: 14 }}>
+            <div className="qa-panel" style={{ padding: 12, marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <span className="qa-kicker">Data sources:</span>
+              {(extData.providersHit ?? []).map((p: string) => (
+                <span key={p} className="qa-lozenge" style={{ background: "#ecfdf5", color: "#047857", fontSize: 11 }}>{p}</span>
+              ))}
+              {(extData.providersFailed ?? []).map((p: string) => (
+                <span key={p} className="qa-lozenge" style={{ background: "#fef3c7", color: "#b45309", fontSize: 11 }}>{p} unavailable</span>
+              ))}
+              {(extData.dataQuality?.missingFields ?? []).length > 0 && (
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>• Missing: {extData.dataQuality.missingFields.join(", ")}</span>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <div className="qa-panel" style={{ flex: 1, minWidth: 180, padding: 14, textAlign: "center" }}>
+                <div className="qa-kicker">Domain Authority</div>
+                <div style={{ fontSize: 24, fontWeight: 700 }}>{extData.domainAuthority?.value ?? "—"}</div>
+                <div style={{ fontSize: 10, color: "var(--muted)" }}>{extData.domainAuthority?.source ?? "no data"}</div>
+              </div>
+              <div className="qa-panel" style={{ flex: 1, minWidth: 180, padding: 14, textAlign: "center" }}>
+                <div className="qa-kicker">Referring Domains (approx.)</div>
+                <div style={{ fontSize: 24, fontWeight: 700 }}>{extData.referringDomainsApprox?.value ?? "—"}</div>
+                <div style={{ fontSize: 10, color: "var(--muted)" }}>{extData.referringDomainsApprox?.note ?? ""}</div>
+              </div>
+              <div className="qa-panel" style={{ flex: 1, minWidth: 180, padding: 14, textAlign: "center" }}>
+                <div className="qa-kicker">Historical Snapshots</div>
+                <div style={{ fontSize: 24, fontWeight: 700 }}>{extData.historicalSnapshots?.length ?? 0}</div>
+                <div style={{ fontSize: 10, color: "var(--muted)" }}>from wayback machine</div>
+              </div>
+            </div>
+
+            {(extData.recentMentions ?? []).length > 0 && (
+              <div className="qa-panel" style={{ marginTop: 12, padding: 14 }}>
+                <div className="qa-panel-title">Recent Mentions ({extData.recentMentions.length})</div>
+                <table className="qa-table">
+                  <thead><tr>{["Domain", "URL", "Seen"].map(h => <th key={h} style={{ textAlign: "left" }}>{h}</th>)}</tr></thead>
+                  <tbody>{extData.recentMentions.slice(0, 20).map((m: any, i: number) => (
+                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td style={{ padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>{m.domain}</td>
+                      <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={m.url}>
+                        <a href={m.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent, #5a67d8)" }}>{m.url}</a>
+                      </td>
+                      <td style={{ padding: "4px 10px", fontSize: 11, color: "var(--text-secondary)" }}>{m.time?.slice(0, 10) ?? ""}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }

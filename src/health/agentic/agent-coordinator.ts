@@ -329,9 +329,9 @@ export async function runAgenticPipeline(config: AgenticSessionConfig): Promise<
   addLog(session, "coordinator", `Starting agentic pipeline for ${config.targetUrl}`);
   addLog(session, "coordinator", `Keywords: ${config.keywords.join(", ") || "none"}`);
 
-  // Check Ollama availability
+  // Check Ollama availability (the only LLM provider)
   const ollamaOk = await checkOllamaAvailable();
-  addLog(session, "coordinator", `LLM providers: Gemini (primary)${ollamaOk ? ", Ollama (fallback)" : ""}`);
+  addLog(session, "coordinator", `LLM provider: ${ollamaOk ? "Ollama (local)" : "Ollama (offline — LLM steps will be skipped)"}`);
 
   try {
     // Phase 1: SERP Collection (parallel-safe, no crawl dependency)

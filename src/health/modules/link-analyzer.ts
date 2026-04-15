@@ -1,8 +1,30 @@
+/**
+ * Link / backlink analyzer powered by real free data sources.
+ *
+ * This module has two layers:
+ *   1. SELF-CRAWL ANALYSIS — uses the existing crawl results to describe the
+ *      site's internal link graph (orphans, internal vs external, broken).
+ *   2. EXTERNAL BACKLINK DISCOVERY — queries real free providers to surface
+ *      backlinks from the outside web:
+ *        - Common Crawl CDX index (approximate referring domains)
+ *        - URLScan.io recent scans (recent link activity)
+ *        - OpenPageRank (domain authority score)
+ *        - Wayback Machine (historical link count)
+ *
+ * No LLM estimates. Every number carries provenance.
+ */
+
 import type { SiteHealthReport } from "../types.js";
+import { approximateReferringDomains, fetchDomainHits } from "../providers/common-crawl.js";
+import { searchDomainReferences, isUrlscanConfigured } from "../providers/urlscan.js";
+import { fetchDomainAuthority, isOpenPageRankConfigured } from "../providers/open-page-rank.js";
+import { fetchSnapshotHistory } from "../providers/wayback-machine.js";
 
 function safeHostname(url: string): string {
-  try { return new URL(url).hostname; } catch { return ""; }
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
 }
+
+// ── Self-crawl link analysis (unchanged core, kept for backwards compat) ──
 
 export function analyzeBacklinks(reports: SiteHealthReport[]) {
   const allPages = reports.flatMap(r => r.crawl.pages);
@@ -96,5 +118,134 @@ export function auditBacklinks(reports: SiteHealthReport[]) {
     overallScore: totalChecked > 0 ? Math.max(0, Math.round(100 - toxicPercent * 2)) : 100,
     statusDistribution: { "2xx": linkChecks.filter(l => l.status >= 200 && l.status < 300).length, "3xx": redirected, "4xx": clientErrors, "5xx": serverErrors },
     summary: { totalChecked, healthyPercent: totalChecked > 0 ? +((healthy / totalChecked) * 100).toFixed(1) : 100, actionRequired: broken + serverErrors },
+  };
+}
+
+// ── NEW: external backlink discovery from real free providers ───────────
+
+export interface ExternalBacklinkReport {
+  domain: string;
+  domainAuthority: { value: number; source: string; confidence: string } | null;
+  referringDomainsApprox: { value: number; source: string; confidence: string; note?: string } | null;
+  recentMentions: { url: string; domain: string; title?: string; time: string }[];
+  historicalSnapshots: { timestamp: string; url: string }[];
+  sampleCrawledPages: { url: string; timestamp: string }[];
+  providersHit: string[];
+  providersFailed: string[];
+  dataQuality: {
+    realDataFields: string[];
+    missingFields: string[];
+  };
+}
+
+/**
+ * Query real free providers to build an external backlink profile for a
+ * domain we may not own. All provider calls run in parallel; failures are
+ * swallowed and surfaced via `providersFailed` so the UI can show an
+ * honest confidence signal.
+ */
+export async function discoverExternalBacklinks(domain: string): Promise<ExternalBacklinkReport> {
+  const clean = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  const providersHit: string[] = [];
+  const providersFailed: string[] = [];
+  const realDataFields: string[] = [];
+  const missingFields: string[] = [];
+
+  const [authRes, refRes, urlscanRes, waybackRes, ccPagesRes] = await Promise.allSettled([
+    isOpenPageRankConfigured()
+      ? fetchDomainAuthority(clean)
+      : Promise.reject(new Error("OPR_API_KEY not set")),
+    approximateReferringDomains(clean),
+    isUrlscanConfigured()
+      ? searchDomainReferences(clean, 30)
+      : searchDomainReferences(clean, 30), // anonymous call still works, lower confidence
+    fetchSnapshotHistory(`https://${clean}/`, 12),
+    fetchDomainHits(clean, 50),
+  ]);
+
+  // Domain authority (OpenPageRank)
+  let domainAuthority: ExternalBacklinkReport["domainAuthority"] = null;
+  if (authRes.status === "fulfilled") {
+    providersHit.push("open-page-rank");
+    realDataFields.push("domainAuthority");
+    const pr = authRes.value;
+    domainAuthority = {
+      value: pr.authority0to100.value,
+      source: pr.authority0to100.source,
+      confidence: pr.authority0to100.confidence,
+    };
+  } else {
+    providersFailed.push("open-page-rank");
+    missingFields.push("domainAuthority");
+  }
+
+  // Referring domains (Common Crawl)
+  let referringDomainsApprox: ExternalBacklinkReport["referringDomainsApprox"] = null;
+  if (refRes.status === "fulfilled") {
+    providersHit.push("common-crawl");
+    realDataFields.push("referringDomainsApprox");
+    referringDomainsApprox = {
+      value: refRes.value.value,
+      source: refRes.value.source,
+      confidence: refRes.value.confidence,
+      note: refRes.value.note,
+    };
+  } else {
+    providersFailed.push("common-crawl");
+    missingFields.push("referringDomainsApprox");
+  }
+
+  // Recent mentions (URLScan)
+  let recentMentions: ExternalBacklinkReport["recentMentions"] = [];
+  if (urlscanRes.status === "fulfilled") {
+    providersHit.push("urlscan");
+    realDataFields.push("recentMentions");
+    recentMentions = urlscanRes.value.value.map((h) => ({
+      url: h.url,
+      domain: h.domain,
+      title: h.title,
+      time: h.time,
+    }));
+  } else {
+    providersFailed.push("urlscan");
+  }
+
+  // Historical snapshots (Wayback)
+  let historicalSnapshots: ExternalBacklinkReport["historicalSnapshots"] = [];
+  if (waybackRes.status === "fulfilled") {
+    providersHit.push("wayback-machine");
+    realDataFields.push("historicalSnapshots");
+    historicalSnapshots = waybackRes.value.value.map((s) => ({
+      timestamp: s.timestamp,
+      url: s.url,
+    }));
+  } else {
+    providersFailed.push("wayback-machine");
+  }
+
+  // Sample crawled pages (Common Crawl)
+  let sampleCrawledPages: ExternalBacklinkReport["sampleCrawledPages"] = [];
+  if (ccPagesRes.status === "fulfilled") {
+    if (!providersHit.includes("common-crawl")) providersHit.push("common-crawl");
+    realDataFields.push("sampleCrawledPages");
+    sampleCrawledPages = ccPagesRes.value.value.slice(0, 30).map((h) => ({
+      url: h.url,
+      timestamp: h.timestamp,
+    }));
+  }
+
+  return {
+    domain: clean,
+    domainAuthority,
+    referringDomainsApprox,
+    recentMentions,
+    historicalSnapshots,
+    sampleCrawledPages,
+    providersHit: Array.from(new Set(providersHit)),
+    providersFailed: Array.from(new Set(providersFailed)),
+    dataQuality: {
+      realDataFields: Array.from(new Set(realDataFields)),
+      missingFields: Array.from(new Set(missingFields)),
+    },
   };
 }

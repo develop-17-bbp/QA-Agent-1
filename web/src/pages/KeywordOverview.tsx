@@ -50,7 +50,9 @@ export default function KeywordOverview() {
     <div>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 24 }}>
         <h1 className="qa-page-title">Keyword Overview</h1>
-        <p className="qa-page-desc">SEMrush-style keyword research powered by Gemini AI.</p>
+        <p className="qa-page-desc">
+          Real keyword data from Google Trends, Google Suggest, Wikipedia, and DuckDuckGo SERP — no paid APIs.
+        </p>
       </motion.div>
 
       {/* Search Bar */}
@@ -72,7 +74,7 @@ export default function KeywordOverview() {
       {error && <div className="qa-alert qa-alert--error">{error}</div>}
       {loading && (
         <div className="qa-panel">
-          <div className="qa-loading-panel">Analyzing keyword with Gemini AI...</div>
+          <div className="qa-loading-panel">Querying Google Trends, Suggest, Wikipedia and DuckDuckGo SERP…</div>
         </div>
       )}
 
@@ -84,6 +86,28 @@ export default function KeywordOverview() {
               Keyword Overview: <span style={{ fontWeight: 400, color: "var(--muted)" }}>{data.keyword}</span>
             </h2>
           </div>
+
+          {/* Data quality badges */}
+          {data.dataQuality && (
+            <div className="qa-panel" style={{ padding: 12, marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <span className="qa-kicker" style={{ marginRight: 4 }}>Data sources:</span>
+              {(data.dataQuality.providersHit ?? []).map((p: string) => (
+                <span key={p} className="qa-lozenge" style={{ background: "var(--ok-bg, #ecfdf5)", color: "var(--ok, #047857)", fontSize: 11 }}>
+                  {p}
+                </span>
+              ))}
+              {(data.dataQuality.providersFailed ?? []).map((p: string) => (
+                <span key={p} className="qa-lozenge" style={{ background: "var(--warn-bg, #fef3c7)", color: "var(--warn, #b45309)", fontSize: 11 }}>
+                  {p} offline
+                </span>
+              ))}
+              {(data.dataQuality.missingFields ?? []).length > 0 && (
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                  • Missing: {(data.dataQuality.missingFields ?? []).join(", ")}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* ── Metrics Row ──────────────────────────────────────── */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>

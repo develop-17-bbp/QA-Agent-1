@@ -261,6 +261,34 @@ export async function fetchAgenticSessions(): Promise<any[]> { const res = await
 export function fetchSerpAnalysis(keywords: string[], targetDomain?: string) { return postApi<any>("/api/serp-analysis", { keywords, targetDomain }); }
 export function fetchSerpSearch(query: string) { return postApi<any>("/api/serp-search", { query }); }
 
+// External backlinks (OPR + Common Crawl + URLScan + Wayback)
+export function fetchExternalBacklinks(domain: string) { return postApi<any>("/api/external-backlinks", { domain }); }
+
+// Position tracker sweep (records into history-db)
+export function trackPositions(pairs: { domain: string; keyword: string }[], delayMs?: number) { return postApi<any>("/api/position-track", { pairs, delayMs }); }
+
+// History readers (JSON time series)
+export async function fetchKeywordHistory(domain: string, keyword: string): Promise<any> {
+  const res = await fetch(`/api/history/keyword?domain=${encodeURIComponent(domain)}&keyword=${encodeURIComponent(keyword)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function fetchBacklinkHistoryApi(domain: string): Promise<any> {
+  const res = await fetch(`/api/history/backlinks?domain=${encodeURIComponent(domain)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function fetchTrafficHistory(domain: string): Promise<any> {
+  const res = await fetch(`/api/history/traffic?domain=${encodeURIComponent(domain)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function fetchHistoryStats(): Promise<any> {
+  const res = await fetch("/api/history/stats");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // LLM Router Stats
 export function fetchLlmStats(): Promise<any> {
   return dedupFetch("/api/llm-stats", async () => {

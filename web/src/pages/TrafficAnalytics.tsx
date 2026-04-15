@@ -19,11 +19,26 @@ export default function TrafficAnalytics() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <h1 className="qa-page-title">Traffic Analytics</h1>
-      <p className="qa-page-desc">AI-estimated traffic analysis based on crawl data signals and site structure.</p>
+      <p className="qa-page-desc">Real domain traffic data from Tranco, Cloudflare Radar, and OpenPageRank — with your own crawl metrics layered on top.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing traffic...</div>}
+      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Querying real traffic providers…</div>}
       {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+
+      {data?.dataQuality && !loading && (
+        <div className="qa-panel" style={{ padding: 12, marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <span className="qa-kicker">Data sources:</span>
+          {(data.dataQuality.providersHit ?? []).map((p: string) => (
+            <span key={p} className="qa-lozenge" style={{ background: "#ecfdf5", color: "#047857", fontSize: 11 }}>{p}</span>
+          ))}
+          {(data.dataQuality.providersFailed ?? []).map((p: string) => (
+            <span key={p} className="qa-lozenge" style={{ background: "#fef3c7", color: "#b45309", fontSize: 11 }}>{p} unavailable</span>
+          ))}
+          {(data.dataQuality.missingFields ?? []).length > 0 && (
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>• Missing (no free source): {(data.dataQuality.missingFields ?? []).join(", ")}</span>
+          )}
+        </div>
+      )}
 
       {data && !loading && (
         <>

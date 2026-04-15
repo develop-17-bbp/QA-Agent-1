@@ -11,7 +11,6 @@ import { parseUrlsFromText } from "./load-urls.js";
 import {
   buildGeminiPayloadFromReports,
   generateGeminiRunAnswer,
-  resolveGeminiApiKey,
 } from "./gemini-report.js";
 import { orchestrateHealthCheck } from "./orchestrate-health.js";
 import { routeQuery, loadRawReportsForRun, type NlpQueryRequest } from "./nlp-query-engine.js";
@@ -1233,11 +1232,12 @@ export async function runHealthDashboard(options: {
           res.end(JSON.stringify({ error: "question required" }));
           return;
         }
-        if (!resolveGeminiApiKey()) {
+        const { checkOllamaAvailable } = await import("./llm.js");
+        if (!(await checkOllamaAvailable())) {
           res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
           res.end(
             JSON.stringify({
-              error: "Gemini API key not configured (set GEMINI_API_KEY or GOOGLE_AI_API_KEY for the server process)",
+              error: "Local Ollama not available. Start Ollama and pull the llama3.2 model (ollama pull llama3.2).",
             }),
           );
           return;
@@ -1930,7 +1930,8 @@ export async function runHealthDashboard(options: {
         const history = Array.isArray(payload.history) ? payload.history.slice(-6) : [];
         if (!queryText) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "query required" })); return; }
         if (!runIdParam || !isSafeRunIdSegment(runIdParam)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad runId" })); return; }
-        if (!resolveGeminiApiKey()) { res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Gemini API key not configured" })); return; }
+        const { checkOllamaAvailable: _checkOllama } = await import("./llm.js");
+        if (!(await _checkOllama())) { res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Local Ollama not available. Start Ollama and pull llama3.2." })); return; }
         const rawData = await loadRawReportsForRun(outRoot, runIdParam);
         if (!rawData) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run data not found" })); return; }
         try {
@@ -1945,7 +1946,7 @@ export async function runHealthDashboard(options: {
         return;
       }
 
-      // ── Keyword Research (Gemini-powered, no run needed) ──────────
+      // ── Keyword Research (real free providers, no run needed) ─────
       if (req.method === "POST" && url.pathname === "/api/keyword-research") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
@@ -1962,6 +1963,114 @@ export async function runHealthDashboard(options: {
           const msg = e instanceof Error ? e.message : String(e);
           res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ error: msg }));
+        }
+        return;
+      }
+
+      // ── External Backlinks (free provider mix: OPR + Common Crawl + URLScan + Wayback) ──
+      if (req.method === "POST" && url.pathname === "/api/external-backlinks") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { domain?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const { discoverExternalBacklinks } = await import("./modules/link-analyzer.js");
+          const result = await discoverExternalBacklinks(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: msg }));
+        }
+        return;
+      }
+
+      // ── Position Tracker: schedule a sweep and record into history-db ──
+      if (req.method === "POST" && url.pathname === "/api/position-track") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { pairs?: { domain?: string; keyword?: string }[]; delayMs?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const pairs = Array.isArray(payload.pairs)
+          ? payload.pairs.filter((p): p is { domain: string; keyword: string } =>
+              !!p && typeof p.domain === "string" && p.domain.trim().length > 0 &&
+              typeof p.keyword === "string" && p.keyword.trim().length > 0)
+          : [];
+        if (pairs.length === 0) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "pairs required" })); return; }
+        if (pairs.length > 50) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Max 50 pairs per sweep" })); return; }
+        try {
+          const { trackBatch } = await import("./position-scheduler.js");
+          const delayMs = typeof payload.delayMs === "number" ? Math.max(500, Math.min(10_000, payload.delayMs)) : 1500;
+          const results = await trackBatch(pairs, { delayMs });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ results, sampledAt: new Date().toISOString() }));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: msg }));
+        }
+        return;
+      }
+
+      // ── History read endpoints ────────────────────────────────────
+      if (req.method === "GET" && url.pathname === "/api/history/keyword") {
+        const domain = (url.searchParams.get("domain") ?? "").trim();
+        const keyword = (url.searchParams.get("keyword") ?? "").trim();
+        if (!domain || !keyword) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain and keyword required" })); return; }
+        try {
+          const { getKeywordHistory } = await import("./history-db.js");
+          const hist = await getKeywordHistory(domain, keyword);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(hist ?? { domain, keyword, series: [] }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/history/backlinks") {
+        const domain = (url.searchParams.get("domain") ?? "").trim();
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const { getBacklinkHistory } = await import("./history-db.js");
+          const hist = await getBacklinkHistory(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(hist ?? { domain, series: [] }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/history/traffic") {
+        const domain = (url.searchParams.get("domain") ?? "").trim();
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const { getTrafficHistory } = await import("./history-db.js");
+          const hist = await getTrafficHistory(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(hist ?? { domain, series: [] }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/history/stats") {
+        try {
+          const { getHistoryStats } = await import("./history-db.js");
+          const stats = await getHistoryStats();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(stats));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
         }
         return;
       }

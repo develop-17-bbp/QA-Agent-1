@@ -355,31 +355,36 @@ export async function orchestrateHealthCheck(options: {
     "utf8",
   );
 
-  // ── Gemini + Smart Analysis run IN PARALLEL ──────────────────
+  // ── AI summary (local Ollama) + Smart Analysis run IN PARALLEL ──
   let geminiSummaryHref: string | undefined;
   let aiSummary: HealthRunMeta["aiSummary"] | undefined;
 
   const endTasks: Promise<void>[] = [];
 
   if (options.gemini) {
-    if (!resolveGeminiApiKey()) {
-      aiSummary = { skippedReason: "Gemini API key not set (GEMINI_API_KEY or GOOGLE_AI_API_KEY)" };
-    } else {
-      endTasks.push(
-        (async () => {
-          try {
-            const reps = results.map((r) => { const { failed: _f, ...rep } = r; return rep; });
-            const payload = buildGeminiPayloadFromReports(reps, rid, runFinishedAt);
-            const md = await generateGeminiQaSummary(payload);
-            await writeFile(path.join(runDir, "gemini-summary.md"), md, "utf8");
-            geminiSummaryHref = "./gemini-summary.md";
-            aiSummary = { generatedAt: new Date().toISOString() };
-          } catch (e) {
-            aiSummary = { skippedReason: e instanceof Error ? e.message : String(e) };
+    endTasks.push(
+      (async () => {
+        try {
+          const { checkOllamaAvailable } = await import("./llm.js");
+          const ok = await checkOllamaAvailable();
+          if (!ok) {
+            aiSummary = {
+              skippedReason:
+                "Local Ollama not available. Start Ollama and pull the llama3.2 model (ollama pull llama3.2).",
+            };
+            return;
           }
-        })(),
-      );
-    }
+          const reps = results.map((r) => { const { failed: _f, ...rep } = r; return rep; });
+          const payload = buildGeminiPayloadFromReports(reps, rid, runFinishedAt);
+          const md = await generateGeminiQaSummary(payload);
+          await writeFile(path.join(runDir, "gemini-summary.md"), md, "utf8");
+          geminiSummaryHref = "./gemini-summary.md";
+          aiSummary = { generatedAt: new Date().toISOString() };
+        } catch (e) {
+          aiSummary = { skippedReason: e instanceof Error ? e.message : String(e) };
+        }
+      })(),
+    );
   }
 
   if (options.smartAnalysis) {

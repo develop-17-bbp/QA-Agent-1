@@ -127,7 +127,7 @@ program
   )
   .option(
     "--gemini",
-    "After the run, ask Gemini for an executive Markdown summary (GEMINI_API_KEY or GOOGLE_AI_API_KEY)",
+    "After the run, generate an executive Markdown summary via local Ollama (requires a running Ollama with the llama3.2 model). Flag kept as --gemini for CLI backwards compatibility.",
     false,
   )
   .action(
