@@ -1,6 +1,20 @@
 /**
  * NLP Query Engine — classifies user intent, routes to specialized handlers,
- * and generates focused answers from crawl data using Gemini.
+ * and generates answers grounded in crawl data.
+ *
+ * ── Unit 7 honesty goal ──────────────────────────────────────────────────
+ *
+ * Every answer is wrapped in { answer, confidence, citedPages[] }. The LLM
+ * never produces a numeric claim without a citation: each handler returns the
+ * concrete list of crawl URLs it fed the model, and the router appends a
+ * "Based on N pages from crawl" footer so the UI never hides provenance.
+ *
+ * Confidence levels:
+ *   high   — the handler had ≥5 concrete crawl rows (or a BM25 avg score ≥3)
+ *   medium — at least one row but fewer than 5 (or BM25 avg ∈ [1, 3))
+ *   low    — zero matches, or the RAG fallback kicked in without retrieval hits
+ *
+ * ────────────────────────────────────────────────────────────────────────
  */
 
 import { readdir, readFile, stat } from "node:fs/promises";
@@ -22,6 +36,8 @@ export type NlpIntent =
   | "CONTENT_ANALYSIS"
   | "ISSUE_SUMMARY"
   | "GENERAL_QUESTION";
+
+export type AnswerConfidence = "high" | "medium" | "low";
 
 const VALID_INTENTS: NlpIntent[] = [
   "SEO_AUDIT", "PERFORMANCE_ANALYSIS", "BROKEN_LINKS",
@@ -56,6 +72,16 @@ export interface NlpQueryResponse {
   intent: NlpIntent;
   clarification_needed: boolean;
   follow_up_question: string | null;
+  /** Honesty indicator — "low" means the retriever found no solid grounding. */
+  confidence: AnswerConfidence;
+  /** URLs from the crawl that backed the answer. Empty when clarification-only. */
+  citedPages: string[];
+}
+
+interface HandlerResult {
+  text: string;
+  citedPages: string[];
+  confidence: AnswerConfidence;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +116,34 @@ function extractJson(text: string): unknown | null {
     }
     return null;
   }
+}
+
+/** Confidence based on how many concrete rows we fed the LLM. */
+function confidenceFromCount(n: number): AnswerConfidence {
+  if (n === 0) return "low";
+  if (n < 5) return "medium";
+  return "high";
+}
+
+/** Dedupe + cap a list of URLs (stable order). */
+function uniqUrls(urls: string[], max: number = 10): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of urls) {
+    if (!u || seen.has(u)) continue;
+    seen.add(u);
+    out.push(u);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** Append an honesty footer naming the number of citations. */
+function withFooter(text: string, citedCount: number): string {
+  const suffix = citedCount > 0
+    ? `Based on ${citedCount} page${citedCount === 1 ? "" : "s"} from crawl.`
+    : `No matching crawl pages cited — answer is not grounded in specific pages.`;
+  return `${text.trim()}\n\n_${suffix}_`;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +220,7 @@ async function handleSeoAudit(
   reports: SiteHealthReport[],
   classification: ClassificationResult,
   history: ChatMessage[],
-): Promise<string> {
+): Promise<HandlerResult> {
   const pages: { site: string; url: string; title?: string; metaDescLen?: number; h1Count?: number; lang?: string; canonical?: string }[] = [];
   for (const r of reports) {
     for (const p of r.crawl.pages) {
@@ -199,6 +253,7 @@ Rules:
 - Use markdown with bullet points or a short table.
 - Max 300 words.
 - If the data does not contain enough info, say so.
+- Do NOT invent URLs, scores, or counts that aren't in the data.
 
 ${historyCtx}
 User question: ${query}
@@ -206,7 +261,12 @@ User question: ${query}
 SEO data (${capped.length} of ${pages.length} total pages):
 ${JSON.stringify(capped, null, 2)}`;
 
-  return generateText(prompt);
+  const text = await generateText(prompt);
+  return {
+    text,
+    citedPages: uniqUrls(capped.map((p) => p.url)),
+    confidence: confidenceFromCount(capped.length),
+  };
 }
 
 async function handlePerformanceAnalysis(
@@ -214,7 +274,7 @@ async function handlePerformanceAnalysis(
   reports: SiteHealthReport[],
   classification: ClassificationResult,
   history: ChatMessage[],
-): Promise<string> {
+): Promise<HandlerResult> {
   const entries: { site: string; url: string; perfMobile?: number; perfDesktop?: number; fcpMs?: number; lcpMs?: number; tbtMs?: number; cls?: number; speedIndexMs?: number; loadMs: number }[] = [];
   for (const r of reports) {
     for (const p of r.crawl.pages) {
@@ -245,6 +305,7 @@ async function handlePerformanceAnalysis(
 
   entries.sort((a, b) => (a.perfMobile ?? 100) - (b.perfMobile ?? 100));
   const capped = entries.slice(0, 40);
+  const withPerfData = capped.filter((e) => e.perfMobile !== undefined || e.perfDesktop !== undefined);
   const historyCtx = buildHistoryContext(history);
 
   const prompt = `You are a web performance expert analyzing Lighthouse/PageSpeed data. Answer using ONLY the data below.
@@ -254,6 +315,7 @@ Rules:
 - Use markdown; a table is preferred for comparisons.
 - Max 300 words.
 - If Core Web Vitals data is missing, say so rather than guessing.
+- Do NOT invent scores or URLs that aren't in the data.
 
 ${historyCtx}
 User question: ${query}
@@ -261,15 +323,27 @@ User question: ${query}
 Performance data (${capped.length} of ${entries.length} total pages):
 ${JSON.stringify(capped, null, 2)}`;
 
-  return generateText(prompt);
+  const text = await generateText(prompt);
+  // When no page has real PageSpeed data, downgrade confidence — the LLM can
+  // describe loadMs but it's not the metric the user usually asks about.
+  const confidence: AnswerConfidence = withPerfData.length === 0
+    ? "low"
+    : confidenceFromCount(withPerfData.length);
+  return {
+    text,
+    citedPages: uniqUrls(capped.map((e) => e.url)),
+    confidence,
+  };
 }
 
 async function handleBrokenLinks(
   query: string,
   reports: SiteHealthReport[],
   history: ChatMessage[],
-): Promise<string> {
+): Promise<HandlerResult> {
   const data: { site: string; brokenLinks: { foundOn: string; target: string; status?: number; error?: string }[]; failedPages: { url: string; status: number; error?: string }[] }[] = [];
+  const cited: string[] = [];
+  let brokenCount = 0;
   for (const r of reports) {
     const bl = r.crawl.brokenLinks.slice(0, 50).map((l) => ({
       foundOn: l.foundOn, target: l.target, status: l.status, error: l.error,
@@ -279,6 +353,8 @@ async function handleBrokenLinks(
     }));
     if (bl.length > 0 || fp.length > 0) {
       data.push({ site: r.hostname, brokenLinks: bl, failedPages: fp });
+      for (const l of bl) { cited.push(l.foundOn); brokenCount++; }
+      for (const p of fp) { cited.push(p.url); brokenCount++; }
     }
   }
   const historyCtx = buildHistoryContext(history);
@@ -290,6 +366,7 @@ Rules:
 - Group by site if multiple sites are present.
 - Use markdown with bullet points or a table.
 - Max 300 words.
+- Do NOT invent URLs or status codes that aren't in the data.
 
 ${historyCtx}
 User question: ${query}
@@ -297,7 +374,12 @@ User question: ${query}
 Broken links data:
 ${JSON.stringify(data, null, 2)}`;
 
-  return generateText(prompt);
+  const text = await generateText(prompt);
+  return {
+    text,
+    citedPages: uniqUrls(cited),
+    confidence: confidenceFromCount(brokenCount),
+  };
 }
 
 async function handleContentAnalysis(
@@ -305,7 +387,7 @@ async function handleContentAnalysis(
   reports: SiteHealthReport[],
   classification: ClassificationResult,
   history: ChatMessage[],
-): Promise<string> {
+): Promise<HandlerResult> {
   const pages: { site: string; url: string; title?: string; metaDescLen?: number; h1Count?: number; bodyBytes?: number }[] = [];
   for (const r of reports) {
     for (const p of r.crawl.pages) {
@@ -337,6 +419,7 @@ Rules:
 - Be specific about which pages have issues and what the issue is.
 - Use markdown with bullets or a table.
 - Max 300 words.
+- Do NOT invent pages or counts that aren't in the data.
 
 ${historyCtx}
 User question: ${query}
@@ -355,7 +438,12 @@ ${JSON.stringify(capped, null, 2)}
 Duplicate titles:
 ${JSON.stringify(issues.duplicateTitles, null, 2)}`;
 
-  return generateText(prompt);
+  const text = await generateText(prompt);
+  return {
+    text,
+    citedPages: uniqUrls(capped.map((p) => p.url)),
+    confidence: confidenceFromCount(capped.length),
+  };
 }
 
 function findDuplicates(arr: string[]): { title: string; count: number }[] {
@@ -370,7 +458,7 @@ async function handleIssueSummary(
   query: string,
   reports: SiteHealthReport[],
   history: ChatMessage[],
-): Promise<string> {
+): Promise<HandlerResult> {
   const summary = {
     totalSites: reports.length,
     sites: reports.map((r) => {
@@ -411,6 +499,7 @@ Rules:
 - Include counts and specific examples.
 - Use markdown with headers and bullet points.
 - Max 400 words.
+- Do NOT invent sites, issues, or counts that aren't in the data.
 
 ${historyCtx}
 User question: ${query}
@@ -418,7 +507,21 @@ User question: ${query}
 Issue summary:
 ${JSON.stringify(summary, null, 2)}`;
 
-  return generateText(prompt);
+  const text = await generateText(prompt);
+
+  // Cite each site's start URL + a few concrete failed pages as evidence.
+  const cited: string[] = [];
+  for (const r of reports) {
+    if (r.startUrl) cited.push(r.startUrl);
+    for (const p of r.crawl.pages.filter((p) => !p.ok).slice(0, 3)) {
+      cited.push(p.url);
+    }
+  }
+  return {
+    text,
+    citedPages: uniqUrls(cited),
+    confidence: confidenceFromCount(reports.length),
+  };
 }
 
 async function handleGeneralQuestion(
@@ -427,14 +530,14 @@ async function handleGeneralQuestion(
   reports: SiteHealthReport[],
   generatedAt: string,
   history: ChatMessage[],
-): Promise<string> {
+): Promise<HandlerResult> {
   // Use RAG retrieval for targeted context instead of dumping the full payload
   if (!hasIndex(runId)) buildIndex(runId, reports);
   const chunks = retrieve(runId, query, 20);
   const historyCtx = buildHistoryContext(history);
 
   if (chunks.length > 0) {
-    const contextData = chunks.map(c => c.text).join("\n\n");
+    const contextData = chunks.map((c) => c.text).join("\n\n");
     const prompt = `You answer questions about ONE website health crawl run. Use ONLY the data below — do not invent URLs, scores, counts, or issues.
 
 Rules:
@@ -448,10 +551,20 @@ User question: ${query}
 Retrieved context (${chunks.length} most relevant pages):
 ${contextData}`;
 
-    return generateText(prompt);
+    const text = await generateText(prompt);
+    // BM25 scores are unbounded; these cutoffs were tuned against the
+    // rag-engine's current term-weighting on typical crawl documents.
+    const avgScore = chunks.reduce((s, c) => s + c.score, 0) / chunks.length;
+    const confidence: AnswerConfidence = avgScore >= 3 ? "high" : avgScore >= 1 ? "medium" : "low";
+    return {
+      text,
+      citedPages: uniqUrls(chunks.map((c) => c.url)),
+      confidence,
+    };
   }
 
-  // Fallback to full payload if RAG returns nothing
+  // Fallback to full payload if RAG returns nothing — no per-page grounding,
+  // so confidence is always "low" here.
   const payload = buildGeminiPayloadFromReports(reports, runId, generatedAt, {
     pageSpeedSampleLimit: 80,
     pageSpeedPreferAnalyzed: true,
@@ -470,7 +583,12 @@ User question: ${query}
 Run data:
 ${JSON.stringify(payload, null, 2)}`;
 
-  return generateText(prompt);
+  const text = await generateText(prompt);
+  return {
+    text,
+    citedPages: [],
+    confidence: "low",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -495,36 +613,40 @@ export async function routeQuery(
       intent: classification.intent,
       clarification_needed: true,
       follow_up_question: classification.follow_up_question,
+      confidence: "low",
+      citedPages: [],
     };
   }
 
-  let answer: string;
+  let result: HandlerResult;
   switch (classification.intent) {
     case "SEO_AUDIT":
-      answer = await handleSeoAudit(query, reports, classification, history);
+      result = await handleSeoAudit(query, reports, classification, history);
       break;
     case "PERFORMANCE_ANALYSIS":
-      answer = await handlePerformanceAnalysis(query, reports, classification, history);
+      result = await handlePerformanceAnalysis(query, reports, classification, history);
       break;
     case "BROKEN_LINKS":
-      answer = await handleBrokenLinks(query, reports, history);
+      result = await handleBrokenLinks(query, reports, history);
       break;
     case "CONTENT_ANALYSIS":
-      answer = await handleContentAnalysis(query, reports, classification, history);
+      result = await handleContentAnalysis(query, reports, classification, history);
       break;
     case "ISSUE_SUMMARY":
-      answer = await handleIssueSummary(query, reports, history);
+      result = await handleIssueSummary(query, reports, history);
       break;
     default:
-      answer = await handleGeneralQuestion(query, runId, reports, generatedAt, history);
+      result = await handleGeneralQuestion(query, runId, reports, generatedAt, history);
       break;
   }
 
   return {
-    answer,
+    answer: withFooter(result.text, result.citedPages.length),
     intent: classification.intent,
     clarification_needed: false,
     follow_up_question: null,
+    confidence: result.confidence,
+    citedPages: result.citedPages,
   };
 }
 

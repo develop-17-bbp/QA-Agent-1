@@ -185,11 +185,17 @@ export async function fetchKeywordResearch(keyword: string): Promise<any> {
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
+export type AnswerConfidence = "high" | "medium" | "low";
+
 export type NlpQueryResponse = {
   answer: string;
   intent: string;
   clarification_needed: boolean;
   follow_up_question: string | null;
+  /** "low" means the answer has no grounded citations — do not cite it as data. */
+  confidence: AnswerConfidence;
+  /** Crawl URLs that backed the answer. Empty when clarification-only or fallback. */
+  citedPages: string[];
 };
 
 export async function queryNlp(
