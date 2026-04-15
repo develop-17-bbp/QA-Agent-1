@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, type Browser } from "playwright";
 import pLimit from "p-limit";
 import { isCrawlPageEligibleForLighthouseLab } from "./lab-eligible-crawl-page.js";
 import { preparePageForVisualCapture } from "./playwright-page-ready.js";
@@ -17,7 +17,13 @@ type OneVp = {
   error?: string;
 };
 
+/**
+ * Load a single viewport using a SHARED browser instance.
+ * Each viewport gets its own context for isolation (cookies/storage)
+ * but reuses the same Chromium process — saves 2-5s launch overhead per URL.
+ */
 async function loadOneViewport(
+  browser: Browser,
   url: string,
   width: number,
   height: number,
@@ -25,7 +31,6 @@ async function loadOneViewport(
 ): Promise<OneVp> {
   let consoleErrorCount = 0;
   const t0 = Date.now();
-  const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ viewport: { width, height } });
     const page = await context.newPage();
@@ -34,10 +39,9 @@ async function loadOneViewport(
     });
     const res = await preparePageForVisualCapture(page, url, timeoutMs, "load");
     const loadMs = Date.now() - t0;
-    const ok = true;
     const httpStatus = res.status();
     await context.close();
-    return { width, height, loadMs, ok, httpStatus, consoleErrorCount };
+    return { width, height, loadMs, ok: true, httpStatus, consoleErrorCount };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
@@ -48,14 +52,13 @@ async function loadOneViewport(
       consoleErrorCount,
       error: msg,
     };
-  } finally {
-    await browser.close();
   }
 }
 
 /**
- * For each URL (capped), load in mobile then desktop viewports with separate Chromium sessions.
- * (Isolated sessions avoid shared storage skew between viewport sizes.)
+ * For each URL (capped), load in mobile then desktop viewports.
+ * Uses a SINGLE shared browser instance for all checks (isolated contexts).
+ * This avoids the 2-5s Chromium launch overhead per viewport load.
  */
 export async function attachViewportChecks(
   crawl: CrawlSiteResult,
@@ -68,44 +71,57 @@ export async function attachViewportChecks(
   const t0 = Date.now();
   const cap = Math.max(1, options.maxUrls);
   const candidates = crawl.pages.filter(isCrawlPageEligibleForLighthouseLab).slice(0, cap);
+
+  if (candidates.length === 0) {
+    crawl.viewportChecks = [];
+    crawl.viewportMeta = { totalDurationMs: 0, urlsChecked: 0 };
+    return { totalDurationMs: 0, urlsChecked: 0 };
+  }
+
+  // Launch ONE browser for all viewport checks
+  const browser = await chromium.launch({ headless: true });
   const limit = pLimit(Math.max(1, options.concurrency));
 
-  const rows: ViewportCheckRecord[] = await Promise.all(
-    candidates.map((p) =>
-      limit(async (): Promise<ViewportCheckRecord> => {
-        const [mob, desk] = await Promise.all([
-          loadOneViewport(p.url, MOBILE.width, MOBILE.height, options.timeoutMs),
-          loadOneViewport(p.url, DESKTOP.width, DESKTOP.height, options.timeoutMs),
-        ]);
-        return {
-          url: p.url,
-          mobile: {
-            width: mob.width,
-            height: mob.height,
-            loadMs: mob.loadMs,
-            ok: mob.ok,
-            httpStatus: mob.httpStatus,
-            consoleErrorCount: mob.consoleErrorCount,
-            error: mob.error,
-          },
-          desktop: {
-            width: desk.width,
-            height: desk.height,
-            loadMs: desk.loadMs,
-            ok: desk.ok,
-            httpStatus: desk.httpStatus,
-            consoleErrorCount: desk.consoleErrorCount,
-            error: desk.error,
-          },
-        };
-      }),
-    ),
-  );
+  try {
+    const rows: ViewportCheckRecord[] = await Promise.all(
+      candidates.map((p) =>
+        limit(async (): Promise<ViewportCheckRecord> => {
+          const [mob, desk] = await Promise.all([
+            loadOneViewport(browser, p.url, MOBILE.width, MOBILE.height, options.timeoutMs),
+            loadOneViewport(browser, p.url, DESKTOP.width, DESKTOP.height, options.timeoutMs),
+          ]);
+          return {
+            url: p.url,
+            mobile: {
+              width: mob.width,
+              height: mob.height,
+              loadMs: mob.loadMs,
+              ok: mob.ok,
+              httpStatus: mob.httpStatus,
+              consoleErrorCount: mob.consoleErrorCount,
+              error: mob.error,
+            },
+            desktop: {
+              width: desk.width,
+              height: desk.height,
+              loadMs: desk.loadMs,
+              ok: desk.ok,
+              httpStatus: desk.httpStatus,
+              consoleErrorCount: desk.consoleErrorCount,
+              error: desk.error,
+            },
+          };
+        }),
+      ),
+    );
 
-  crawl.viewportChecks = rows;
-  crawl.viewportMeta = {
-    totalDurationMs: Date.now() - t0,
-    urlsChecked: rows.length,
-  };
-  return { totalDurationMs: crawl.viewportMeta.totalDurationMs, urlsChecked: rows.length };
+    crawl.viewportChecks = rows;
+    crawl.viewportMeta = {
+      totalDurationMs: Date.now() - t0,
+      urlsChecked: rows.length,
+    };
+    return { totalDurationMs: crawl.viewportMeta.totalDurationMs, urlsChecked: rows.length };
+  } finally {
+    await browser.close();
+  }
 }

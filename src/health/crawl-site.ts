@@ -201,7 +201,7 @@ async function fetchPage(
       const msg = e instanceof Error ? e.message : String(e);
       lastError = msg;
       if (shouldRetryFetch(attempt, msg)) {
-        await sleep(RETRY_BACKOFF_MS * (attempt + 1));
+        await sleep(Math.round(RETRY_BACKOFF_MS * (attempt + 1) * (0.7 + Math.random() * 0.6)));
         continue;
       }
       return { status: 0, body: null, durationMs: Date.now() - started, error: msg };
@@ -246,7 +246,7 @@ async function headOrGetStatus(
       const msg = e instanceof Error ? e.message : String(e);
       lastError = msg;
       if (shouldRetryFetch(attempt, msg)) {
-        await sleep(RETRY_BACKOFF_MS * (attempt + 1));
+        await sleep(Math.round(RETRY_BACKOFF_MS * (attempt + 1) * (0.7 + Math.random() * 0.6)));
         continue;
       }
       return { status: 0, durationMs: Date.now() - started, method: "HEAD", error: msg };

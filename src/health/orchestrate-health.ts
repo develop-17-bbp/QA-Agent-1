@@ -247,7 +247,12 @@ export async function orchestrateHealthCheck(options: {
 
     const siteDir = path.join(runDir, outputDirName);
     const siteFileBase = perSiteReportBaseName(report.hostname, report.finishedAt);
-    await writeSiteHealthReports({ report, outDir: siteDir, fileBaseName: siteFileBase, runId: rid });
+    // Fire-and-forget: write reports in background so the next site can start immediately.
+    // Errors are logged but don't block the pipeline.
+    const writePromise = writeSiteHealthReports({ report, outDir: siteDir, fileBaseName: siteFileBase, runId: rid })
+      .then(() => {})
+      .catch((e) => { console.error(`[write-report] ${hostname}: ${e}`); });
+    deferredWrites.push(writePromise);
 
     const failed = crawl.brokenLinks.length > 0 || crawl.pages.some((p) => !p.ok);
     const reportHtmlHref = `${outputDirName}/report.html`;
@@ -271,6 +276,7 @@ export async function orchestrateHealthCheck(options: {
   }
 
   const results: (SiteHealthReport & { failed: boolean })[] = [];
+  const deferredWrites: Promise<void>[] = [];
 
   if (options.concurrency <= 1) {
     for (let idx = 0; idx < urls.length; idx++) {
@@ -281,6 +287,9 @@ export async function orchestrateHealthCheck(options: {
     const tasks = urls.map((startUrl, idx) => limit(() => runOneSite(idx, startUrl)));
     results.push(...(await Promise.all(tasks)));
   }
+  // Await all deferred report writes before generating combined reports
+  if (deferredWrites.length > 0) await Promise.allSettled(deferredWrites);
+
   /** Same order as the URL list (Promise.all preserves index order; this is a safety net). */
   results.sort((a, b) => urls.indexOf(a.startUrl) - urls.indexOf(b.startUrl));
   const siteFailures = results.filter((r) => r.failed).length;
