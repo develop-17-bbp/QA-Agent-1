@@ -191,7 +191,7 @@ function GoogleOverlayBanner({
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#94a3b8" }} />
         <span>
           Connect Google for real impressions, clicks, and sessions per page.
-          <a href="/google-connections" style={{ marginLeft: 6, color: "var(--accent, #5a67d8)" }}>Connect →</a>
+          <a href="/google-connections" style={{ marginLeft: 6, color: "var(--accent, #111111)" }}>Connect →</a>
         </span>
       </div>
     );

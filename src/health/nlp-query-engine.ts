@@ -19,7 +19,7 @@
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { buildGeminiPayloadFromReports } from "./gemini-report.js";
+import { buildRunSummaryPayload } from "./run-summary-ai.js";
 import { generateText } from "./llm.js";
 import { buildIndex, retrieve, hasIndex } from "./agentic/rag-engine.js";
 import type { HealthRunMeta } from "./orchestrate-health.js";
@@ -565,7 +565,7 @@ ${contextData}`;
 
   // Fallback to full payload if RAG returns nothing — no per-page grounding,
   // so confidence is always "low" here.
-  const payload = buildGeminiPayloadFromReports(reports, runId, generatedAt, {
+  const payload = buildRunSummaryPayload(reports, runId, generatedAt, {
     pageSpeedSampleLimit: 80,
     pageSpeedPreferAnalyzed: true,
   });

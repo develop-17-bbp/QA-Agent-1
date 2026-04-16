@@ -139,7 +139,7 @@ export default function DomainOverview() {
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#94a3b8" }} />
           <span>
             Connect Google to overlay real impressions, clicks, and sessions per site.
-            <a href="/google-connections" style={{ marginLeft: 6, color: "var(--accent, #5a67d8)" }}>Connect →</a>
+            <a href="/google-connections" style={{ marginLeft: 6, color: "var(--accent, #111111)" }}>Connect →</a>
           </span>
         </div>
       )}
@@ -164,7 +164,7 @@ export default function DomainOverview() {
             <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
               <div style={{ width: 300, height: 250 }}>
                 <ResponsiveContainer>
-                  <RadarChart data={radarData}><PolarGrid /><PolarAngleAxis dataKey="dim" fontSize={12} /><PolarRadiusAxis domain={[0, 100]} tick={false} /><Radar dataKey="score" stroke="#5a67d8" fill="#5a67d8" fillOpacity={0.3} /><Tooltip /></RadarChart>
+                  <RadarChart data={radarData}><PolarGrid /><PolarAngleAxis dataKey="dim" fontSize={12} /><PolarRadiusAxis domain={[0, 100]} tick={false} /><Radar dataKey="score" stroke="#111111" fill="#111111" fillOpacity={0.3} /><Tooltip /></RadarChart>
                 </ResponsiveContainer>
               </div>
               <div style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>

@@ -171,7 +171,7 @@ export default function KeywordGap() {
               {
                 label: "Keywords in A",
                 val: data.summary?.totalA ?? 0,
-                color: "#5a67d8",
+                color: "#111111",
               },
               {
                 label: "Shared Keywords",
@@ -219,7 +219,7 @@ export default function KeywordGap() {
               className="qa-panel"
               style={{ padding: 16, overflowX: "auto" }}
             >
-              <div className="qa-panel-title" style={{ marginBottom: 8, color: "#5a67d8" }}>
+              <div className="qa-panel-title" style={{ marginBottom: 8, color: "#111111" }}>
                 Only in Run A ({onlyA.length})
               </div>
               <table className="qa-table">

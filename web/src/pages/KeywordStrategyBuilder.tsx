@@ -3,8 +3,8 @@ import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
 import { fetchKeywordStrategy } from "../api";
 
-const PRIORITY_COLORS: Record<string, string> = { High: "#e53e3e", Medium: "#dd6b20", Low: "#5a67d8" };
-const SOURCE_COLORS: Record<string, string> = { crawl: "#38a169", "google-suggest": "#5a67d8" };
+const PRIORITY_COLORS: Record<string, string> = { High: "#e53e3e", Medium: "#dd6b20", Low: "#111111" };
+const SOURCE_COLORS: Record<string, string> = { crawl: "#38a169", "google-suggest": "#111111" };
 
 export default function KeywordStrategyBuilder() {
   const [runId, setRunId] = useState("");

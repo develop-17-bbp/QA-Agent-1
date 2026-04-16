@@ -83,7 +83,7 @@ export default function KeywordManager() {
         <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
           <div className="qa-panel-title" style={{ marginBottom: 12 }}>{selectedList.name} ({selectedList.keywordCount} keywords)</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {(selectedList.keywords ?? []).map((kw: string) => <span key={kw} className="qa-lozenge" style={{ background: "#5a67d820", color: "#5a67d8" }}>{kw}</span>)}
+            {(selectedList.keywords ?? []).map((kw: string) => <span key={kw} className="qa-lozenge" style={{ background: "#11111120", color: "#111111" }}>{kw}</span>)}
           </div>
         </div>
       )}
@@ -100,7 +100,7 @@ export default function KeywordManager() {
                   <div key={i} style={{ flex: "1 1 220px", padding: 12, borderRadius: 8, border: "1px solid var(--border)" }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
                     <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>Intent: {c.intent} | Vol: {c.totalVolume}</div>
-                    <div style={{ fontSize: 11, color: "#5a67d8", marginTop: 4 }}>{(c.keywords ?? []).join(", ")}</div>
+                    <div style={{ fontSize: 11, color: "#111111", marginTop: 4 }}>{(c.keywords ?? []).join(", ")}</div>
                   </div>
                 ))}
               </div>

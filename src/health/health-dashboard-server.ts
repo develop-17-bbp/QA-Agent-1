@@ -9,9 +9,9 @@ import type { HealthProgressEvent } from "./progress-events.js";
 import { renderHtmlFileToPdf } from "./html-to-pdf.js";
 import { parseUrlsFromText } from "./load-urls.js";
 import {
-  buildGeminiPayloadFromReports,
-  generateGeminiRunAnswer,
-} from "./gemini-report.js";
+  buildRunSummaryPayload,
+  generateRunAnswer,
+} from "./run-summary-ai.js";
 import { orchestrateHealthCheck } from "./orchestrate-health.js";
 import { routeQuery, loadRawReportsForRun, type NlpQueryRequest } from "./nlp-query-engine.js";
 import { analyzeSiteAudit } from "./modules/site-audit-analyzer.js";
@@ -363,7 +363,7 @@ async function resolveMasterJsonPath(runDir: string, meta: HealthRunMeta): Promi
   return path.join(runDir, pick);
 }
 
-async function loadGeminiPayloadForRun(outRoot: string, runId: string) {
+async function loadRunSummaryPayloadForRun(outRoot: string, runId: string) {
   const meta = await loadRunMetaById(outRoot, runId);
   if (!meta) return null;
   const runDir = path.join(outRoot, runId);
@@ -383,7 +383,7 @@ async function loadGeminiPayloadForRun(outRoot: string, runId: string) {
   }
   if (!Array.isArray(data.sites) || data.sites.length === 0) return null;
   const generatedAt = typeof data.generatedAt === "string" ? data.generatedAt : meta.generatedAt;
-  return buildGeminiPayloadFromReports(data.sites, runId, generatedAt, {
+  return buildRunSummaryPayload(data.sites, runId, generatedAt, {
     pageSpeedSampleLimit: 80,
     pageSpeedPreferAnalyzed: true,
   });
@@ -1197,17 +1197,14 @@ export async function runHealthDashboard(options: {
         return;
       }
 
-      if (
-        req.method === "GET" &&
-        (url.pathname === "/api/ai-summary" || url.pathname === "/api/gemini-summary")
-      ) {
+      if (req.method === "GET" && url.pathname === "/api/ai-summary") {
         const runId = url.searchParams.get("runId");
         if (!runId || !isSafeRunIdSegment(runId)) {
           res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
           res.end("Bad runId");
           return;
         }
-        const p = path.join(outRoot, runId, "gemini-summary.md");
+        const p = path.join(outRoot, runId, "ai-summary.md");
         if (!isPathInsideRoot(outRoot, p)) {
           res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
           res.end("Forbidden");
@@ -1227,10 +1224,7 @@ export async function runHealthDashboard(options: {
         return;
       }
 
-      if (
-        req.method === "POST" &&
-        (url.pathname === "/api/ai-run-chat" || url.pathname === "/api/gemini-run-chat")
-      ) {
+      if (req.method === "POST" && url.pathname === "/api/ai-run-chat") {
         let body: string;
         try {
           body = await readBody(req, 32_000);
@@ -1270,14 +1264,14 @@ export async function runHealthDashboard(options: {
           );
           return;
         }
-        const qaPayload = await loadGeminiPayloadForRun(outRoot, runIdParam);
+        const qaPayload = await loadRunSummaryPayloadForRun(outRoot, runIdParam);
         if (!qaPayload) {
           res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ error: "Run data not found (missing MASTER JSON)" }));
           return;
         }
         try {
-          const answer = await generateGeminiRunAnswer(qaPayload, question);
+          const answer = await generateRunAnswer(qaPayload, question);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify({ answer }));
         } catch (e) {
@@ -1631,7 +1625,7 @@ export async function runHealthDashboard(options: {
         }
       }
 
-      // Keyword Magic (Gemini-powered, seed keyword only)
+      // Keyword Magic (Ollama-powered, seed keyword only)
       if (req.method === "POST" && url.pathname === "/api/keyword-magic") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
@@ -1666,7 +1660,7 @@ export async function runHealthDashboard(options: {
         return;
       }
 
-      // SEO Content Template (Gemini-powered, keyword only)
+      // SEO Content Template (Ollama-powered, keyword only)
       if (req.method === "POST" && url.pathname === "/api/seo-content-template") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
@@ -1682,7 +1676,7 @@ export async function runHealthDashboard(options: {
         return;
       }
 
-      // Topic Research (Gemini-powered, optional runId)
+      // Topic Research (Ollama-powered, optional runId)
       if (req.method === "POST" && url.pathname === "/api/topic-research") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
@@ -2057,7 +2051,7 @@ export async function runHealthDashboard(options: {
         return;
       }
 
-      // Local SEO (Gemini-powered, optional runId)
+      // Local SEO (Ollama-powered, optional runId)
       if (req.method === "POST" && url.pathname === "/api/local-seo") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
@@ -2404,12 +2398,8 @@ export async function runHealthDashboard(options: {
           urls?: string[];
           pageSpeedBoth?: boolean;
           viewportCheck?: boolean;
-          /** Preferred name for the AI summary toggle. */
           aiSummary?: boolean;
-          /** @deprecated Legacy alias for `aiSummary`. */
-          gemini?: boolean;
           seoAudit?: boolean;
-          useFirecrawl?: boolean;
           smartAnalysis?: boolean;
           maxPages?: number;
         };
@@ -2456,11 +2446,10 @@ export async function runHealthDashboard(options: {
             concurrency: vc?.concurrency ?? 2,
           };
         }
-        if (payload.aiSummary || payload.gemini) {
-          runExtra.gemini = true;
+        if (payload.aiSummary) {
+          runExtra.aiSummary = true;
         }
         // seoAudit: requires seo-audit module (available on main branch)
-        if (payload.useFirecrawl) runExtra.useFirecrawl = true;
         if (payload.smartAnalysis) runExtra.smartAnalysis = true;
         if (typeof payload.maxPages === "number" && payload.maxPages > 0) {
           runExtra.maxPages = payload.maxPages;

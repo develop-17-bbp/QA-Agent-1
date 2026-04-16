@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { fetchKeywordMagic } from "../api";
 
-const INTENT_COLORS: Record<string, string> = { Informational: "#3182ce", Commercial: "#dd6b20", Transactional: "#38a169", Navigational: "#5a67d8" };
+const INTENT_COLORS: Record<string, string> = { Informational: "#3182ce", Commercial: "#dd6b20", Transactional: "#38a169", Navigational: "#111111" };
 const DIFF_COLORS: Record<string, string> = { Easy: "#38a169", Medium: "#dd6b20", Hard: "#e53e3e", "Very Hard": "#9b2c2c" };
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
 const CONFIDENCE_LABELS: Record<string, string> = { high: "real", medium: "derived", low: "estimated" };

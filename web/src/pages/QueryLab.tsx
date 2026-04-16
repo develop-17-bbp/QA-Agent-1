@@ -115,7 +115,7 @@ export default function QueryLab() {
             if (msg.role === "user") {
               return (
                 <div key={i} style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-                  <div style={{ maxWidth: "75%", padding: "10px 16px", borderRadius: 12, background: "#5a67d8", color: "#fff", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                  <div style={{ maxWidth: "75%", padding: "10px 16px", borderRadius: 12, background: "#111111", color: "#ffffff", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
                     {msg.content}
                   </div>
                 </div>
@@ -124,7 +124,7 @@ export default function QueryLab() {
             const isOpen = openCitations === i;
             return (
               <div key={i} style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
-                <div style={{ maxWidth: "85%", padding: "10px 16px", borderRadius: 12, background: "var(--bg-card, rgba(90,103,216,0.06))", color: "var(--text-primary)", fontSize: 13, lineHeight: 1.6 }}>
+                <div style={{ maxWidth: "85%", padding: "10px 16px", borderRadius: 12, background: "var(--bg-card, var(--glass2))", color: "var(--text-primary)", fontSize: 13, lineHeight: 1.6 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                     <ConfidenceLozenge confidence={msg.confidence} />
                     {msg.citedPages.length > 0 && (
@@ -138,14 +138,14 @@ export default function QueryLab() {
                   </div>
                   <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
                   {isOpen && msg.citedPages.length > 0 && (
-                    <div style={{ marginTop: 10, padding: 10, background: "rgba(90,103,216,0.06)", borderRadius: 6, fontSize: 11 }}>
+                    <div style={{ marginTop: 10, padding: 10, background: "var(--glass2)", borderRadius: 6, fontSize: 11 }}>
                       <div style={{ fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>
                         Cited crawl pages
                       </div>
                       <ul style={{ margin: 0, paddingLeft: 16, display: "flex", flexDirection: "column", gap: 4 }}>
                         {msg.citedPages.map((u, idx) => (
                           <li key={idx}>
-                            <a href={u} target="_blank" rel="noopener noreferrer" style={{ color: "#5a67d8", wordBreak: "break-all" }}>
+                            <a href={u} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text)", wordBreak: "break-all" }}>
                               {u}
                             </a>
                           </li>
@@ -159,7 +159,7 @@ export default function QueryLab() {
           })}
           {loading && (
             <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
-              <div style={{ padding: "10px 16px", borderRadius: 12, background: "var(--bg-card, rgba(90,103,216,0.06))", fontSize: 13, color: "var(--text-secondary)" }}>Thinking...</div>
+              <div style={{ padding: "10px 16px", borderRadius: 12, background: "var(--bg-card, var(--glass2))", fontSize: 13, color: "var(--text-secondary)" }}>Thinking...</div>
             </div>
           )}
           <div ref={chatEnd} />

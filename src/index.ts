@@ -126,8 +126,8 @@ program
     DEFAULT_VIEWPORT_CONCURRENCY,
   )
   .option(
-    "--gemini",
-    "After the run, generate an executive Markdown summary via local Ollama (requires a running Ollama with the llama3.2 model). Flag kept as --gemini for CLI backwards compatibility.",
+    "--ai-summary",
+    "After the run, generate an executive Markdown summary via local Ollama (requires a running Ollama with the llama3.2 model).",
     false,
   )
   .action(
@@ -151,7 +151,7 @@ program
       viewportMaxUrls: string;
       viewportTimeoutMs: string;
       viewportConcurrency: string;
-      gemini?: boolean;
+      aiSummary?: boolean;
     }) => {
       const concurrency = Number.parseInt(opts.concurrency, 10);
       const maxPages = Number.parseInt(opts.maxPages, 10);
@@ -260,7 +260,7 @@ program
               },
             }
           : {}),
-        ...(opts.gemini ? { gemini: true } : {}),
+        ...(opts.aiSummary ? { aiSummary: true } : {}),
       };
 
       const { runId, runDir, siteFailures } = opts.serve

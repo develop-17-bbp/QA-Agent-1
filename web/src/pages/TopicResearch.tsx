@@ -7,7 +7,7 @@ const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#d
 const CONFIDENCE_LABELS: Record<string, string> = { high: "real", medium: "derived", low: "estimated" };
 
 const SOURCE_COLORS: Record<string, string> = {
-  "google-suggest": "#5a67d8",
+  "google-suggest": "#111111",
   "google-suggest-cascade": "#9f7aea",
   "crawl": "#38a169",
 };
@@ -107,7 +107,7 @@ export default function TopicResearch() {
                 Topic popularity proxy (Wikipedia monthly pageviews)
                 <ConfidenceDot confidence={topicPopularityMeta?.confidence} source={topicPopularityMeta?.source} note={topicPopularityMeta?.note} />
               </div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: "#5a67d8" }}>{topicPopularity.toLocaleString()}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: "#111111" }}>{topicPopularity.toLocaleString()}</div>
               <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                 Real monthly-average pageviews over the last 12 months — not a Semrush-style search volume,
                 but a genuine traffic signal.
@@ -134,7 +134,7 @@ export default function TopicResearch() {
                       </div>
                     )}
                     {st.clusterLabel && (
-                      <div style={{ fontSize: 11, color: "#5a67d8", marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: "#111111", marginTop: 4 }}>
                         cluster: {st.clusterLabel}
                       </div>
                     )}
@@ -159,7 +159,7 @@ export default function TopicResearch() {
               {questions.map((q: any, i: number) => (
                 <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", display: "flex", gap: 12, alignItems: "center" }}>
                   <span style={{ fontWeight: 500, fontSize: 13, flex: 1 }}>{q.question}</span>
-                  <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: "#5a67d820", color: "#5a67d8", fontWeight: 600 }}>{q.source}</span>
+                  <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: "#11111120", color: "#111111", fontWeight: 600 }}>{q.source}</span>
                 </div>
               ))}
             </div>

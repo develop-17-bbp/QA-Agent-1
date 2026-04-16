@@ -8,7 +8,7 @@ const CONFIDENCE_LABELS: Record<string, string> = { high: "real", medium: "deriv
 
 const SOURCE_COLORS: Record<string, string> = {
   "crawl": "#38a169",
-  "duckduckgo-serp": "#5a67d8",
+  "duckduckgo-serp": "#111111",
   "common-crawl": "#9f7aea",
   "urlscan": "#ed8936",
 };
@@ -153,7 +153,7 @@ export default function BrandMonitoring() {
                         </td>
                         <td style={{ maxWidth: 300 }}>
                           {m.title && <div style={{ fontSize: 13, fontWeight: 500 }}>{m.title}</div>}
-                          <a href={m.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#5a67d8", wordBreak: "break-all" }}>{m.url}</a>
+                          <a href={m.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#111111", wordBreak: "break-all" }}>{m.url}</a>
                         </td>
                         <td style={{ fontSize: 11, color: "var(--text-secondary)", maxWidth: 300 }}>{m.snippet ?? "—"}</td>
                         <td style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{m.time ?? "—"}</td>

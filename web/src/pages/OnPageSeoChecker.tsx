@@ -153,7 +153,7 @@ export default function OnPageSeoChecker() {
                       </button>
                       {isOpen && (
                         <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(90,103,216,0.08)", borderRadius: 6, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                          <strong style={{ color: "#5a67d8" }}>AI suggestion — verify before applying:</strong> {check.fixSuggestion}
+                          <strong style={{ color: "#111111" }}>AI suggestion — verify before applying:</strong> {check.fixSuggestion}
                         </div>
                       )}
                     </>

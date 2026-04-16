@@ -196,7 +196,7 @@ export default function BacklinkGap() {
               {
                 label: "Links in A",
                 val: data.summary?.totalA ?? 0,
-                color: "#5a67d8",
+                color: "#111111",
               },
               {
                 label: "Shared Links",
@@ -244,7 +244,7 @@ export default function BacklinkGap() {
               className="qa-panel"
               style={{ padding: 16, overflowX: "auto" }}
             >
-              <div className="qa-panel-title" style={{ color: "#5a67d8" }}>
+              <div className="qa-panel-title" style={{ color: "#111111" }}>
                 Only in Run A ({onlyA.length})
               </div>
               <table className="qa-table">
@@ -382,7 +382,7 @@ export default function BacklinkGap() {
                           padding: "6px 6px",
                           fontSize: 13,
                           textAlign: "right",
-                          color: "#5a67d8",
+                          color: "#111111",
                           fontWeight: 600,
                         }}
                       >

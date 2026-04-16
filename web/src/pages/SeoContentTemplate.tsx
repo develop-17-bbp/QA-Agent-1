@@ -95,7 +95,7 @@ export default function SeoContentTemplate() {
                 <ConfidenceDot confidence={targetWordCountMeta?.confidence} source={targetWordCountMeta?.source} note={targetWordCountMeta?.note} />
               </div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 32, fontWeight: 700, color: "#5a67d8" }}>{targetWordCount}</div>
+                <div style={{ fontSize: 32, fontWeight: 700, color: "#111111" }}>{targetWordCount}</div>
                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                   computed from {competitors.length} competitor{competitors.length === 1 ? "" : "s"} via DuckDuckGo SERP
                 </div>
@@ -116,7 +116,7 @@ export default function SeoContentTemplate() {
                           <tr key={i}>
                             <td style={{ color: "var(--text-secondary)" }}>{i + 1}</td>
                             <td style={{ fontSize: 11, maxWidth: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ color: "#5a67d8" }}>{c.url}</a>
+                              <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ color: "#111111" }}>{c.url}</a>
                             </td>
                             <td style={{ fontWeight: 600 }}>{c.wordCount}</td>
                           </tr>
@@ -155,7 +155,7 @@ export default function SeoContentTemplate() {
               <div className="qa-panel-title">Heading Structure</div>
               {data.headings.map((h: any, i: number) => (
                 <div key={i} style={{ padding: "4px 0", paddingLeft: h.level === "h1" ? 0 : h.level === "h2" ? 16 : 32 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: "#5a67d8", marginRight: 8, textTransform: "uppercase" }}>{h.level}</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#111111", marginRight: 8, textTransform: "uppercase" }}>{h.level}</span>
                   <span style={{ fontSize: 13 }}>{h.text}</span>
                 </div>
               ))}
@@ -169,7 +169,7 @@ export default function SeoContentTemplate() {
                 <div key={type} style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "capitalize", marginBottom: 4 }}>{type}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {data.keywords[type].map((kw: string) => <span key={kw} style={{ padding: "3px 10px", borderRadius: 12, background: type === "primary" ? "#5a67d820" : type === "secondary" ? "#38a16920" : "#dd6b2020", color: type === "primary" ? "#5a67d8" : type === "secondary" ? "#38a169" : "#dd6b20", fontSize: 12 }}>{kw}</span>)}
+                    {data.keywords[type].map((kw: string) => <span key={kw} style={{ padding: "3px 10px", borderRadius: 12, background: type === "primary" ? "#11111120" : type === "secondary" ? "#38a16920" : "#dd6b2020", color: type === "primary" ? "#111111" : type === "secondary" ? "#38a169" : "#dd6b20", fontSize: 12 }}>{kw}</span>)}
                   </div>
                 </div>
               ))}

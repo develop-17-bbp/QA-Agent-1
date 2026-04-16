@@ -111,7 +111,7 @@ export default function AgenticCrawl() {
             <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{session.progress?.percent}%</span>
           </div>
           <div style={{ height: 6, borderRadius: 3, background: "var(--border)" }}>
-            <div style={{ height: 6, borderRadius: 3, width: `${session.progress?.percent ?? 0}%`, background: "#5a67d8", transition: "width 0.3s" }} />
+            <div style={{ height: 6, borderRadius: 3, width: `${session.progress?.percent ?? 0}%`, background: "#111111", transition: "width 0.3s" }} />
           </div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>{session.progress?.message}</div>
         </div>
@@ -134,7 +134,7 @@ export default function AgenticCrawl() {
                     <PolarGrid />
                     <PolarAngleAxis dataKey="metric" fontSize={11} />
                     <PolarRadiusAxis domain={[0, 100]} fontSize={10} />
-                    <Radar dataKey="value" stroke="#5a67d8" fill="#5a67d8" fillOpacity={0.3} />
+                    <Radar dataKey="value" stroke="#111111" fill="#111111" fillOpacity={0.3} />
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
@@ -146,7 +146,7 @@ export default function AgenticCrawl() {
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Executive Summary</div>
               <div style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-secondary)" }}>{analysis.summary}</div>
-              {analysis.competitiveEdge && <div style={{ fontSize: 12, marginTop: 8, fontStyle: "italic", color: "#5a67d8" }}>{analysis.competitiveEdge}</div>}
+              {analysis.competitiveEdge && <div style={{ fontSize: 12, marginTop: 8, fontStyle: "italic", color: "#111111" }}>{analysis.competitiveEdge}</div>}
             </div>
           )}
 
@@ -257,7 +257,7 @@ export default function AgenticCrawl() {
             {session.log.map((entry: any, i: number) => (
               <div key={i} style={{ padding: "3px 0", borderBottom: "1px solid var(--border)", display: "flex", gap: 8 }}>
                 <span style={{ color: "var(--text-secondary)", flexShrink: 0, width: 70 }}>{new Date(entry.timestamp).toLocaleTimeString()}</span>
-                <span style={{ color: "#5a67d8", fontWeight: 600, flexShrink: 0, width: 80 }}>[{entry.agent}]</span>
+                <span style={{ color: "#111111", fontWeight: 600, flexShrink: 0, width: 80 }}>[{entry.agent}]</span>
                 <span>{entry.message}</span>
               </div>
             ))}

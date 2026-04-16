@@ -118,7 +118,7 @@ export default function SiteAudit() {
                   <div className="qa-panel-title">Category Scores</div>
                 </div>
                 <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={catData}><XAxis dataKey="name" fontSize={12} /><YAxis domain={[0, 100]} fontSize={12} /><Tooltip /><Bar dataKey="score" fill="#5a67d8" radius={[4,4,0,0]} /></BarChart>
+                  <BarChart data={catData}><XAxis dataKey="name" fontSize={12} /><YAxis domain={[0, 100]} fontSize={12} /><Tooltip /><Bar dataKey="score" fill="#111111" radius={[4,4,0,0]} /></BarChart>
                 </ResponsiveContainer>
               </div>
             )}

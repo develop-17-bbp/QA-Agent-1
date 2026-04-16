@@ -98,12 +98,7 @@ export async function fetchRunMeta(runId: string): Promise<HealthRunMeta | null>
     const t = await res.text();
     throw new Error(t || res.statusText);
   }
-  const raw = (await res.json()) as HealthRunMeta & { geminiSummaryHref?: string };
-  // Back-compat: legacy run-meta.json files stored this under an older key.
-  if (!raw.aiSummaryHref && raw.geminiSummaryHref) {
-    raw.aiSummaryHref = raw.geminiSummaryHref;
-  }
-  return raw;
+  return (await res.json()) as HealthRunMeta;
 }
 
 export async function startRun(body: {
@@ -112,7 +107,6 @@ export async function startRun(body: {
   viewportCheck?: boolean;
   aiSummary?: boolean;
   seoAudit?: boolean;
-  useFirecrawl?: boolean;
   smartAnalysis?: boolean;
   maxPages?: number;
 }): Promise<void> {
@@ -130,25 +124,18 @@ export function streamUrl(): string {
 }
 
 export async function fetchAiSummary(runId: string): Promise<string | null> {
-  // Try the new endpoint first, fall back to the legacy alias for older server builds.
-  const tryFetch = async (path: string) => fetch(`${path}?runId=${encodeURIComponent(runId)}`);
-  let res = await tryFetch("/api/ai-summary");
-  if (res.status === 404 || res.status === 405) res = await tryFetch("/api/gemini-summary");
+  const res = await fetch(`/api/ai-summary?runId=${encodeURIComponent(runId)}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(await res.text());
   return res.text();
 }
 
 export async function askAiAboutRun(runId: string, question: string): Promise<string> {
-  // Prefer the new endpoint; fall back to the legacy alias for older server builds.
-  const tryPost = async (path: string) =>
-    fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ runId, question }),
-    });
-  let res = await tryPost("/api/ai-run-chat");
-  if (res.status === 404 || res.status === 405) res = await tryPost("/api/gemini-run-chat");
+  const res = await fetch("/api/ai-run-chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId, question }),
+  });
   const text = await res.text();
   let data: { answer?: string; error?: string };
   try {

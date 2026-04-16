@@ -26,8 +26,8 @@ import {
   type GscSite,
 } from "../api";
 
-const COLORS = ["#38a169", "#5a67d8", "#dd6b20", "#e53e3e"];
-const HISTORY_COLORS = ["#5a67d8", "#38a169", "#dd6b20", "#e53e3e", "#805ad5", "#d69e2e"];
+const COLORS = ["#38a169", "#111111", "#dd6b20", "#e53e3e"];
+const HISTORY_COLORS = ["#111111", "#38a169", "#dd6b20", "#e53e3e", "#805ad5", "#d69e2e"];
 
 type LiveResult = {
   domain: string;
@@ -270,7 +270,7 @@ export default function PositionTracking() {
                     <XAxis dataKey="hostname" fontSize={11} />
                     <YAxis domain={[0, 100]} fontSize={11} />
                     <Tooltip />
-                    <Bar dataKey="avgScore" fill="#5a67d8" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="avgScore" fill="#111111" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -398,7 +398,7 @@ export default function PositionTracking() {
                           {r.position ?? (r.error ? "error" : "not found")}
                         </td>
                         <td style={{ padding: "6px 10px", fontSize: 11, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }} title={r.url ?? ""}>
-                          {r.url ? <a href={r.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent, #5a67d8)" }}>{r.url}</a> : <span style={{ color: "var(--muted)" }}>—</span>}
+                          {r.url ? <a href={r.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent, #111111)" }}>{r.url}</a> : <span style={{ color: "var(--muted)" }}>—</span>}
                         </td>
                         <td style={{ padding: "6px 10px", fontSize: 11, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }} title={r.topUrl ?? ""}>
                           {r.topUrl ?? ""}

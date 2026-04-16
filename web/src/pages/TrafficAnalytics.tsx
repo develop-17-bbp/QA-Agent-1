@@ -7,7 +7,7 @@ import { useGoogleOverlay } from "../lib/google-overlay";
 
 const SOURCE_COLORS: Record<string, string> = {
   organic: "#38a169",
-  direct: "#5a67d8",
+  direct: "#111111",
   referral: "#dd6b20",
   social: "#d53f8c",
   paid: "#e53e3e",
@@ -146,7 +146,7 @@ export default function TrafficAnalytics() {
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#94a3b8" }} />
           <span>
             Connect Google to replace the estimated monthly traffic below with real first-party GA4 sessions and add a &ldquo;Top queries from GSC&rdquo; panel.
-            <a href="/google-connections" style={{ marginLeft: 6, color: "var(--accent, #5a67d8)" }}>Connect →</a>
+            <a href="/google-connections" style={{ marginLeft: 6, color: "var(--accent, #111111)" }}>Connect →</a>
           </span>
         </div>
       )}
@@ -192,7 +192,7 @@ export default function TrafficAnalytics() {
                     <XAxis dataKey="month" fontSize={12} />
                     <YAxis fontSize={12} />
                     <Tooltip />
-                    <Line type="monotone" dataKey="estimated" stroke="#5a67d8" strokeWidth={2} dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="estimated" stroke="#111111" strokeWidth={2} dot={{ r: 4 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

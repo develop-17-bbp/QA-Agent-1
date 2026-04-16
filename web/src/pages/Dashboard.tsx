@@ -13,9 +13,8 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
   const [viewportCheck, setViewportCheck] = useState(true);
   const [aiSummary, setAiSummary] = useState(true);
   const [seoAudit, setSeoAudit] = useState(false);
-  const [useFirecrawl, setUseFirecrawl] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState(false);
-  const [maxPages, setMaxPages] = useState(50);
+  const [maxPages, setMaxPages] = useState(0);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -118,7 +117,6 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
         viewportCheck,
         aiSummary,
         seoAudit,
-        useFirecrawl,
         smartAnalysis,
         maxPages,
       });
@@ -217,12 +215,6 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
               SEO URL audit
             </label>
           </OptionWithTooltip>
-          <OptionWithTooltip hint="Use Firecrawl for 10x faster crawling with JavaScript rendering and anti-bot handling. Requires FIRECRAWL_API_KEY. Falls back to default crawler if unavailable.">
-            <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
-              <input type="checkbox" checked={useFirecrawl} disabled={runInFlight} onChange={(e) => setUseFirecrawl(e.target.checked)} />
-              Firecrawl (fast)
-            </label>
-          </OptionWithTooltip>
           <OptionWithTooltip hint="After crawl, runs Ollama local LLM to autonomously analyze results, prioritize issues, and generate fix recommendations. Requires Ollama running locally. Zero API cost.">
             <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
               <input type="checkbox" checked={smartAnalysis} disabled={runInFlight} onChange={(e) => setSmartAnalysis(e.target.checked)} />
@@ -232,20 +224,21 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
         </div>
         <hr className="qa-divider" />
         <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>
-          Crawl limits
+          Crawl scope
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", fontSize: 13 }}>
             Max pages per site
             <input
               type="number"
-              min={1}
-              max={10000}
+              min={0}
+              max={100000}
               value={maxPages}
               disabled={runInFlight}
-              onChange={(e) => setMaxPages(Math.max(1, Number(e.target.value) || 50))}
+              onChange={(e) => setMaxPages(Math.max(0, Number(e.target.value) || 0))}
+              placeholder="0 = all"
               style={{
-                width: 80,
+                width: 90,
                 padding: "4px 8px",
                 borderRadius: 6,
                 border: "1px solid var(--border)",
@@ -257,7 +250,7 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
             />
           </label>
           <span style={{ fontSize: 12, color: "var(--muted)" }}>
-            Lower = faster. Use 20-50 for quick audits, 200+ for full crawls.
+            <strong>0 = crawl every page</strong> (default). Set a positive number only if you want to cap a huge site for a quick audit.
           </span>
         </div>
         <div style={{ marginTop: 20, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>

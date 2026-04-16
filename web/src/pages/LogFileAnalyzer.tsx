@@ -179,7 +179,7 @@ export default function LogFileAnalyzer() {
                     <div className="qa-panel-title">Bot Traffic</div>
                     <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 8 }}>parsed from log file · UA string matched against known bots</div>
                     <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={botData.slice(0, 8)} layout="vertical"><XAxis type="number" fontSize={11} /><YAxis type="category" dataKey="bot" width={120} fontSize={11} /><Tooltip /><Bar dataKey="hits" fill="#5a67d8" radius={[0,4,4,0]} /></BarChart>
+                      <BarChart data={botData.slice(0, 8)} layout="vertical"><XAxis type="number" fontSize={11} /><YAxis type="category" dataKey="bot" width={120} fontSize={11} /><Tooltip /><Bar dataKey="hits" fill="#111111" radius={[0,4,4,0]} /></BarChart>
                     </ResponsiveContainer>
                   </div>
                 )}

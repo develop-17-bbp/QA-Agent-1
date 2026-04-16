@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import { fetchHistory, fetchCompareDomains, type HealthRunMeta } from "../api";
 
-const COLORS = ["#5a67d8", "#e53e3e", "#38a169", "#dd6b20", "#3182ce", "#d53f8c"];
+const COLORS = ["#111111", "#e53e3e", "#38a169", "#dd6b20", "#3182ce", "#d53f8c"];
 const METRIC_LABELS: Record<string, string> = {
   seo: "SEO",
   performance: "Performance",

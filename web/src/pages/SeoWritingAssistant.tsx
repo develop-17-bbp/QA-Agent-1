@@ -132,7 +132,7 @@ export default function SeoWritingAssistant() {
                 <ConfidenceDot confidence={keywordsMeta?.confidence} source={keywordsMeta?.source} note={keywordsMeta?.note} />
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {keywords.map((kw: string) => <span key={kw} style={{ padding: "4px 12px", borderRadius: 16, background: "#5a67d820", color: "#5a67d8", fontSize: 12, fontWeight: 500 }}>{kw}</span>)}
+                {keywords.map((kw: string) => <span key={kw} style={{ padding: "4px 12px", borderRadius: 16, background: "#11111120", color: "#111111", fontSize: 12, fontWeight: 500 }}>{kw}</span>)}
               </div>
             </div>
           )}

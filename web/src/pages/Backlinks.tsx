@@ -66,7 +66,7 @@ export default function Backlinks() {
               <div className="qa-panel" style={{ padding: 16, flex: 1 }}>
                 <div className="qa-panel-title">Most Linked Pages</div>
                 <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={(data.topLinked ?? []).slice(0, 10)} layout="vertical"><XAxis type="number" fontSize={11} /><YAxis type="category" dataKey="url" width={180} fontSize={10} tickFormatter={(v: string) => v.length > 30 ? v.slice(0, 27) + "..." : v} /><Tooltip /><Bar dataKey="inboundLinks" fill="#5a67d8" radius={[0,4,4,0]} /></BarChart>
+                  <BarChart data={(data.topLinked ?? []).slice(0, 10)} layout="vertical"><XAxis type="number" fontSize={11} /><YAxis type="category" dataKey="url" width={180} fontSize={10} tickFormatter={(v: string) => v.length > 30 ? v.slice(0, 27) + "..." : v} /><Tooltip /><Bar dataKey="inboundLinks" fill="#111111" radius={[0,4,4,0]} /></BarChart>
                 </ResponsiveContainer>
               </div>
             )}
@@ -169,7 +169,7 @@ export default function Backlinks() {
                     <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                       <td style={{ padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>{m.domain}</td>
                       <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={m.url}>
-                        <a href={m.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent, #5a67d8)" }}>{m.url}</a>
+                        <a href={m.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent, #111111)" }}>{m.url}</a>
                       </td>
                       <td style={{ padding: "4px 10px", fontSize: 11, color: "var(--text-secondary)" }}>{m.time?.slice(0, 10) ?? ""}</td>
                     </tr>
