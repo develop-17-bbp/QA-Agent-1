@@ -1,7 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
-import { fetchKeywordStrategy } from "../api";
+import { fetchKeywordStrategy, fetchGscPagesBatch } from "../api";
+import { useGoogleOverlay } from "../lib/google-overlay";
+
+function bestGscForKeyword(urls: string[], gscPages: Map<string, any>) {
+  for (const u of urls ?? []) {
+    const p = gscPages.get(u);
+    if (p) return p;
+    try {
+      const path = new URL(u).pathname;
+      for (const [k, v] of gscPages) {
+        try { if (new URL(k).pathname === path) return v; } catch {}
+      }
+    } catch {}
+  }
+  return null;
+}
 
 const PRIORITY_COLORS: Record<string, string> = { High: "#e53e3e", Medium: "#dd6b20", Low: "#111111" };
 const SOURCE_COLORS: Record<string, string> = { crawl: "#38a169", "google-suggest": "#111111" };
@@ -11,6 +26,25 @@ export default function KeywordStrategyBuilder() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [domain, setDomain] = useState("");
+  const [gscPages, setGscPages] = useState<Map<string, any>>(new Map());
+
+  useEffect(() => {
+    const firstUrl = (data?.priorityKeywords?.[0]?.urls ?? [])[0];
+    if (firstUrl) { try { setDomain(new URL(firstUrl).hostname.replace(/^www\./, "")); } catch {} }
+  }, [data]);
+
+  const overlay = useGoogleOverlay(domain);
+
+  useEffect(() => {
+    if (!overlay.matchedGscSite) return;
+    fetchGscPagesBatch(overlay.matchedGscSite.siteUrl, 28, 500)
+      .then(pages => {
+        const m = new Map<string, any>();
+        for (const p of pages) m.set(p.page ?? "", p);
+        setGscPages(m);
+      }).catch(() => {});
+  }, [overlay.matchedGscSite?.siteUrl]);
 
   const load = async (rid: string) => {
     setRunId(rid);
@@ -59,6 +93,11 @@ export default function KeywordStrategyBuilder() {
                   Missing: {dq.missingFields.join(", ")}
                 </span>
               )}
+              {overlay.matchedGscSite && gscPages.size > 0 && (
+                <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 12, background: "rgba(56,161,105,0.15)", color: "#38a169", fontWeight: 600, border: "1px solid rgba(56,161,105,0.3)" }} title="Real GSC data overlaid">
+                  ● google-search-console
+                </span>
+              )}
             </div>
           )}
 
@@ -87,24 +126,35 @@ export default function KeywordStrategyBuilder() {
               </div>
               <div style={{ overflowX: "auto" }}>
                 <table className="qa-table">
-                  <thead><tr>{["Keyword", "Source", "Frequency", "Priority", "Sample URLs"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
+                  <thead>
+                    <tr>
+                      {["Keyword", "Source", "Frequency", "Priority", "Sample URLs"].map((h) => <th key={h}>{h}</th>)}
+                      {gscPages.size > 0 && <th>GSC Impr.</th>}
+                      {gscPages.size > 0 && <th>GSC Clicks</th>}
+                    </tr>
+                  </thead>
                   <tbody>
-                    {priorityKeywords.map((kw: any, i: number) => (
-                      <tr key={i}>
-                        <td style={{ fontWeight: 500 }}>{kw.keyword}</td>
-                        <td>
-                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (SOURCE_COLORS[kw.source] ?? "#888") + "20", color: SOURCE_COLORS[kw.source] ?? "#888", fontWeight: 600 }}>{kw.source}</span>
-                        </td>
-                        <td style={{ color: "var(--text-secondary)" }}>{kw.frequency ?? "—"}</td>
-                        <td>
-                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (PRIORITY_COLORS[kw.priority] ?? "#888") + "20", color: PRIORITY_COLORS[kw.priority] ?? "#888", fontWeight: 600 }}>{kw.priority ?? "—"}</span>
-                        </td>
-                        <td style={{ fontSize: 11, color: "var(--text-secondary)", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {(kw.urls ?? []).slice(0, 2).join(", ")}
-                          {(kw.urls ?? []).length > 2 && ` +${kw.urls.length - 2} more`}
-                        </td>
-                      </tr>
-                    ))}
+                    {priorityKeywords.map((kw: any, i: number) => {
+                      const gscMatch = gscPages.size > 0 ? bestGscForKeyword(kw.urls, gscPages) : null;
+                      return (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 500 }}>{kw.keyword}</td>
+                          <td>
+                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (SOURCE_COLORS[kw.source] ?? "#888") + "20", color: SOURCE_COLORS[kw.source] ?? "#888", fontWeight: 600 }}>{kw.source}</span>
+                          </td>
+                          <td style={{ color: "var(--text-secondary)" }}>{kw.frequency ?? "—"}</td>
+                          <td>
+                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (PRIORITY_COLORS[kw.priority] ?? "#888") + "20", color: PRIORITY_COLORS[kw.priority] ?? "#888", fontWeight: 600 }}>{kw.priority ?? "—"}</span>
+                          </td>
+                          <td style={{ fontSize: 11, color: "var(--text-secondary)", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {(kw.urls ?? []).slice(0, 2).join(", ")}
+                            {(kw.urls ?? []).length > 2 && ` +${kw.urls.length - 2} more`}
+                          </td>
+                          {gscPages.size > 0 && <td style={{ color: "var(--text-secondary)", fontSize: 12 }}>{gscMatch?.impressions?.value ?? "—"}</td>}
+                          {gscPages.size > 0 && <td style={{ color: "var(--text-secondary)", fontSize: 12 }}>{gscMatch?.clicks?.value ?? "—"}</td>}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

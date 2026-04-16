@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
-import { fetchOnPageSeoChecker } from "../api";
+import { fetchOnPageSeoChecker, fetchGscPageStats, fetchGa4PageTraffic } from "../api";
+import { useGoogleOverlay } from "../lib/google-overlay";
 
 const STATUS_COLORS: Record<string, string> = { pass: "#38a169", warning: "#dd6b20", fail: "#e53e3e" };
 const STATUS_LABELS: Record<string, string> = { pass: "PASS", warning: "WARN", fail: "FAIL" };
@@ -47,6 +48,34 @@ export default function OnPageSeoChecker() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [openFix, setOpenFix] = useState<number | null>(null);
+  const [domain, setDomain] = useState("");
+  const [gscPage, setGscPage] = useState<any>(null);
+  const [ga4Page, setGa4Page] = useState<any>(null);
+
+  useEffect(() => {
+    if (data?.url) {
+      try { setDomain(new URL(data.url).hostname.replace(/^www\./, "")); } catch {}
+    }
+  }, [data?.url]);
+
+  const overlay = useGoogleOverlay(domain);
+
+  useEffect(() => {
+    if (!data?.url) return;
+    let cancelled = false;
+    if (overlay.matchedGscSite) {
+      fetchGscPageStats(overlay.matchedGscSite.siteUrl, data.url, 28)
+        .then(s => { if (!cancelled) setGscPage(s); })
+        .catch(() => {});
+    }
+    if (overlay.matchedGa4Property) {
+      const path = (() => { try { return new URL(data.url).pathname; } catch { return data.url; } })();
+      fetchGa4PageTraffic(overlay.matchedGa4Property.propertyId, path, 28)
+        .then(t => { if (!cancelled) setGa4Page(t); })
+        .catch(() => {});
+    }
+    return () => { cancelled = true; };
+  }, [data?.url, overlay.matchedGscSite?.siteUrl, overlay.matchedGa4Property?.propertyId]);
 
   const analyze = async () => {
     if (!runId) return;
@@ -123,7 +152,31 @@ export default function OnPageSeoChecker() {
                 {checks.filter((c: any) => c.status === "fail").length > 0 && <span style={{ fontSize: 13, color: "#e53e3e" }}>{checks.filter((c: any) => c.status === "fail").length} failed</span>}
               </div>
             </div>
+            {(gscPage || ga4Page) && (
+              <div className="qa-panel" style={{ flex: 1, padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Real Traffic (last 28d)</div>
+                {gscPage && (
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
+                    <span><strong>{gscPage.clicks?.value ?? "—"}</strong> <span style={{color:"var(--text-secondary)"}}>GSC clicks</span></span>
+                    <span><strong>{gscPage.impressions?.value ?? "—"}</strong> <span style={{color:"var(--text-secondary)"}}>impressions</span></span>
+                    <span><strong>#{gscPage.position?.value?.toFixed(1) ?? "—"}</strong> <span style={{color:"var(--text-secondary)"}}>avg position</span></span>
+                  </div>
+                )}
+                {ga4Page && (
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13, marginTop: gscPage ? 8 : 0 }}>
+                    <span><strong>{ga4Page.screenPageViews?.value ?? "—"}</strong> <span style={{color:"var(--text-secondary)"}}>GA4 views</span></span>
+                    <span><strong>{ga4Page.activeUsers?.value ?? "—"}</strong> <span style={{color:"var(--text-secondary)"}}>users</span></span>
+                    <span><strong>{ga4Page.sessions?.value ?? "—"}</strong> <span style={{color:"var(--text-secondary)"}}>sessions</span></span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+          {overlay.connected && !gscPage && !ga4Page && data && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic" }}>
+              Connect Google to see real GSC + GA4 traffic for this page.
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12, marginTop: 16 }}>
             {checks.map((check: any, i: number) => {

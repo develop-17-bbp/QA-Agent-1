@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
-import { fetchSerpAnalysis } from "../api";
+import { fetchSerpAnalysis, queryGscAnalytics } from "../api";
+import { useGoogleOverlay } from "../lib/google-overlay";
 
 const DIFF_COLORS = { easy: "#38a169", medium: "#dd6b20", hard: "#e53e3e" };
 
@@ -11,6 +12,9 @@ export default function SerpAnalyzer() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [gscPositions, setGscPositions] = useState<Map<string, any>>(new Map());
+
+  const overlay = useGoogleOverlay(targetDomain.trim() || undefined);
 
   const analyze = async () => {
     const kws = keywords.split("\n").map(k => k.trim()).filter(Boolean);
@@ -19,6 +23,24 @@ export default function SerpAnalyzer() {
     try { setData(await fetchSerpAnalysis(kws, targetDomain.trim() || undefined)); } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    if (!data || !overlay.matchedGscSite) return;
+    const kws = (data.results ?? []).map((r: any) => r.query).filter(Boolean);
+    if (kws.length === 0) return;
+    queryGscAnalytics({
+      siteUrl: overlay.matchedGscSite.siteUrl,
+      dimensions: ["query"],
+      rowLimit: 200,
+    }).then((rows: any[]) => {
+      const m = new Map<string, any>();
+      for (const r of rows) {
+        const q = (r.keys?.[0] ?? "").toLowerCase();
+        if (q) m.set(q, r);
+      }
+      setGscPositions(m);
+    }).catch(() => {});
+  }, [data, overlay.matchedGscSite?.siteUrl]);
 
   const positionData = data?.competitors?.filter((c: any) => c.yourPosition)?.map((c: any) => ({
     keyword: c.query.length > 20 ? c.query.slice(0, 20) + "..." : c.query,
@@ -56,6 +78,22 @@ export default function SerpAnalyzer() {
 
       {data && !loading && (
         <>
+          {/* GSC overlay status pill */}
+          {overlay.connected && overlay.matchedGscSite && (
+            <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20, background: "#e8f5e8", color: "#1a7a1a", fontWeight: 600, border: "1px solid #a3d9a3" }}>
+                ● GSC overlay active · {overlay.matchedGscSite.siteUrl}
+              </span>
+            </div>
+          )}
+          {overlay.connected && !overlay.matchedGscSite && targetDomain && (
+            <div style={{ marginTop: 16 }}>
+              <span style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20, background: "rgba(221,107,32,0.1)", color: "#dd6b20", fontWeight: 500, border: "1px solid rgba(221,107,32,0.3)" }}>
+                Google connected — no verified GSC property matches "{targetDomain}"
+              </span>
+            </div>
+          )}
+
           {/* Summary cards */}
           <div style={{ display: "flex", gap: 16, marginTop: 24, flexWrap: "wrap" }}>
             {[
@@ -138,6 +176,11 @@ export default function SerpAnalyzer() {
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: DIFF_COLORS[ca.difficulty as keyof typeof DIFF_COLORS] + "20", color: DIFF_COLORS[ca.difficulty as keyof typeof DIFF_COLORS], fontWeight: 600 }}>{ca.difficulty}</span>
                       {ca.yourPosition && <span style={{ fontSize: 12, fontWeight: 700, color: ca.yourPosition <= 3 ? "#38a169" : ca.yourPosition <= 10 ? "#dd6b20" : "#e53e3e" }}>#{ca.yourPosition}</span>}
+                      {gscPositions.has(ca.query.toLowerCase()) && (
+                        <span title="Real GSC data" style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, background: "#e8f5e8", color: "#1a7a1a", fontWeight: 600, marginLeft: 4 }}>
+                          GSC #{gscPositions.get(ca.query.toLowerCase())?.position?.value?.toFixed(0) ?? "?"}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{ca.opportunity}</div>

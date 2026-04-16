@@ -1,8 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
-import { fetchSiteAudit } from "../api";
+import { fetchSiteAudit, fetchGscPagesBatch } from "../api";
+import { useGoogleOverlay } from "../lib/google-overlay";
+
+function getGsc(gscPages: Map<string, any>, url: string) {
+  if (gscPages.has(url)) return gscPages.get(url);
+  try {
+    const path = new URL(url).pathname;
+    for (const [k, v] of gscPages) {
+      try { if (new URL(k).pathname === path) return v; } catch {}
+    }
+  } catch {}
+  return null;
+}
 
 const SEV_COLORS = { critical: "#e53e3e", warning: "#dd6b20", info: "#3182ce" };
 const CAT_LABELS: Record<string, string> = { seo: "SEO", technical: "Technical", performance: "Performance", content: "Content", links: "Links" };
@@ -33,14 +45,39 @@ export default function SiteAudit() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [severityFilter, setSeverityFilter] = useState("all");
+  const [domain, setDomain] = useState("");
+  const overlay = useGoogleOverlay(domain);
+  const [gscPages, setGscPages] = useState<Map<string, any>>(new Map());
 
   const load = async (rid: string) => {
     setRunId(rid);
     if (!rid) return;
     setLoading(true); setError("");
+    setGscPages(new Map());
     try { setData(await fetchSiteAudit(rid)); } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   };
+
+  // Extract domain from the first affected URL in the audit data
+  useEffect(() => {
+    if (!data) return;
+    const firstUrl = data.issues?.[0]?.affectedUrls?.[0] ?? "";
+    if (firstUrl) {
+      try { setDomain(new URL(firstUrl).hostname.replace(/^www\./, "")); } catch {}
+    }
+  }, [data]);
+
+  // When overlay matches a GSC site, fetch page-level stats
+  useEffect(() => {
+    if (!overlay.matchedGscSite) return;
+    fetchGscPagesBatch(overlay.matchedGscSite.siteUrl, 28, 500)
+      .then((pages: any[]) => {
+        const m = new Map<string, any>();
+        for (const p of pages) m.set(p.page ?? p.url ?? "", p);
+        setGscPages(m);
+      })
+      .catch(() => {});
+  }, [overlay.matchedGscSite?.siteUrl]);
 
   const issues = data?.issues ?? [];
   const filtered = severityFilter === "all" ? issues : issues.filter((i: any) => i.severity === severityFilter);
@@ -96,6 +133,19 @@ export default function SiteAudit() {
             ))}
           </div>
 
+          {/* GSC overlay notice / coverage row */}
+          {overlay.connected && !overlay.matchedGscSite && (
+            <div style={{ marginTop: 14, padding: "8px 12px", background: "#fffbeb", border: "1px solid #fbbf24", borderRadius: 6, fontSize: 12, color: "#92400e" }}>
+              Google connected — no verified GSC property matches this domain
+            </div>
+          )}
+          {overlay.matchedGscSite && gscPages.size > 0 && (
+            <div style={{ marginTop: 14, padding: "8px 12px", background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 6, fontSize: 12, color: "#065f46", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+              <strong>GSC Coverage:</strong> {gscPages.size} pages tracked in GSC · last 28 days
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
             {pieData.length > 0 && (
               <div className="qa-panel" style={{ width: 260 }}>
@@ -145,7 +195,20 @@ export default function SiteAudit() {
                   <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 4 }}>{issue.description}</div>
                   {issue.affectedUrls?.length > 0 && (
                     <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
-                      {issue.affectedUrls.slice(0, 5).map((u: string) => <div key={u} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u}</div>)}
+                      {issue.affectedUrls.slice(0, 5).map((u: string) => {
+                        const gsc = gscPages.size > 0 ? getGsc(gscPages, u) : null;
+                        const clicks = gsc?.clicks?.value ?? null;
+                        return (
+                          <div key={u} style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{u}</span>
+                            {clicks !== null && (
+                              <span style={{ fontSize: 10, fontWeight: 600, color: clicks > 0 ? "#047857" : "var(--muted)", background: clicks > 0 ? "#ecfdf5" : "var(--bg-secondary)", padding: "1px 5px", borderRadius: 10, whiteSpace: "nowrap", flexShrink: 0 }}>
+                                {clicks}↗
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                       {issue.affectedUrls.length > 5 && <div>...and {issue.affectedUrls.length - 5} more</div>}
                     </div>
                   )}
