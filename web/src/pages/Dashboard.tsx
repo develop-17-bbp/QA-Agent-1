@@ -14,7 +14,7 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
   const [aiSummary, setAiSummary] = useState(true);
   const [seoAudit, setSeoAudit] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState(false);
-  const [maxPages, setMaxPages] = useState(0);
+  const maxPages = 0;
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -135,17 +135,44 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
 
   return (
     <div>
+      {/* Hero header */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45 }}
-        style={{ marginBottom: 24 }}
+        transition={{ duration: 0.4 }}
+        style={{ marginBottom: 28 }}
       >
-        <h1 className="qa-page-title">New run</h1>
-        <p className="qa-page-desc">
-          Queue a crawl from root URLs. Optional Lighthouse, viewport checks, and a local AI summary run after the crawl. See{" "}
-          <Link to="/history">run history</Link> for past jobs and <Link to="/reports">reports</Link> for exports.
-        </p>
+        <div style={{
+          background: "linear-gradient(135deg, var(--accent-light) 0%, #f0f9ff 100%)",
+          border: "1px solid var(--accent-muted)",
+          borderRadius: "var(--radius-lg)",
+          padding: "28px 32px",
+          marginBottom: 4,
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--accent)", background: "var(--accent-light)", border: "1px solid var(--accent-muted)", borderRadius: 99, padding: "2px 10px" }}>
+                  SEO Intelligence
+                </span>
+              </div>
+              <h1 style={{ fontSize: "1.75rem", fontWeight: 800, letterSpacing: "-0.03em", margin: "0 0 8px", color: "var(--text)" }}>
+                Start a New Crawl
+              </h1>
+              <p style={{ color: "var(--muted)", fontSize: 14, margin: 0, maxWidth: 540, lineHeight: 1.6 }}>
+                Enter any website URL to crawl, audit, and analyze. Data flows automatically through site audit, keyword research, backlinks, and SEO checks.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+              <Link to="/url-report" className="qa-btn-default" style={{ gap: 6 }}>
+                ⚡ URL Report
+              </Link>
+              <Link to="/history" className="qa-btn-default" style={{ gap: 6 }}>
+                📋 Run History
+              </Link>
+            </div>
+          </div>
+        </div>
       </motion.div>
 
       <RunProgressBanner state={runBanner} />
@@ -153,139 +180,93 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
       <motion.section
         className="qa-panel"
         initial={{ opacity: 0, y: 12 }}
-        animate={{
-          opacity: formDimmed ? 0.75 : 1,
-          y: 0,
-        }}
+        animate={{ opacity: formDimmed ? 0.75 : 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        style={{ padding: 24, overflow: "hidden" }}
+        style={{ padding: "0", overflow: "hidden" }}
       >
-        <div className="qa-panel-head">
-          <h2 className="qa-panel-title">Start a crawl</h2>
-          <p className="qa-panel-subtitle">
-            Paste root URLs (one per line). The crawler discovers same-site pages, checks links, then optionally runs PageSpeed, viewport smoke loads, and a local AI summary.
-          </p>
+        <div style={{ padding: "18px 24px 16px", borderBottom: "1px solid var(--border)", background: "var(--glass2)", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 16 }}>🔍</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>Crawl Configuration</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 1 }}>
+              Paste root URLs, choose analysis options, and start a run.
+            </div>
+          </div>
         </div>
-        <label className="qa-label-field">Root URLs (one per line)</label>
-        <textarea
-          className="qa-textarea"
-          value={urlsText}
-          onChange={(e) => setUrlsText(e.target.value)}
-          placeholder={"https://www.example.com\nwww.another.org"}
-          rows={6}
-          disabled={runInFlight}
-          style={{
-            width: "100%",
-            resize: "vertical",
-            padding: "12px 14px",
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-            fontSize: "0.8125rem",
-            lineHeight: 1.45,
-            opacity: runInFlight ? 0.85 : 1,
-          }}
-        />
-        <hr className="qa-divider" />
-        <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>
-          Optional post-crawl steps
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center", rowGap: 10 }}>
-          <OptionWithTooltip
-            hint="Calls Google PageSpeed Insights (Lighthouse lab) for each crawled HTML page, twice: mobile and desktop. Adds performance, a11y, best-practices, and SEO scores to reports. Requires PAGESPEED_API_KEY (or GOOGLE_PAGESPEED_API_KEY) on the server. Slower and API-metered—turn off for large crawls."
-          >
-            <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
-              <input type="checkbox" checked={pageSpeedBoth} disabled={runInFlight} onChange={(e) => setPageSpeedBoth(e.target.checked)} />
-              PageSpeed mobile + desktop
-            </label>
-          </OptionWithTooltip>
-          <OptionWithTooltip hint="Opens each URL in local headless Chromium at a phone-sized and a desktop-sized viewport to check that the page loads without hard failures. Lightweight smoke test—not a full Lighthouse audit. Adds a few seconds per URL.">
-            <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
-              <input type="checkbox" checked={viewportCheck} disabled={runInFlight} onChange={(e) => setViewportCheck(e.target.checked)} />
-              Viewport loads (Chromium)
-            </label>
-          </OptionWithTooltip>
-          <OptionWithTooltip hint="After the crawl finishes, sends a compact JSON summary of the run to the local LLM (Ollama) and saves a short Markdown executive summary (ai-summary.md) for the run workspace and dashboard. Requires Ollama running locally. Does not run PageSpeed for you—it only narrates results.">
-            <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
-              <input type="checkbox" checked={aiSummary} disabled={runInFlight} onChange={(e) => setAiSummary(e.target.checked)} />
-              AI summary
-            </label>
-          </OptionWithTooltip>
-          <OptionWithTooltip hint="After the crawl, discovers XML sitemaps (sitemap.xml, robots.txt), HEAD-checks every URL for 404s and redirects, then classifies URLs with the local LLM to find old versions, drafts, duplicates, and test pages.">
-            <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
-              <input type="checkbox" checked={seoAudit} disabled={runInFlight} onChange={(e) => setSeoAudit(e.target.checked)} />
-              SEO URL audit
-            </label>
-          </OptionWithTooltip>
-          <OptionWithTooltip hint="After crawl, runs Ollama local LLM to autonomously analyze results, prioritize issues, and generate fix recommendations. Requires Ollama running locally. Zero API cost.">
-            <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: runInFlight ? "default" : "pointer", color: "var(--muted)" }}>
-              <input type="checkbox" checked={smartAnalysis} disabled={runInFlight} onChange={(e) => setSmartAnalysis(e.target.checked)} />
-              Smart Analysis (Ollama)
-            </label>
-          </OptionWithTooltip>
-        </div>
-        <hr className="qa-divider" />
-        <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>
-          Crawl scope
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", fontSize: 13 }}>
-            Max pages per site
-            <input
-              type="number"
-              min={0}
-              max={100000}
-              value={maxPages}
-              disabled={runInFlight}
-              onChange={(e) => setMaxPages(Math.max(0, Number(e.target.value) || 0))}
-              placeholder="0 = all"
-              style={{
-                width: 90,
-                padding: "4px 8px",
-                borderRadius: 6,
-                border: "1px solid var(--border)",
-                background: "var(--bg-card)",
-                color: "var(--text)",
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                fontSize: "0.8125rem",
-              }}
-            />
-          </label>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>
-            <strong>0 = crawl every page</strong> (default). Set a positive number only if you want to cap a huge site for a quick audit.
-          </span>
-        </div>
-        <div style={{ marginTop: 20, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <motion.button
-            type="button"
-            className="qa-btn-primary"
-            whileTap={{ scale: runInFlight ? 1 : 0.98 }}
-            onClick={() => void onStart()}
-            disabled={runInFlight || !urlsText.trim()}
+        <div style={{ padding: "20px 24px" }}>
+          <label className="qa-label-field">Root URLs — one per line</label>
+          <textarea
+            className="qa-textarea"
+            value={urlsText}
+            onChange={(e) => setUrlsText(e.target.value)}
+            placeholder={"https://www.example.com\nhttps://www.another.org"}
+            rows={5}
+            disabled={runInFlight}
             style={{
-              padding: "8px 20px",
-              minHeight: 36,
-              cursor: runInFlight || !urlsText.trim() ? "not-allowed" : "pointer",
+              width: "100%", resize: "vertical",
+              padding: "12px 14px",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: "0.8125rem", lineHeight: 1.55,
+              borderRadius: "var(--radius-sm)",
+              opacity: runInFlight ? 0.8 : 1,
             }}
-          >
-            {runBanner.kind === "posting"
-              ? "Sending…"
-              : runBanner.kind === "queued"
-                ? "Starting…"
-                : runBanner.kind === "live"
-                  ? "Run in progress…"
-                  : "Start run"}
-          </motion.button>
+          />
+
+          <div style={{ marginTop: 18, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 12 }}>
+              Optional post-crawl analysis
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
+              {[
+                { checked: pageSpeedBoth, setter: setPageSpeedBoth, label: "PageSpeed (mobile + desktop)", hint: "Calls Google PageSpeed Insights for each page. Requires PAGESPEED_API_KEY." },
+                { checked: viewportCheck, setter: setViewportCheck, label: "Viewport smoke test", hint: "Opens each URL in headless Chromium at phone and desktop sizes." },
+                { checked: aiSummary, setter: setAiSummary, label: "AI summary (Ollama)", hint: "Local LLM generates an executive summary. Requires Ollama running." },
+                { checked: seoAudit, setter: setSeoAudit, label: "SEO URL audit", hint: "Discovers sitemaps, checks 404s/redirects, classifies URLs with LLM." },
+                { checked: smartAnalysis, setter: setSmartAnalysis, label: "Smart analysis", hint: "Ollama analyzes results and generates prioritized fix recommendations." },
+              ].map(({ checked, setter, label, hint }) => (
+                <OptionWithTooltip key={label} hint={hint}>
+                  <label style={{
+                    display: "flex", gap: 8, alignItems: "center",
+                    cursor: runInFlight ? "default" : "pointer",
+                    fontSize: 13.5, color: "var(--text-secondary)",
+                    padding: "8px 12px",
+                    border: `1px solid ${checked ? "var(--accent-muted)" : "var(--border)"}`,
+                    borderRadius: "var(--radius-sm)",
+                    background: checked ? "var(--accent-light)" : "var(--glass)",
+                    transition: "background 0.12s, border-color 0.12s",
+                  }}>
+                    <input type="checkbox" checked={checked} disabled={runInFlight} onChange={(e) => setter(e.target.checked)} />
+                    {label}
+                  </label>
+                </OptionWithTooltip>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 20, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <motion.button
+              type="button"
+              className="qa-btn-primary"
+              whileTap={{ scale: runInFlight ? 1 : 0.98 }}
+              onClick={() => void onStart()}
+              disabled={runInFlight || !urlsText.trim()}
+              style={{ padding: "10px 24px", fontSize: 14 }}
+            >
+              {runBanner.kind === "posting" ? "⏳ Sending…"
+               : runBanner.kind === "queued" ? "⏳ Starting…"
+               : runBanner.kind === "live" ? "⚡ Run in progress…"
+               : "▶ Start run"}
+            </motion.button>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>
+              Large sites: disable PageSpeed for faster crawls
+            </span>
+          </div>
         </div>
-        <p className="qa-footnote" style={{ marginTop: 18 }}>
-          Large sites: disable PageSpeed, viewport, or AI summary for faster runs. Tune <code>QA_AGENT_FETCH_CONCURRENCY</code> in <code>.env</code> for heavier parallel HTTP.
-        </p>
       </motion.section>
 
-      {err ? <div className="qa-alert qa-alert--error">{err}</div> : null}
+      {err && <div className="qa-alert qa-alert--error" style={{ marginTop: 14 }}>⚠ {err}</div>}
 
-      {/* Quick-start feature cards */}
       <QuickStartCards />
-
-      {/* System health */}
       <SystemHealth />
     </div>
   );
@@ -294,12 +275,12 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
 // ── Quick-start cards ────────────────────────────────────────────────────────
 
 const FEATURE_CARDS = [
-  { title: "Site Audit", desc: "Comprehensive SEO health check", path: "/site-audit", icon: "🔍" },
-  { title: "Keyword Research", desc: "AI-powered keyword analysis", path: "/keyword-overview", icon: "🔑" },
-  { title: "SERP Analyzer", desc: "DuckDuckGo search analysis", path: "/serp-analyzer", icon: "📊" },
-  { title: "Agentic Crawl", desc: "Multi-agent AI pipeline", path: "/agentic-crawl", icon: "🤖" },
-  { title: "Content Audit", desc: "Content quality assessment", path: "/content-audit", icon: "📝" },
-  { title: "Backlinks", desc: "Link profile analysis", path: "/backlinks", icon: "🔗" },
+  { title: "URL Report",       desc: "Full parallel report for any URL", path: "/url-report",        icon: "⚡", color: "#2563eb" },
+  { title: "Site Audit",       desc: "Health score + issue breakdown",   path: "/site-audit",         icon: "🔍", color: "#16a34a" },
+  { title: "Keyword Magic",    desc: "Discover & analyze keywords",       path: "/keyword-magic-tool", icon: "🔑", color: "#7c3aed" },
+  { title: "SERP Analyzer",   desc: "Live search result analysis",       path: "/serp-analyzer",      icon: "📊", color: "#d97706" },
+  { title: "Backlinks",        desc: "Full link profile analysis",        path: "/backlinks",          icon: "🔗", color: "#0284c7" },
+  { title: "Agentic Crawl",   desc: "Multi-agent AI intelligence",       path: "/agentic-crawl",      icon: "🤖", color: "#dc2626" },
 ] as const;
 
 function QuickStartCards() {
@@ -310,13 +291,47 @@ function QuickStartCards() {
       transition={{ duration: 0.35, delay: 0.1 }}
       style={{ marginTop: 24 }}
     >
-      <h2 className="qa-kicker" style={{ marginBottom: 12 }}>Quick access</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 14 }}>
+        Quick Access
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
         {FEATURE_CARDS.map((c) => (
-          <Link key={c.path} to={c.path} className="qa-panel" style={{ textDecoration: "none", padding: "16px 18px" }}>
-            <div style={{ fontSize: 22, marginBottom: 6 }}>{c.icon}</div>
-            <div style={{ fontWeight: 600, fontSize: "0.88rem", marginBottom: 2 }}>{c.title}</div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{c.desc}</div>
+          <Link
+            key={c.path}
+            to={c.path}
+            style={{ textDecoration: "none" }}
+          >
+            <div style={{
+              background: "var(--glass)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              padding: "16px 18px",
+              cursor: "pointer",
+              transition: "box-shadow 0.15s, border-color 0.15s, transform 0.15s",
+              height: "100%",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLDivElement).style.boxShadow = "var(--shadow-md)";
+              (e.currentTarget as HTMLDivElement).style.borderColor = "var(--accent-muted)";
+              (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLDivElement).style.boxShadow = "";
+              (e.currentTarget as HTMLDivElement).style.borderColor = "";
+              (e.currentTarget as HTMLDivElement).style.transform = "";
+            }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: "var(--radius-sm)",
+                background: c.color + "14",
+                border: `1px solid ${c.color}28`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 18, marginBottom: 12,
+              }}>
+                {c.icon}
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 13.5, color: "var(--text)", marginBottom: 3 }}>{c.title}</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4 }}>{c.desc}</div>
+            </div>
           </Link>
         ))}
       </div>
@@ -352,27 +367,41 @@ function SystemHealth() {
 
   return (
     <motion.section
-      className="qa-panel"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: 0.2 }}
-      style={{ marginTop: 16 }}
+      style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap" }}
     >
-      <h2 className="qa-kicker" style={{ marginBottom: 10 }}>System status</h2>
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: "0.85rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span className={`qa-status-dot qa-status-dot--${stats?.ollamaAvailable ? "ok" : "off"}`} />
-          Ollama {stats?.ollamaAvailable ? "available" : "offline"}
+      {[
+        {
+          icon: stats?.ollamaAvailable ? "🟢" : "⚪",
+          label: "Ollama",
+          value: stats?.ollamaAvailable ? "Online" : "Offline",
+          color: stats?.ollamaAvailable ? "var(--ok)" : "var(--muted)",
+        },
+        {
+          icon: "📋",
+          label: "Past Runs",
+          value: String(recentRuns),
+          color: "var(--text)",
+        },
+        {
+          icon: "🧠",
+          label: "LLM Requests",
+          value: stats?.totalRequests ? String(stats.totalRequests) : "—",
+          color: "var(--text)",
+        },
+      ].map((item) => (
+        <div key={item.label} style={{
+          background: "var(--glass)", border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)", padding: "10px 16px",
+          display: "flex", alignItems: "center", gap: 10, fontSize: 13,
+        }}>
+          <span style={{ fontSize: 16 }}>{item.icon}</span>
+          <span style={{ color: "var(--muted)" }}>{item.label}</span>
+          <span style={{ fontWeight: 700, color: item.color }}>{item.value}</span>
         </div>
-        <div style={{ color: "var(--muted)" }}>
-          {recentRuns} past run{recentRuns !== 1 ? "s" : ""}
-        </div>
-        {stats && stats.totalRequests !== undefined && stats.totalRequests > 0 && (
-          <div style={{ color: "var(--muted)" }}>
-            {stats.totalRequests} LLM requests ({stats.fallbackCount} fallbacks)
-          </div>
-        )}
-      </div>
+      ))}
     </motion.section>
   );
 }

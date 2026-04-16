@@ -60,6 +60,14 @@ import { runAgenticPipeline, runSerpAnalysis, getSession as getAgenticSession, l
 import { searchSerp, searchSerpBatch, analyzeCompetitors, getSerpCacheStats, clearSerpCache } from "./agentic/duckduckgo-serp.js";
 import { getRouterStats as getLlmRouterStats, checkOllamaAvailable, resetRouterStats } from "./agentic/llm-router.js";
 import { ReportCache, type CachedReportData } from "./cache.js";
+import { fetchSuggestions, fetchQuestionSuggestions } from "./providers/google-suggest.js";
+import { fetchKeywordTrend } from "./providers/google-trends.js";
+import { fetchKeywordVolume, isGoogleAdsConfigured } from "./providers/google-ads.js";
+import {
+  loadTrackedPairs, saveTrackedPairs, addTrackedPair, removeTrackedPair,
+  appendSnapshot, getHistoryForKeyword, getHistoryForDomain, getAllStats,
+  type TrackedPair,
+} from "./position-db.js";
 
 function webDistRoot(): string {
   return path.join(process.cwd(), "web", "dist");
@@ -1625,6 +1633,47 @@ export async function runHealthDashboard(options: {
         }
       }
 
+      // Keyword Suggestions (Google Autocomplete — no key needed)
+      if (req.method === "POST" && url.pathname === "/api/keyword-suggestions") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { keyword?: string; locale?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const kw = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
+        if (!kw) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keyword required" })); return; }
+        const locale = typeof payload.locale === "string" ? payload.locale : "en";
+        try {
+          const [sugg, questions] = await Promise.allSettled([
+            fetchSuggestions(kw, locale),
+            fetchQuestionSuggestions(kw, locale),
+          ]);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=86400" });
+          res.end(JSON.stringify({
+            suggestions: sugg.status === "fulfilled" ? sugg.value.value : [],
+            questions: questions.status === "fulfilled" ? questions.value.value : [],
+            source: "google-suggest",
+          }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // Keyword Trends (Google Trends — no key needed)
+      if (req.method === "POST" && url.pathname === "/api/keyword-trends") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { keyword?: string; geo?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const kw = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
+        if (!kw) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keyword required" })); return; }
+        const geo = typeof payload.geo === "string" ? payload.geo : "";
+        try {
+          const trend = await fetchKeywordTrend(kw, geo);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
+          res.end(JSON.stringify(trend));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
       // Keyword Magic (Ollama-powered, seed keyword only)
       if (req.method === "POST" && url.pathname === "/api/keyword-magic") {
         let body: string;
@@ -2285,6 +2334,124 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Domain Authority (OpenPageRank free tier) ──
+      if (req.method === "POST" && url.pathname === "/api/domain-authority") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { domain?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const { fetchDomainAuthority, isOpenPageRankConfigured } = await import("./providers/open-page-rank.js");
+          if (!isOpenPageRankConfigured()) {
+            res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ configured: false, pageRank: null, domainAuthority: null, source: "openPageRank — set OPR_API_KEY in .env" }));
+            return;
+          }
+          const da = await fetchDomainAuthority(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
+          res.end(JSON.stringify({
+            configured: true,
+            domain: da.domain,
+            pageRankDecimal: da.pageRankDecimal.value,
+            authority0to100: da.authority0to100.value,
+            globalRank: da.globalRank?.value ?? null,
+            source: "open-page-rank",
+          }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Keyword Volume (Google Ads Keyword Planner) ──
+      if (req.method === "POST" && url.pathname === "/api/keyword-volume") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { keywords?: string[]; geo?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        if (!isGoogleAdsConfigured()) {
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ configured: false, error: "Set GOOGLE_ADS_DEVELOPER_TOKEN and GOOGLE_ADS_CUSTOMER_ID in .env — see src/health/providers/google-ads.ts for setup instructions" }));
+          return;
+        }
+        const keywords = Array.isArray(payload.keywords) ? payload.keywords.map(String).filter(Boolean).slice(0, 20) : [];
+        if (keywords.length === 0) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keywords array required" })); return; }
+        try {
+          const results = await fetchKeywordVolume(keywords, payload.geo ?? "US");
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=86400" });
+          res.end(JSON.stringify({ configured: true, results }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Position History CRUD ──────────────────────────────────────────────
+      // GET /api/history/keyword?domain=...&keyword=...
+      if (req.method === "GET" && url.pathname === "/api/history/keyword") {
+        const domain = url.searchParams.get("domain") ?? "";
+        const keyword = url.searchParams.get("keyword") ?? "";
+        if (!domain || !keyword) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain and keyword required" })); return; }
+        try {
+          const series = await getHistoryForKeyword(domain, keyword);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(series));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // GET /api/history/domain?domain=...
+      if (req.method === "GET" && url.pathname === "/api/history/domain") {
+        const domain = url.searchParams.get("domain") ?? "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const series = await getHistoryForDomain(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(series));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // GET /api/history/stats — all tracked pairs with latest snapshot
+      if (req.method === "GET" && url.pathname === "/api/history/stats") {
+        try {
+          const stats = await getAllStats();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(stats));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // POST /api/tracked-pairs — add a (domain, keyword) to track
+      if (req.method === "POST" && url.pathname === "/api/tracked-pairs") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { domain?: string; keyword?: string; remove?: boolean };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        const keyword = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
+        if (!domain || !keyword) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain and keyword required" })); return; }
+        try {
+          if (payload.remove) {
+            await removeTrackedPair(domain, keyword);
+          } else {
+            await addTrackedPair(domain, keyword);
+          }
+          const pairs = await loadTrackedPairs();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: true, pairs }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // GET /api/tracked-pairs — list all tracked pairs
+      if (req.method === "GET" && url.pathname === "/api/tracked-pairs") {
+        try {
+          const pairs = await loadTrackedPairs();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(pairs));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
       // ── Position Tracker: schedule a sweep and record into history-db ──
       if (req.method === "POST" && url.pathname === "/api/position-track") {
         let body: string;
@@ -2565,6 +2732,97 @@ export async function runHealthDashboard(options: {
 
   const baseUrl = `http://127.0.0.1:${options.port}/`;
   console.log(`[qa-agent] Live dashboard: ${baseUrl}`);
+
+  // ── Auto-start Ollama if installed but not running ───────────────────────
+  void (async () => {
+    const ollamaUrl = process.env.OLLAMA_BASE_URL?.trim() || "http://127.0.0.1:11434";
+    try {
+      const probe = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(1500) });
+      if (probe.ok) {
+        console.log("[qa-agent] Ollama already running at", ollamaUrl);
+        return;
+      }
+    } catch {
+      // not running — try to start it
+    }
+    try {
+      const child = spawn("ollama", ["serve"], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.unref();
+      console.log("[qa-agent] Started Ollama (pid", child.pid, ") — waiting for ready…");
+      // Poll up to 10 s
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          const r = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(800) });
+          if (r.ok) { console.log("[qa-agent] Ollama ready"); return; }
+        } catch { /* still starting */ }
+      }
+      console.warn("[qa-agent] Ollama did not respond within 10s — AI features may be limited");
+    } catch (e: any) {
+      if (e?.code === "ENOENT") {
+        console.log("[qa-agent] Ollama not installed — AI features unavailable. Install at https://ollama.com");
+      } else {
+        console.warn("[qa-agent] Could not start Ollama:", e?.message ?? e);
+      }
+    }
+  })();
+
+  // ── Daily GSC position cron ──────────────────────────────────────────────
+  // Runs once at startup (after 30s delay) and then every 24 hours.
+  // Fetches GSC position data for all tracked (domain, keyword) pairs and
+  // stores snapshots in data/position-history/.
+  async function runPositionCron(): Promise<void> {
+    try {
+      const pairs = await loadTrackedPairs();
+      if (pairs.length === 0) return;
+      const { getConnectionStatus } = await import("./providers/google-auth.js");
+      const status = await getConnectionStatus();
+      if (!status.connected) return;
+      const { queryGscAnalytics, listGscSites } = await import("./providers/google-search-console.js");
+      const sites = await listGscSites();
+      const today = new Date().toISOString().slice(0, 10);
+      for (const pair of pairs) {
+        try {
+          const cleanDomain = pair.domain.toLowerCase().replace(/^www\./, "");
+          const matchedSite = sites.find(s => {
+            const url = s.siteUrl;
+            let host = url.startsWith("sc-domain:") ? url.slice("sc-domain:".length) : "";
+            if (!host) { try { host = new URL(url).hostname; } catch { return false; } }
+            host = host.toLowerCase().replace(/^www\./, "");
+            return host === cleanDomain || cleanDomain.endsWith("." + host) || host.endsWith("." + cleanDomain);
+          });
+          if (!matchedSite) continue;
+          const rows = await queryGscAnalytics({
+            siteUrl: matchedSite.siteUrl,
+            dimensions: ["query"],
+            filter: { dimension: "query", operator: "equals", expression: pair.keyword },
+            rowLimit: 1,
+          });
+          const row = rows?.[0];
+          const pos = row ? row.position.value : null;
+          await appendSnapshot(pair.domain, pair.keyword, {
+            at: today,
+            position: pos !== null ? Math.round(pos * 10) / 10 : null,
+            clicks: row?.clicks.value ?? 0,
+            impressions: row?.impressions.value ?? 0,
+            ctr: row?.ctr?.value ?? 0,
+          });
+        } catch {
+          // Individual pair failures don't abort the cron
+        }
+      }
+      console.log(`[qa-agent] Position cron: updated ${pairs.length} tracked keywords`);
+    } catch (err) {
+      console.error("[qa-agent] Position cron error:", err);
+    }
+  }
+  // Run 30s after startup so GSC auth is ready, then every 24h
+  setTimeout(() => { void runPositionCron(); }, 30_000);
+  setInterval(() => { void runPositionCron(); }, 24 * 60 * 60 * 1000);
   if (options.openBrowser) {
     setTimeout(() => openBrowser(baseUrl), 400);
   }

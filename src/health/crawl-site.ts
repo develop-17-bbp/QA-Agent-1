@@ -14,13 +14,13 @@ function userAgent(): string {
 }
 
 const MAX_FETCH_ATTEMPTS = (() => {
-  const n = Number.parseInt(process.env.QA_AGENT_FETCH_MAX_ATTEMPTS ?? "3", 10);
-  return Number.isFinite(n) && n >= 1 && n <= 5 ? n : 3;
+  const n = Number.parseInt(process.env.QA_AGENT_FETCH_MAX_ATTEMPTS ?? "2", 10);
+  return Number.isFinite(n) && n >= 1 && n <= 5 ? n : 2;
 })();
 
 const RETRY_BACKOFF_MS = (() => {
-  const n = Number.parseInt(process.env.QA_AGENT_FETCH_RETRY_BACKOFF_MS ?? "100", 10);
-  return Number.isFinite(n) && n >= 0 && n <= 5000 ? n : 100;
+  const n = Number.parseInt(process.env.QA_AGENT_FETCH_RETRY_BACKOFF_MS ?? "80", 10);
+  return Number.isFinite(n) && n >= 0 && n <= 5000 ? n : 80;
 })();
 
 function sleep(ms: number): Promise<void> {
@@ -82,6 +82,49 @@ function isCloudflareEmailProtectionUrl(u: URL): boolean {
   return p.startsWith("/cdn-cgi/l/email-protection");
 }
 
+/**
+ * Skip URL patterns that are almost never HTML content pages:
+ * - CMS admin panels, login pages, cart/checkout flows
+ * - Static asset extensions (images, fonts, scripts, stylesheets, archives)
+ * - Feed/API endpoints, sitemaps (covered separately)
+ * - Session/token query strings that produce duplicate content
+ */
+const SKIP_PATH_PATTERNS = [
+  // CMS admin & tooling
+  /^\/wp-(admin|login|cron|json|includes\/)\b/i,
+  /^\/(admin|login|logout|signin|signout|dashboard|backend|cp|panel)\b/i,
+  // Static asset file extensions
+  /\.(jpe?g|png|gif|svg|webp|ico|bmp|tiff?|avif)(\?.*)?$/i,
+  /\.(woff2?|ttf|eot|otf)(\?.*)?$/i,
+  /\.(js|css|map|ts)(\?.*)?$/i,
+  /\.(zip|gz|tar|rar|7z|pdf|docx?|xlsx?|pptx?)(\?.*)?$/i,
+  /\.(mp4|webm|ogg|mp3|wav|flac|avi|mov)(\?.*)?$/i,
+  // Feeds, sitemaps, manifests
+  /\/(feed|rss|atom)(\/|\.xml)?(\?.*)?$/i,
+  /\/sitemap[\w-]*\.xml(\?.*)?$/i,
+  /\/manifest\.json(\?.*)?$/i,
+  // CDN / cache bust paths
+  /^\/cdn-cgi\//i,
+];
+
+const SKIP_QUERY_PARAMS = new Set([
+  "session_id", "PHPSESSID", "jsessionid", "sid",
+  "preview", "preview_id", "preview_nonce",
+  "wc-ajax", "action",
+]);
+
+function shouldSkipUrl(u: URL): boolean {
+  const path = u.pathname;
+  for (const re of SKIP_PATH_PATTERNS) {
+    if (re.test(path)) return true;
+  }
+  // Skip if any query param is a known session/preview key
+  for (const key of u.searchParams.keys()) {
+    if (SKIP_QUERY_PARAMS.has(key)) return true;
+  }
+  return false;
+}
+
 function normalizeHref(href: string, pageUrl: string): string | null {
   const trimmed = href.trim();
   if (!trimmed || trimmed.startsWith("#") || trimmed.toLowerCase().startsWith("javascript:")) {
@@ -91,6 +134,9 @@ function normalizeHref(href: string, pageUrl: string): string | null {
   try {
     const u = new URL(trimmed, pageUrl);
     if (isCloudflareEmailProtectionUrl(u)) return null;
+    if (shouldSkipUrl(u)) return null;
+    // Strip fragment — same page
+    u.hash = "";
     return u.href;
   } catch {
     return null;

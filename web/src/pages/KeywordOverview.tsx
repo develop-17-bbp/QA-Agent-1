@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { BarChart, Bar, ResponsiveContainer } from "recharts";
-import { fetchKeywordResearch, fetchGscKeywordStats, type GscSite } from "../api";
+import { fetchKeywordResearch, fetchKeywordSuggestions, fetchKeywordTrends, fetchGscKeywordStats, type GscSite } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
 /**
@@ -47,6 +47,9 @@ export default function KeywordOverview() {
   const overlay = useGoogleOverlay();
   const [perSiteGsc, setPerSiteGsc] = useState<PerSiteGscStat[]>([]);
   const [gscLoading, setGscLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [trend, setTrend] = useState<any>(null);
 
   const research = async () => {
     const kw = keyword.trim();
@@ -54,8 +57,19 @@ export default function KeywordOverview() {
     setLoading(true);
     setError(null);
     setPerSiteGsc([]);
+    setSuggestions([]);
+    setQuestions([]);
+    setTrend(null);
     try {
-      setData(await fetchKeywordResearch(kw));
+      const [main, sugg, tr] = await Promise.allSettled([
+        fetchKeywordResearch(kw),
+        fetchKeywordSuggestions(kw),
+        fetchKeywordTrends(kw),
+      ]);
+      if (main.status === "fulfilled") setData(main.value);
+      else setError(main.reason?.message ?? String(main.reason));
+      if (sugg.status === "fulfilled") { setSuggestions(sugg.value.suggestions); setQuestions(sugg.value.questions); }
+      if (tr.status === "fulfilled") setTrend(tr.value);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -130,6 +144,41 @@ export default function KeywordOverview() {
       {loading && (
         <div className="qa-panel">
           <div className="qa-loading-panel">Querying Google Trends, Suggest, Wikipedia and DuckDuckGo SERP…</div>
+        </div>
+      )}
+
+      {(trend || suggestions.length > 0 || questions.length > 0) && !loading && (
+        <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
+          {trend && (
+            <div className="qa-panel" style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+              <span style={{ fontWeight: 600 }}>Trend:</span>
+              <span style={{ fontWeight: 700, color: trend.trend === "rising" ? "#38a169" : trend.trend === "falling" ? "#e53e3e" : "var(--muted)" }}>
+                {trend.trend === "rising" ? "↑ Rising" : trend.trend === "falling" ? "↓ Falling" : "→ Stable"}
+              </span>
+              {trend.peakMonth && <span style={{ fontSize: 11, color: "var(--muted)" }}>Peak: {trend.peakMonth}</span>}
+              <span style={{ fontSize: 10, color: "var(--muted)" }}>google-trends</span>
+            </div>
+          )}
+          {suggestions.length > 0 && (
+            <div className="qa-panel" style={{ padding: "10px 16px", flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 6 }}>Related (Google Suggest)</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {suggestions.map(s => (
+                  <button key={s} onClick={() => { setKeyword(s); }} style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--glass2)", cursor: "pointer", color: "var(--text)" }}>{s}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {questions.length > 0 && (
+            <div className="qa-panel" style={{ padding: "10px 16px", flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 6 }}>People Also Ask</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {questions.map(q => (
+                  <button key={q} onClick={() => setKeyword(q)} style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--glass2)", cursor: "pointer", color: "var(--text)" }}>{q}</button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

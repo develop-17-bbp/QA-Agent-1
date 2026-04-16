@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { fetchKeywordMagic, queryGscAnalytics } from "../api";
+import { fetchKeywordMagic, fetchKeywordSuggestions, fetchKeywordTrends, fetchKeywordVolume, queryGscAnalytics } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
 const INTENT_COLORS: Record<string, string> = { Informational: "#3182ce", Commercial: "#dd6b20", Transactional: "#38a169", Navigational: "#111111" };
@@ -38,14 +38,40 @@ export default function KeywordMagicTool() {
   const [gscDomain, setGscDomain] = useState("");
   const [gscKwStats, setGscKwStats] = useState<Map<string, any>>(new Map());
   const [gscLoading, setGscLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [trend, setTrend] = useState<any>(null);
+  const [volumeMap, setVolumeMap] = useState<Map<string, any>>(new Map());
 
   const overlay = useGoogleOverlay(gscDomain.trim() || undefined);
 
-  const search = async () => {
-    if (!seed.trim()) return;
-    setLoading(true); setError("");
-    try { setData(await fetchKeywordMagic(seed.trim())); } catch (e: any) { setError(e.message); }
-    finally { setLoading(false); }
+  const search = async (kw?: string) => {
+    const term = (kw ?? seed).trim();
+    if (!term) return;
+    if (kw) setSeed(kw);
+    setLoading(true); setError(""); setSuggestions([]); setQuestions([]); setTrend(null);
+    try {
+      const [main, sugg, tr] = await Promise.allSettled([
+        fetchKeywordMagic(term),
+        fetchKeywordSuggestions(term),
+        fetchKeywordTrends(term),
+      ]);
+      if (main.status === "fulfilled") {
+        setData(main.value);
+        // Fetch volume for discovered keywords (silent — only works if Google Ads configured)
+        const kws: string[] = (main.value?.keywords ?? []).slice(0, 20).map((k: any) => k.keyword).filter(Boolean);
+        if (kws.length > 0) {
+          fetchKeywordVolume(kws).then(r => {
+            if (!r?.configured) return;
+            const m = new Map<string, any>();
+            for (const row of r.results ?? []) m.set(row.keyword, row);
+            setVolumeMap(m);
+          }).catch(() => {});
+        }
+      } else setError(main.reason?.message ?? String(main.reason));
+      if (sugg.status === "fulfilled") { setSuggestions(sugg.value.suggestions); setQuestions(sugg.value.questions); }
+      if (tr.status === "fulfilled") setTrend(tr.value);
+    } finally { setLoading(false); }
   };
 
   useEffect(() => {
@@ -81,7 +107,7 @@ export default function KeywordMagicTool() {
 
       <div className="qa-panel" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <input className="qa-input" value={seed} onChange={e => setSeed(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Enter seed keyword..." style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
-        <button className="qa-btn" onClick={search} disabled={loading || !seed.trim()} style={{ padding: "8px 24px" }}>{loading ? "Researching..." : "Research"}</button>
+        <button className="qa-btn-primary" onClick={() => search()} disabled={loading || !seed.trim()} style={{ padding: "8px 24px" }}>{loading ? "Researching..." : "Research"}</button>
         <input className="qa-input" value={gscDomain} onChange={e => setGscDomain(e.target.value)} placeholder="Your domain for GSC overlay (optional — e.g. example.com)" style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
         {overlay.connected && overlay.matchedGscSite && (
           <span style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20, background: "#e8f5e8", color: "#1a7a1a", fontWeight: 600, border: "1px solid #a3d9a3", whiteSpace: "nowrap" }}>
@@ -92,6 +118,42 @@ export default function KeywordMagicTool() {
 
       {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 16 }}>{error}</div>}
       {loading && <div className="qa-panel" style={{ marginTop: 20 }}><div className="qa-loading-panel">Fetching from live providers...</div></div>}
+
+      {/* Google Suggest — real autocomplete results */}
+      {(suggestions.length > 0 || questions.length > 0 || trend) && !loading && (
+        <div style={{ display: "flex", gap: 14, marginTop: 16, flexWrap: "wrap" }}>
+          {trend && (
+            <div className="qa-panel" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+              <span style={{ fontWeight: 600 }}>Trend:</span>
+              <span style={{ fontWeight: 700, color: trend.trend === "rising" ? "#38a169" : trend.trend === "falling" ? "#e53e3e" : "var(--muted)" }}>
+                {trend.trend === "rising" ? "↑ Rising" : trend.trend === "falling" ? "↓ Falling" : "→ Stable"}
+              </span>
+              {trend.peakMonth && <span style={{ color: "var(--muted)", fontSize: 12 }}>Peak: {trend.peakMonth}</span>}
+              <span style={{ fontSize: 10, color: "var(--muted)" }}>google-trends</span>
+            </div>
+          )}
+          {suggestions.length > 0 && (
+            <div className="qa-panel" style={{ padding: "12px 16px", flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 8 }}>Google Suggest</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {suggestions.map(s => (
+                  <button key={s} onClick={() => search(s)} style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--glass2)", cursor: "pointer", color: "var(--text)" }}>{s}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {questions.length > 0 && (
+            <div className="qa-panel" style={{ padding: "12px 16px", flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 8 }}>People Also Ask</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {questions.map(q => (
+                  <button key={q} onClick={() => search(q)} style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--glass2)", cursor: "pointer", color: "var(--text)" }}>{q}</button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {data && !loading && (
         <>
@@ -172,13 +234,24 @@ export default function KeywordMagicTool() {
                 <tbody>
                   {filtered.map((kw: any, i: number) => {
                     const gscRow = gscKwStats.get(kw.keyword.toLowerCase());
+                    const adsRow = volumeMap.get(kw.keyword.toLowerCase());
+                    const realVolume = adsRow?.avgMonthlySearches?.value ?? null;
                     return (
                       <tr key={i}>
                         <td style={{ fontWeight: 500 }}>{kw.keyword}</td>
                         <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{kw.source ?? "—"}</td>
                         <td style={{ color: "var(--text-secondary)" }}>
-                          {kw.volume}
-                          <ConfidenceDot confidence={kw.volumeData?.confidence} source={kw.volumeData?.source} value={kw.volumeData?.value} />
+                          {realVolume !== null ? (
+                            <span title="Real monthly searches from Google Ads Keyword Planner" style={{ fontWeight: 600, color: "var(--text)" }}>
+                              {realVolume.toLocaleString()}
+                              <ConfidenceDot confidence="high" source="google-ads" value={realVolume} />
+                            </span>
+                          ) : (
+                            <>
+                              {kw.volume}
+                              <ConfidenceDot confidence={kw.volumeData?.confidence} source={kw.volumeData?.source} value={kw.volumeData?.value} />
+                            </>
+                          )}
                         </td>
                         <td>
                           <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (DIFF_COLORS[kw.difficulty] ?? "#888") + "20", color: DIFF_COLORS[kw.difficulty] ?? "#888", fontWeight: 600 }}>{kw.difficulty}</span>

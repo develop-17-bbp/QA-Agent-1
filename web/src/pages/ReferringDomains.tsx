@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
-import { fetchReferringDomains } from "../api";
+import { fetchReferringDomains, fetchDomainAuthority } from "../api";
 
 const AUTH_COLORS = { high: "#38a169", medium: "#dd6b20", low: "#e53e3e" };
 
@@ -11,6 +11,18 @@ export default function ReferringDomains() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [daInput, setDaInput] = useState("");
+  const [daData, setDaData] = useState<any>(null);
+  const [daLoading, setDaLoading] = useState(false);
+  const [daError, setDaError] = useState("");
+
+  const lookupDa = async () => {
+    const d = daInput.trim();
+    if (!d) return;
+    setDaLoading(true); setDaError(""); setDaData(null);
+    try { setDaData(await fetchDomainAuthority(d)); } catch (e: any) { setDaError(e.message); }
+    finally { setDaLoading(false); }
+  };
 
   const load = async (rid: string) => { setRunId(rid); if (!rid) return; setLoading(true); setError(""); try { setData(await fetchReferringDomains(rid)); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
 
@@ -28,6 +40,42 @@ export default function ReferringDomains() {
 
       {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing domains...</div>}
       {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+
+      {/* Domain Authority Lookup — OpenPageRank free tier */}
+      <div className="qa-panel" style={{ marginTop: 20, padding: 16 }}>
+        <div className="qa-panel-title" style={{ marginBottom: 8 }}>Domain Authority Lookup</div>
+        <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 10px" }}>Check any domain's authority score via OpenPageRank (free). Set <code>OPR_API_KEY</code> in .env to enable.</p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input className="qa-input" placeholder="e.g. example.com" value={daInput} onChange={e => setDaInput(e.target.value)} onKeyDown={e => e.key === "Enter" && lookupDa()} style={{ flex: 1, padding: "7px 10px" }} />
+          <button className="qa-btn-primary" onClick={lookupDa} disabled={daLoading || !daInput.trim()}>{daLoading ? "Checking…" : "Lookup"}</button>
+        </div>
+        {daError && <div className="qa-alert qa-alert--error" style={{ marginTop: 8 }}>{daError}</div>}
+        {daData && !daLoading && (
+          <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
+            {daData.configured === false ? (
+              <div style={{ fontSize: 13, color: "var(--muted)", fontStyle: "italic" }}>{daData.source}</div>
+            ) : (
+              <>
+                <div className="qa-panel" style={{ padding: "10px 16px", textAlign: "center", minWidth: 120 }}>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Authority (0–100)</div>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: (daData.authority0to100 ?? 0) >= 60 ? "#38a169" : (daData.authority0to100 ?? 0) >= 30 ? "#dd6b20" : "#e53e3e" }}>{daData.authority0to100 ?? "—"}</div>
+                </div>
+                <div className="qa-panel" style={{ padding: "10px 16px", textAlign: "center", minWidth: 120 }}>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Page Rank (0–10)</div>
+                  <div style={{ fontSize: 28, fontWeight: 700 }}>{daData.pageRankDecimal ?? "—"}</div>
+                </div>
+                {daData.globalRank != null && (
+                  <div className="qa-panel" style={{ padding: "10px 16px", textAlign: "center", minWidth: 120 }}>
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Global Rank</div>
+                    <div style={{ fontSize: 20, fontWeight: 700 }}>#{daData.globalRank.toLocaleString()}</div>
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: "var(--muted)", alignSelf: "center" }}>source: {daData.source}</div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {data && !loading && (
         <>

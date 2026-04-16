@@ -13,7 +13,7 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
 }
 
 /** Parallel fetches per site — main speed lever for large uncapped crawls. */
-const DEFAULT_FETCH_CONCURRENCY = String(envInt("QA_AGENT_FETCH_CONCURRENCY", 16, 1, 256));
+const DEFAULT_FETCH_CONCURRENCY = String(envInt("QA_AGENT_FETCH_CONCURRENCY", 32, 1, 256));
 /** How many sites to crawl at once (health command). */
 const DEFAULT_SITE_CONCURRENCY = String(envInt("QA_AGENT_SITE_CONCURRENCY", 4, 1, 64));
 const DEFAULT_PAGESPEED_CONCURRENCY = String(envInt("QA_AGENT_PAGESPEED_CONCURRENCY", 3, 1, 64));
@@ -65,8 +65,8 @@ program
   )
   .option(
     "--timeout-ms <n>",
-    "Per-request timeout (ms) for crawl and link checks; slow CMS pages often need 45s+ under parallel load",
-    "45000",
+    "Per-request timeout (ms) for crawl and link checks; most sites respond within 15s under parallel load",
+    "15000",
   )
   .option(
     "--fetch-concurrency <n>",

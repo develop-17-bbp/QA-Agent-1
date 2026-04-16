@@ -53,6 +53,30 @@ else
   fi
 fi
 
+# ── Auto-start Ollama if available and not already running ──────────────────
+if command -v ollama >/dev/null 2>&1; then
+  if ! curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+    echo "==> Starting Ollama in background…"
+    ollama serve >/dev/null 2>&1 &
+    OLLAMA_PID=$!
+    # Wait up to 8 s for Ollama to become ready
+    for i in $(seq 1 16); do
+      sleep 0.5
+      if curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+        echo "    Ollama ready (pid $OLLAMA_PID)"
+        break
+      fi
+    done
+    if ! curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+      echo "    Warning: Ollama did not respond within 8s — AI features may be unavailable." >&2
+    fi
+  else
+    echo "==> Ollama already running at http://127.0.0.1:11434/"
+  fi
+else
+  echo "==> Ollama not found on PATH — AI features will be unavailable. Install at https://ollama.com"
+fi
+
 DASHBOARD_PORT="${QA_AGENT_PORT:-3847}"
 echo "==> Starting dashboard at http://127.0.0.1:${DASHBOARD_PORT}/ (Ctrl+C to stop)"
 echo "    Port: QA_AGENT_PORT in .env, or --port (default 3847). If EADDRINUSE: npm run dashboard:kill"

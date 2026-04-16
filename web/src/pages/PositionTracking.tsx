@@ -23,6 +23,9 @@ import {
   fetchGoogleAuthStatus,
   fetchGscSites,
   fetchGscKeywordStats,
+  fetchHistoryStats,
+  addTrackedPairApi,
+  removeTrackedPairApi,
   type GscSite,
 } from "../api";
 
@@ -90,6 +93,8 @@ export default function PositionTracking() {
   const [liveResults, setLiveResults] = useState<LiveResult[] | null>(null);
   const [historySeries, setHistorySeries] = useState<HistorySeries[]>([]);
   const [sampledAt, setSampledAt] = useState<string>("");
+  const [trackedStats, setTrackedStats] = useState<any[]>([]);
+  const [trackedLoading, setTrackedLoading] = useState(false);
 
   // GSC overlay state — real impressions/clicks/position from the user's
   // verified Search Console property for the domain being tracked.
@@ -97,6 +102,19 @@ export default function PositionTracking() {
   const [gscSites, setGscSites] = useState<GscSite[]>([]);
   const [gscStats, setGscStats] = useState<Map<string, GscStat>>(new Map());
   const [gscMatchedSite, setGscMatchedSite] = useState<GscSite | null>(null);
+
+  // Load stored tracked-keyword stats on mount
+  useEffect(() => {
+    setTrackedLoading(true);
+    fetchHistoryStats()
+      .then((stats) => setTrackedStats(Array.isArray(stats) ? stats : []))
+      .catch(() => {})
+      .finally(() => setTrackedLoading(false));
+  }, []);
+
+  const refreshTrackedStats = () => {
+    fetchHistoryStats().then((stats) => setTrackedStats(Array.isArray(stats) ? stats : [])).catch(() => {});
+  };
 
   // Load GSC connection status + site list on mount. Failures are silent —
   // this is a bonus overlay, not a core feature.
@@ -148,13 +166,20 @@ export default function PositionTracking() {
       const resp = await trackPositions(pairs, { strictHost });
       setLiveResults(resp.results ?? []);
       setSampledAt(resp.sampledAt ?? "");
+
+      // Auto-register each pair for daily GSC cron tracking
+      await Promise.allSettled(kws.map(kw => addTrackedPairApi(dom, kw)));
+      refreshTrackedStats();
+
       // Fetch history series for each keyword so the chart reflects
       // previously-recorded samples plus the one we just appended.
       const series: HistorySeries[] = [];
       for (const kw of kws) {
         try {
           const hist = await fetchKeywordHistory(dom, kw);
-          const points: HistoryPoint[] = (hist?.series ?? []).map((s: any) => ({
+          // New endpoint returns { points: [...] }; legacy returns { series: [...] }
+          const rawPoints = hist?.points ?? hist?.series ?? [];
+          const points: HistoryPoint[] = rawPoints.map((s: any) => ({
             at: typeof s.at === "string" ? s.at.slice(0, 10) : "",
             position: typeof s.position === "number" ? s.position : null,
           }));
@@ -225,6 +250,50 @@ export default function PositionTracking() {
       <h1 className="qa-page-title">Position Tracking</h1>
       <p className="qa-page-desc">Track keyword SEO optimization scores across your crawled pages, and sweep live DuckDuckGo rankings for any domain.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
+
+      {/* Daily-tracked keywords — stored position history from GSC cron */}
+      {(trackedLoading || trackedStats.length > 0) && (
+        <div className="qa-panel" style={{ marginTop: 20, padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div className="qa-panel-title">Daily Tracked Keywords</div>
+            <span style={{ fontSize: 11, color: "var(--muted)" }}>Auto-updated every 24h via GSC · snapshots stored in data/position-history/</span>
+          </div>
+          {trackedLoading && <div className="qa-loading-panel"><div className="qa-spinner" />Loading...</div>}
+          {trackedStats.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid var(--border)" }}>
+                  {["Domain", "Keyword", "Latest Pos.", "Best", "Trend", "Days", ""].map(h => (
+                    <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {trackedStats.map((s: any) => (
+                  <tr key={`${s.domain}::${s.keyword}`} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td style={{ padding: "7px 10px", fontWeight: 500 }}>{s.domain}</td>
+                    <td style={{ padding: "7px 10px" }}>{s.keyword}</td>
+                    <td style={{ padding: "7px 10px", fontWeight: 700, color: s.latest?.position !== null ? (s.latest.position <= 3 ? "#38a169" : s.latest.position <= 10 ? "#dd6b20" : "var(--muted)") : "var(--muted)" }}>
+                      {s.latest?.position !== null ? `#${s.latest.position}` : "—"}
+                    </td>
+                    <td style={{ padding: "7px 10px", color: "#38a169" }}>{s.best !== null ? `#${s.best}` : "—"}</td>
+                    <td style={{ padding: "7px 10px", fontWeight: 600, color: s.trend === "rising" ? "#38a169" : s.trend === "falling" ? "#e53e3e" : "var(--muted)" }}>
+                      {s.trend === "rising" ? "↑ Rising" : s.trend === "falling" ? "↓ Falling" : s.trend === "stable" ? "→ Stable" : "New"}
+                    </td>
+                    <td style={{ padding: "7px 10px", color: "var(--muted)" }}>{s.snapshotCount}</td>
+                    <td style={{ padding: "7px 10px" }}>
+                      <button onClick={() => removeTrackedPairApi(s.domain, s.keyword).then(refreshTrackedStats)} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid var(--border)", background: "none", cursor: "pointer", color: "var(--muted)" }}>Remove</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {!trackedLoading && trackedStats.length === 0 && (
+            <div className="qa-empty">No tracked keywords yet — run a Live Rank Sweep below to start tracking.</div>
+          )}
+        </div>
+      )}
 
       {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing positions...</div>}
       {error && <div className="qa-panel" style={{ marginTop: 20, color: "#e53e3e" }}>{error}</div>}

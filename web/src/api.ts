@@ -270,6 +270,21 @@ export function fetchSerpSearch(query: string) { return postApi<any>("/api/serp-
 // External backlinks (OPR + Common Crawl + URLScan + Wayback)
 export function fetchExternalBacklinks(domain: string) { return postApi<any>("/api/external-backlinks", { domain }); }
 
+// Domain Authority (OpenPageRank)
+export function fetchDomainAuthority(domain: string) {
+  return dedupFetch(`/api/domain-authority:${domain}`, () => postApi<any>("/api/domain-authority", { domain }), 60 * 60 * 1000);
+}
+
+// Keyword Suggestions (Google Autocomplete — no key needed)
+export function fetchKeywordSuggestions(keyword: string, locale = "en") {
+  return postApi<{ suggestions: string[]; questions: string[]; source: string }>("/api/keyword-suggestions", { keyword, locale });
+}
+
+// Keyword Trends (Google Trends)
+export function fetchKeywordTrends(keyword: string, geo = "") {
+  return postApi<any>("/api/keyword-trends", { keyword, geo });
+}
+
 // Position tracker sweep (records into history-db)
 // strictHost: when false (default), wikipedia.org matches en.wikipedia.org. When true, exact host equality only.
 export function trackPositions(
@@ -301,6 +316,35 @@ export async function fetchTrafficHistory(domain: string): Promise<any> {
 }
 export async function fetchHistoryStats(): Promise<any> {
   const res = await fetch("/api/history/stats");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Tracked pairs — position history CRUD
+export async function fetchTrackedPairs(): Promise<any[]> {
+  const res = await fetch("/api/tracked-pairs");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function addTrackedPairApi(domain: string, keyword: string): Promise<any> {
+  const res = await fetch("/api/tracked-pairs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, keyword }) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function removeTrackedPairApi(domain: string, keyword: string): Promise<any> {
+  const res = await fetch("/api/tracked-pairs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, keyword, remove: true }) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function fetchPositionHistoryForKeyword(domain: string, keyword: string): Promise<any> {
+  const res = await fetch(`/api/history/keyword?domain=${encodeURIComponent(domain)}&keyword=${encodeURIComponent(keyword)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Keyword Volume (Google Ads Keyword Planner)
+export async function fetchKeywordVolume(keywords: string[], geo = "US"): Promise<any> {
+  const res = await fetch("/api/keyword-volume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keywords, geo }) });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
