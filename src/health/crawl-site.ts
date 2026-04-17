@@ -67,7 +67,12 @@ function shouldRetryFetch(attempt: number, message: string): boolean {
 
 function sameOrigin(a: string, b: string): boolean {
   try {
-    return new URL(a).origin === new URL(b).origin;
+    const ua = new URL(a);
+    const ub = new URL(b);
+    // Treat www.example.com and example.com as same origin
+    const ha = ua.hostname.replace(/^www\./, "");
+    const hb = ub.hostname.replace(/^www\./, "");
+    return ha === hb;
   } catch {
     return false;
   }
@@ -346,6 +351,53 @@ function capOrUnlimited(n: number): number {
   return n > 0 ? n : Number.MAX_SAFE_INTEGER;
 }
 
+/** Fetch sitemap(s) and return all <loc> URLs. Non-fatal — returns [] on error. */
+async function fetchSitemapUrls(baseUrl: URL, timeoutMs: number): Promise<string[]> {
+  const urls: string[] = [];
+  const sitemapQueue: string[] = [];
+
+  // Try sitemap_index.xml first (WordPress default), then sitemap.xml
+  for (const path of ["/sitemap_index.xml", "/sitemap.xml"]) {
+    try {
+      const res = await fetch(new URL(path, baseUrl).href, {
+        headers: { "User-Agent": userAgent() },
+        redirect: "follow",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (!text.includes("<")) continue;
+
+      // Extract nested sitemap URLs (for sitemap index files)
+      const sitemapMatches = text.matchAll(/<sitemap>\s*<loc>([^<]+)<\/loc>/gi);
+      for (const m of sitemapMatches) sitemapQueue.push(m[1].trim());
+
+      // Extract direct page URLs
+      const locMatches = text.matchAll(/<url>\s*<loc>([^<]+)<\/loc>/gi);
+      for (const m of locMatches) urls.push(m[1].trim());
+
+      if (sitemapQueue.length > 0 || urls.length > 0) break; // found valid sitemap
+    } catch { /* non-fatal */ }
+  }
+
+  // Fetch nested sitemaps (e.g., post-sitemap.xml, page-sitemap.xml)
+  for (const smUrl of sitemapQueue) {
+    try {
+      const res = await fetch(smUrl, {
+        headers: { "User-Agent": userAgent() },
+        redirect: "follow",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) continue;
+      const text = await res.text();
+      const locMatches = text.matchAll(/<url>\s*<loc>([^<]+)<\/loc>/gi);
+      for (const m of locMatches) urls.push(m[1].trim());
+    } catch { /* non-fatal */ }
+  }
+
+  return urls;
+}
+
 export async function crawlSite(options: {
   startUrl: string;
   maxPages: number;
@@ -356,7 +408,19 @@ export async function crawlSite(options: {
   fetchConcurrency: number;
 }): Promise<CrawlSiteResult> {
   const started = Date.now();
-  const base = new URL(options.startUrl);
+  let base = new URL(options.startUrl);
+
+  // Follow redirect to get the canonical base URL (e.g., nwface.com → www.nwface.com)
+  try {
+    const probe = await fetch(base.href, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(8000),
+      headers: { "User-Agent": userAgent() },
+    });
+    if (probe.url) base = new URL(probe.url);
+  } catch { /* use original */ }
+
   const hostname = base.hostname;
   const siteId = siteIdFromUrl(options.startUrl);
 
@@ -369,6 +433,23 @@ export async function crawlSite(options: {
   const queued = new Set<string>();
   const queue: string[] = [base.href];
   queued.add(base.href);
+
+  // Seed BFS queue from sitemap — discovers pages not reachable through internal links
+  try {
+    const sitemapUrls = await fetchSitemapUrls(base, options.requestTimeoutMs);
+    for (const sUrl of sitemapUrls) {
+      if (sameOrigin(sUrl, base.href) && !queued.has(sUrl)) {
+        const normalized = normalizeHref(sUrl, base.href);
+        if (normalized && !queued.has(normalized)) {
+          queue.push(normalized);
+          queued.add(normalized);
+        }
+      }
+    }
+    if (sitemapUrls.length > 0) {
+      console.log(`[crawl] ${hostname}: seeded ${queued.size - 1} URLs from sitemap`);
+    }
+  } catch { /* sitemap fetch failed — continue with BFS only */ }
 
   const pages: PageFetchRecord[] = [];
   const brokenLinks: BrokenLinkRecord[] = [];
