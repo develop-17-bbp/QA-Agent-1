@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
 import { fetchBrandMonitoring } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
 const CONFIDENCE_LABELS: Record<string, string> = { high: "real", medium: "derived", low: "estimated" };
 
@@ -82,8 +83,8 @@ export default function BrandMonitoring() {
         Tip: enter a domain form (e.g. <code>acme.com</code>) to enable Common Crawl + URLScan lookups.
       </div>
 
-      {error && <div className="qa-alert qa-alert--error">{error}</div>}
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Monitoring brand across real providers...</div>}
+      {error && <ErrorBanner error={error} />}
+      {loading && <LoadingPanel message="Monitoring brand across real providers…" />}
 
       {data && !loading && (
         <>

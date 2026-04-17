@@ -4,6 +4,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchOnPageSeoChecker, fetchGscPageStats, fetchGa4PageTraffic } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const STATUS_COLORS: Record<string, string> = { pass: "#38a169", warning: "#dd6b20", fail: "#e53e3e" };
 const STATUS_LABELS: Record<string, string> = { pass: "PASS", warning: "WARN", fail: "FAIL" };
 
@@ -104,8 +105,8 @@ export default function OnPageSeoChecker() {
         <button className="qa-btn-primary" onClick={analyze} disabled={loading || !runId}>{loading ? "Analyzing..." : "Check"}</button>
       </div>
 
-      {error && <div className="qa-alert qa-alert--error">{error}</div>}
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Checking page against real crawl fields...</div>}
+      {error && <ErrorBanner error={error} />}
+      {loading && <LoadingPanel message="Checking page against real crawl fields…" />}
 
       {data && !loading && (
         <>

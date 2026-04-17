@@ -4,6 +4,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
 import { fetchReferringDomains, fetchDomainAuthority } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const AUTH_COLORS = { high: "#38a169", medium: "#dd6b20", low: "#e53e3e" };
 
 export default function ReferringDomains() {
@@ -38,8 +39,8 @@ export default function ReferringDomains() {
       <p className="qa-page-desc">Analyze external domains linking to your sites.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing domains...</div>}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {loading && <LoadingPanel message="Analyzing domains…" />}
+      {error && <ErrorBanner error={error} />}
 
       {/* Domain Authority Lookup — OpenPageRank free tier */}
       <div className="qa-panel" style={{ marginTop: 20, padding: 16 }}>
@@ -49,7 +50,7 @@ export default function ReferringDomains() {
           <input className="qa-input" placeholder="e.g. example.com" value={daInput} onChange={e => setDaInput(e.target.value)} onKeyDown={e => e.key === "Enter" && lookupDa()} style={{ flex: 1, padding: "7px 10px" }} />
           <button className="qa-btn-primary" onClick={lookupDa} disabled={daLoading || !daInput.trim()}>{daLoading ? "Checking…" : "Lookup"}</button>
         </div>
-        {daError && <div className="qa-alert qa-alert--error" style={{ marginTop: 8 }}>{daError}</div>}
+        {daError && <ErrorBanner error={daError} />}
         {daData && !daLoading && (
           <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
             {daData.configured === false ? (

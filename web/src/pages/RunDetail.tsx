@@ -16,6 +16,7 @@ import JobCard from "../components/JobCard";
 import MarkdownBody from "../components/MarkdownBody";
 import SiteStatusEditor from "../components/SiteStatusEditor";
 
+import { ErrorBanner } from "../components/UI";
 function decodeRunIdParam(raw: string | undefined): string {
   if (raw == null || raw === "") return "";
   try {
@@ -121,7 +122,7 @@ export default function RunDetail() {
           Loading run metadata…
         </p>
       ) : null}
-      {err ? <div className="qa-alert qa-alert--error" style={{ marginTop: 16, maxWidth: 560 }}>{err}</div> : null}
+      {err ? <ErrorBanner error={err} /> : null}
       {err ? (
         <p style={{ marginTop: 12, fontSize: "0.9rem" }}>
           <Link to="/reports" style={{ color: "var(--accent2)" }}>

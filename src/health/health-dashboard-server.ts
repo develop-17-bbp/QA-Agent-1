@@ -1888,6 +1888,83 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Google Ads OAuth (separate from GSC/GA4) ──────────────────────
+
+      if (req.method === "GET" && url.pathname === "/api/auth/gads/start") {
+        const clientId     = process.env.GOOGLE_ADS_CLIENT_ID?.trim();
+        const redirectUri  = process.env.GOOGLE_ADS_REDIRECT_URI?.trim() || `http://localhost:${options.port}/api/auth/gads/callback`;
+        if (!clientId) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "GOOGLE_ADS_CLIENT_ID not set in .env" }));
+          return;
+        }
+        const params = new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          response_type: "code",
+          scope: "https://www.googleapis.com/auth/adwords",
+          access_type: "offline",
+          prompt: "consent",
+        });
+        res.writeHead(302, { Location: `https://accounts.google.com/o/oauth2/v2/auth?${params}`, "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/auth/gads/callback") {
+        const code     = url.searchParams.get("code");
+        const errParam = url.searchParams.get("error");
+        if (errParam) {
+          res.writeHead(302, { Location: `/google-connections?gads_err=${encodeURIComponent(errParam)}` });
+          res.end();
+          return;
+        }
+        if (!code) {
+          res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Missing authorization code");
+          return;
+        }
+        try {
+          const clientId     = process.env.GOOGLE_ADS_CLIENT_ID!.trim();
+          const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET!.trim();
+          const redirectUri  = process.env.GOOGLE_ADS_REDIRECT_URI?.trim() || `http://localhost:${options.port}/api/auth/gads/callback`;
+          const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
+          });
+          const tokenData = await tokenRes.json() as { refresh_token?: string; error?: string };
+          if (!tokenData.refresh_token) {
+            throw new Error(tokenData.error ?? "No refresh token returned — ensure prompt=consent was set");
+          }
+          // Write refresh token to .env file at runtime so it persists
+          const envPath = path.join(process.cwd(), ".env");
+          let envContent = await readFile(envPath, "utf8").catch(() => "");
+          if (envContent.includes("GOOGLE_ADS_REFRESH_TOKEN=")) {
+            envContent = envContent.replace(/^GOOGLE_ADS_REFRESH_TOKEN=.*$/m, `GOOGLE_ADS_REFRESH_TOKEN=${tokenData.refresh_token}`);
+          } else {
+            envContent += `\nGOOGLE_ADS_REFRESH_TOKEN=${tokenData.refresh_token}\n`;
+          }
+          await writeFile(envPath, envContent, "utf8");
+          process.env.GOOGLE_ADS_REFRESH_TOKEN = tokenData.refresh_token;
+          res.writeHead(302, { Location: "/google-connections?gads_connected=1" });
+          res.end();
+        } catch (e) {
+          const msg = encodeURIComponent(e instanceof Error ? e.message : String(e));
+          res.writeHead(302, { Location: `/google-connections?gads_err=${msg}` });
+          res.end();
+        }
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/auth/gads/status") {
+        const configured = !!(process.env.GOOGLE_ADS_CLIENT_ID?.trim() && process.env.GOOGLE_ADS_CLIENT_SECRET?.trim());
+        const connected  = !!process.env.GOOGLE_ADS_REFRESH_TOKEN?.trim();
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify({ configured, connected }));
+        return;
+      }
+
       // ── GSC ───────────────────────────────────────────────────────────
 
       if (req.method === "GET" && url.pathname === "/api/gsc/sites") {

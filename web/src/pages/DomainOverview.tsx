@@ -9,6 +9,7 @@ import {
 } from "../api";
 import { useGoogleOverlay, findMatchingGscSite, findMatchingGa4Property } from "../lib/google-overlay";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 type GscTotals = {
   clicks: number;
   impressions: number;
@@ -128,12 +129,9 @@ export default function DomainOverview() {
       </p>
       <RunSelector value={runId} onChange={load} label="Select run" />
       {loading && (
-        <div className="qa-panel qa-loading-panel" style={{ marginTop: 20 }}>
-          <span className="qa-spinner" />
-          <span>Analyzing...</span>
-        </div>
+        <LoadingPanel message="Analyzing…" />
       )}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {error && <ErrorBanner error={error} />}
       {data && !loading && overlay.loaded && !overlay.connected && (
         <div className="qa-panel" style={{ marginTop: 14, padding: 10, fontSize: 12, display: "flex", alignItems: "center", gap: 8, background: "var(--bg-app)" }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#94a3b8" }} />

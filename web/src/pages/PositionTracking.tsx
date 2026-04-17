@@ -29,6 +29,7 @@ import {
   type GscSite,
 } from "../api";
 
+import { LoadingPanel, ErrorBanner, EmptyState } from "../components/UI";
 const COLORS = ["#38a169", "#111111", "#dd6b20", "#e53e3e"];
 const HISTORY_COLORS = ["#111111", "#38a169", "#dd6b20", "#e53e3e", "#805ad5", "#d69e2e"];
 
@@ -258,7 +259,7 @@ export default function PositionTracking() {
             <div className="qa-panel-title">Daily Tracked Keywords</div>
             <span style={{ fontSize: 11, color: "var(--muted)" }}>Auto-updated every 24h via GSC · snapshots stored in data/position-history/</span>
           </div>
-          {trackedLoading && <div className="qa-loading-panel"><div className="qa-spinner" />Loading...</div>}
+          {trackedLoading && <LoadingPanel message="Loading…" />}
           {trackedStats.length > 0 && (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
@@ -290,12 +291,12 @@ export default function PositionTracking() {
             </table>
           )}
           {!trackedLoading && trackedStats.length === 0 && (
-            <div className="qa-empty">No tracked keywords yet — run a Live Rank Sweep below to start tracking.</div>
+            <EmptyState title="No tracked keywords yet — run a Live Rank Sweep below to start tracking." />
           )}
         </div>
       )}
 
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing positions...</div>}
+      {loading && <LoadingPanel message="Analyzing positions…" />}
       {error && <div className="qa-panel" style={{ marginTop: 20, color: "#e53e3e" }}>{error}</div>}
 
       {data && !loading && (
@@ -425,7 +426,7 @@ export default function PositionTracking() {
           {sampledAt && <span style={{ fontSize: 11, color: "var(--muted)" }}>Last sampled: {sampledAt.slice(0, 19).replace("T", " ")} UTC</span>}
         </div>
 
-        {liveError && <div className="qa-alert qa-alert--error" style={{ marginTop: 12 }}>{liveError}</div>}
+        {liveError && <ErrorBanner error={liveError} />}
 
         {liveResults && liveResults.length > 0 && (
           <div style={{ marginTop: 14 }}>

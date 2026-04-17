@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { fetchLogAnalysis } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
 const CONFIDENCE_LABELS: Record<string, string> = { high: "real", medium: "derived", low: "estimated" };
 
@@ -99,8 +100,8 @@ export default function LogFileAnalyzer() {
         <button className="qa-btn-primary" onClick={analyze} disabled={loading || !logContent.trim()} style={{ marginTop: 8 }}>{loading ? "Analyzing..." : "Analyze Logs"}</button>
       </div>
 
-      {error && <div className="qa-alert qa-alert--error">{error}</div>}
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Parsing log file...</div>}
+      {error && <ErrorBanner error={error} />}
+      {loading && <LoadingPanel message="Parsing log file…" />}
 
       {!data && !loading && (
         <div className="qa-panel" style={{ marginTop: 16, padding: 20, textAlign: "center", color: "var(--text-secondary)" }}>

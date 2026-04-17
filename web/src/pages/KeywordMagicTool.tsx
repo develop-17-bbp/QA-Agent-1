@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { fetchKeywordMagic, fetchKeywordSuggestions, fetchKeywordTrends, fetchKeywordVolume, queryGscAnalytics } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
+import { ErrorBanner } from "../components/UI";
 const INTENT_COLORS: Record<string, string> = { Informational: "#3182ce", Commercial: "#dd6b20", Transactional: "#38a169", Navigational: "#111111" };
 const DIFF_COLORS: Record<string, string> = { Easy: "#38a169", Medium: "#dd6b20", Hard: "#e53e3e", "Very Hard": "#9b2c2c" };
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
@@ -116,7 +117,7 @@ export default function KeywordMagicTool() {
         )}
       </div>
 
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 16 }}>{error}</div>}
+      {error && <ErrorBanner error={error} />}
       {loading && <div className="qa-panel" style={{ marginTop: 20 }}><div className="qa-loading-panel">Fetching from live providers...</div></div>}
 
       {/* Google Suggest — real autocomplete results */}

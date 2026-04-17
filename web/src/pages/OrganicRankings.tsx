@@ -5,6 +5,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchOrganicRankings, fetchGscPagesBatch } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 function getGsc(gscPages: Map<string, any>, url: string) {
   if (gscPages.has(url)) return gscPages.get(url);
   try {
@@ -81,12 +82,9 @@ export default function OrganicRankings() {
       <p className="qa-page-desc">Pages ranked by organic SEO value score based on on-page signals.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
       {loading && (
-        <div className="qa-panel qa-loading-panel" style={{ marginTop: 20 }}>
-          <span className="qa-spinner" />
-          <span>Analyzing...</span>
-        </div>
+        <LoadingPanel message="Analyzing…" />
       )}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {error && <ErrorBanner error={error} />}
       {/* Data-source pill — shown when Google is connected and a GSC site matched */}
       {overlay.connected && data && !loading && (
         <div className="qa-panel" style={{ marginTop: 14, padding: 10, fontSize: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>

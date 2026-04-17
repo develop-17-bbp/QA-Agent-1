@@ -4,6 +4,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveCo
 import RunSelector from "../components/RunSelector";
 import { fetchBacklinks, fetchExternalBacklinks } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 export default function Backlinks() {
   const [runId, setRunId] = useState("");
   const [data, setData] = useState<any>(null);
@@ -37,8 +38,8 @@ export default function Backlinks() {
       <p className="qa-page-desc">Analyze your internal and external link structure from crawl data.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing backlinks...</div>}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {loading && <LoadingPanel message="Analyzing backlinks…" />}
+      {error && <ErrorBanner error={error} />}
 
       {data && !loading && (
         <>
@@ -124,8 +125,8 @@ export default function Backlinks() {
           </button>
         </div>
 
-        {extLoading && <div className="qa-loading-panel" style={{ marginTop: 14 }}><div className="qa-spinner" />Querying OpenPageRank, Common Crawl, URLScan and Wayback Machine…</div>}
-        {extError && <div className="qa-alert qa-alert--error" style={{ marginTop: 14 }}>{extError}</div>}
+        {extLoading && <LoadingPanel message="Querying OpenPageRank, Common Crawl, URLScan and Wayback Machine…" />}
+        {extError && <ErrorBanner error={extError} />}
 
         {extData && !extLoading && (
           <div style={{ marginTop: 14 }}>

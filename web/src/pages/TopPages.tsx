@@ -4,6 +4,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchTopPages, fetchGscPagesBatch, fetchGa4PagesBatch } from "../api";
 import { toPathname, useGoogleOverlay } from "../lib/google-overlay";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 type GscPageStat = {
   page: string;
   clicks?: { value: number; note?: string };
@@ -96,12 +97,9 @@ export default function TopPages() {
       <p className="qa-page-desc">Pages ranked by composite SEO + performance score, overlaid with real impressions and sessions from your connected Google account.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
       {loading && (
-        <div className="qa-panel qa-loading-panel" style={{ marginTop: 20 }}>
-          <span className="qa-spinner" />
-          <span>Analyzing...</span>
-        </div>
+        <LoadingPanel message="Analyzing…" />
       )}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {error && <ErrorBanner error={error} />}
       {data && !loading && (
         <>
           <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>

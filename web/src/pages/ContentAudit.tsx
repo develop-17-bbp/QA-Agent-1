@@ -10,6 +10,7 @@ import {
   type Ga4Property,
 } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const CLASS_COLORS: Record<string, string> = { good: "#38a169", "needs-improvement": "#dd6b20", poor: "#e53e3e" };
 
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
@@ -171,8 +172,8 @@ export default function ContentAudit() {
         </div>
       )}
 
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Auditing content...</div>}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {loading && <LoadingPanel message="Auditing content…" />}
+      {error && <ErrorBanner error={error} />}
 
       {data && !loading && (
         <>

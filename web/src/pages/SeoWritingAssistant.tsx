@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
 import { fetchSeoWritingAssistant } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const SCORE_COLOR = (s: number) => s >= 80 ? "#38a169" : s >= 60 ? "#dd6b20" : "#e53e3e";
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
 const CONFIDENCE_LABELS: Record<string, string> = { high: "real", medium: "derived", low: "estimated" };
@@ -68,8 +69,8 @@ export default function SeoWritingAssistant() {
         <button className="qa-btn-primary" onClick={analyze} disabled={loading || !runId || !url.trim()}>{loading ? "Analyzing..." : "Analyze"}</button>
       </div>
 
-      {error && <div className="qa-alert qa-alert--error">{error}</div>}
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Analyzing content...</div>}
+      {error && <ErrorBanner error={error} />}
+      {loading && <LoadingPanel message="Analyzing content…" />}
 
       {data && !loading && (
         <>

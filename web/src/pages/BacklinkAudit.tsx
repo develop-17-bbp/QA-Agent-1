@@ -4,6 +4,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
 import { fetchBacklinkAudit } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const HEALTH_COLORS: Record<string, string> = { broken: "#e53e3e", "server-error": "#9b2c2c", "client-error": "#dd6b20", redirect: "#d69e2e" };
 
 export default function BacklinkAudit() {
@@ -27,8 +28,8 @@ export default function BacklinkAudit() {
       <p className="qa-page-desc">Audit your link profile health and identify toxic or broken links.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Auditing backlinks...</div>}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {loading && <LoadingPanel message="Auditing backlinks…" />}
+      {error && <ErrorBanner error={error} />}
 
       {data && !loading && (
         <>

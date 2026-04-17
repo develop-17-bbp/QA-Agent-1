@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import { fetchSerpAnalysis, queryGscAnalytics } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const DIFF_COLORS = { easy: "#38a169", medium: "#dd6b20", hard: "#e53e3e" };
 
 export default function SerpAnalyzer() {
@@ -73,8 +74,8 @@ export default function SerpAnalyzer() {
         <button className="qa-btn-primary" onClick={analyze} disabled={loading || !keywords.trim()} style={{ marginTop: 8, padding: "8px 24px" }}>{loading ? "Searching..." : "Analyze SERPs"}</button>
       </div>
 
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 16 }}>{error}</div>}
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Scraping search results...</div>}
+      {error && <ErrorBanner error={error} />}
+      {loading && <LoadingPanel message="Scraping search results…" />}
 
       {data && !loading && (
         <>

@@ -5,6 +5,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchSiteAudit, fetchGscPagesBatch } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
+import { LoadingPanel, ErrorBanner, EmptyState } from "../components/UI";
 function getGsc(gscPages: Map<string, any>, url: string) {
   if (gscPages.has(url)) return gscPages.get(url);
   try {
@@ -97,12 +98,9 @@ export default function SiteAudit() {
       <RunSelector value={runId} onChange={load} label="Select run" />
 
       {loading && (
-        <div className="qa-panel qa-loading-panel" style={{ marginTop: 20 }}>
-          <span className="qa-spinner" />
-          <span>Analyzing...</span>
-        </div>
+        <LoadingPanel message="Analyzing…" />
       )}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {error && <ErrorBanner error={error} />}
 
       {data && !loading && (
         <>
@@ -214,7 +212,7 @@ export default function SiteAudit() {
                   )}
                 </div>
               ))}
-              {filtered.length === 0 && <div className="qa-empty">No issues found</div>}
+              {filtered.length === 0 && <EmptyState title="No issues found" />}
             </div>
           </div>
         </>

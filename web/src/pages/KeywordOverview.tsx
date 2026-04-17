@@ -4,6 +4,7 @@ import { BarChart, Bar, ResponsiveContainer } from "recharts";
 import { fetchKeywordResearch, fetchKeywordSuggestions, fetchKeywordTrends, fetchGscKeywordStats, type GscSite } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
+import { ErrorBanner } from "../components/UI";
 /**
  * Per-site GSC stats for the queried keyword. Each entry is what Google
  * actually reported for the user's own verified property over the last
@@ -140,7 +141,7 @@ export default function KeywordOverview() {
         </button>
       </div>
 
-      {error && <div className="qa-alert qa-alert--error">{error}</div>}
+      {error && <ErrorBanner error={error} />}
       {loading && (
         <div className="qa-panel">
           <div className="qa-loading-panel">Querying Google Trends, Suggest, Wikipedia and DuckDuckGo SERP…</div>

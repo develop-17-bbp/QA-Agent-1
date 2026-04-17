@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { fetchGoogleAuthStatus, fetchLlmStats } from "../api";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 // ─── Data honesty ────────────────────────────────────────────────────────────
 type SourceClass = "real" | "llm-safe" | "mixed";
@@ -262,7 +263,8 @@ function Topbar() {
         padding: "0 24px",
         height: 54,
         borderBottom: "1px solid var(--border)",
-      }}>
+      }}
+      className="qa-brand-row">
         <Link to="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
           <span className="qa-app-mark" aria-hidden />
           <span>
@@ -308,13 +310,14 @@ function Topbar() {
         padding: "0 20px",
         height: 42,
         overflow: "visible",
-      }}>
+      }}
+      className="qa-topnav-row">
         {NAV_GROUPS.map((g) => (
           <NavGroupBtn key={g.label} group={g} />
         ))}
 
         {/* Data honesty legend — far right */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14, fontSize: 10.5, color: "var(--muted)", flexShrink: 0 }}>
+        <div className="qa-data-honesty" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14, fontSize: 10.5, color: "var(--muted)", flexShrink: 0 }}>
           {(["real", "llm-safe", "mixed"] as SourceClass[]).map((cls) => (
             <span key={cls} style={{ display: "flex", alignItems: "center", gap: 4 }} title={DOT_TITLES[cls]}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: DOT_COLORS[cls], display: "inline-block", flexShrink: 0 }} />
@@ -330,6 +333,7 @@ function Topbar() {
 // ─── Layout ───────────────────────────────────────────────────────────────────
 export default function AppLayout() {
   const { pathname } = useLocation();
+  usePageTitle();
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--bg-app)" }}>

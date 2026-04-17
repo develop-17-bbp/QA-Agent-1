@@ -12,6 +12,7 @@ import {
   type GscSite,
 } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 /**
  * Google Search Console + GA4 integration page.
  *
@@ -121,10 +122,7 @@ export default function GoogleConnections() {
       )}
 
       {loading && (
-        <div className="qa-loading-panel" style={{ marginTop: 20 }}>
-          <div className="qa-spinner" />
-          Checking connection...
-        </div>
+        <LoadingPanel message="Checking connection…" />
       )}
 
       {!loading && status && (
@@ -236,7 +234,7 @@ export default function GoogleConnections() {
                   Verified sites from <code>webmasters/v3/sites</code>. Any property listed here can return real clicks,
                   impressions, CTR, and position for its own queries and pages.
                 </div>
-                {sitesError && <div className="qa-alert qa-alert--error">{sitesError}</div>}
+                {sitesError && <ErrorBanner error={sitesError} />}
                 {!sitesError && sites.length === 0 && (
                   <div style={{ fontSize: 13, color: "var(--text-secondary)", padding: "12px 0" }}>
                     No verified GSC properties found for this account.
@@ -272,7 +270,7 @@ export default function GoogleConnections() {
                   Properties from <code>analyticsadmin/v1beta/accountSummaries</code>. Each property can return real
                   sessions, users, engagement, and per-page views via the Data API.
                 </div>
-                {propertiesError && <div className="qa-alert qa-alert--error">{propertiesError}</div>}
+                {propertiesError && <ErrorBanner error={propertiesError} />}
                 {!propertiesError && properties.length === 0 && (
                   <div style={{ fontSize: 13, color: "var(--text-secondary)", padding: "12px 0" }}>
                     No GA4 properties found for this account.
@@ -331,6 +329,87 @@ export default function GoogleConnections() {
           )}
         </>
       )}
+
+      {/* ── Google Ads Connection ───────────────────────────────── */}
+      <GoogleAdsCard />
     </motion.div>
+  );
+}
+
+// ── Google Ads OAuth card ────────────────────────────────────────────────────
+function GoogleAdsCard() {
+  const [status, setStatus] = useState<{ configured: boolean; connected: boolean } | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [banner, setBanner] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("gads_connected") === "1") {
+      setBanner({ kind: "ok", text: "Google Ads connected! Keyword volumes are now live." });
+      navigate("/google-connections", { replace: true });
+    } else if (params.get("gads_err")) {
+      setBanner({ kind: "err", text: `Google Ads OAuth failed: ${params.get("gads_err")}` });
+      navigate("/google-connections", { replace: true });
+    }
+    fetch("/api/auth/gads/status")
+      .then((r) => r.json())
+      .then((d) => setStatus(d))
+      .catch(() => setStatus({ configured: false, connected: false }));
+  }, []);
+
+  return (
+    <div className="qa-panel" style={{ marginTop: 24, padding: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <span style={{ fontSize: 20 }}>📊</span>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Google Ads — Keyword Volumes</div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>
+            Real monthly search volumes via Google Ads Keyword Planner (free tier)
+          </div>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{
+            width: 10, height: 10, borderRadius: "50%", display: "inline-block",
+            background: status?.connected ? "#22c55e" : "#9ca3af",
+          }} />
+          <span style={{ fontSize: 13, color: "var(--muted)" }}>
+            {status === null ? "Checking…" : status.connected ? "Connected" : status.configured ? "Not connected" : "Not configured"}
+          </span>
+        </div>
+      </div>
+
+      {banner && (
+        <div className={`qa-alert ${banner.kind === "ok" ? "qa-alert--ok" : "qa-alert--error"}`} style={{ marginBottom: 14 }}>
+          {banner.text}
+        </div>
+      )}
+
+      {status?.connected ? (
+        <div className="qa-alert qa-alert--ok">
+          ✅ Google Ads is connected. Keyword volumes are live in Keyword Magic Tool, Keyword Overview, and URL Report.
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.6 }}>
+            Connects your Google Ads account to fetch real monthly search volumes. Uses a separate OAuth flow from GSC/GA4.
+            Requires <code>GOOGLE_ADS_CLIENT_ID</code>, <code>GOOGLE_ADS_CLIENT_SECRET</code>, and <code>GOOGLE_ADS_DEVELOPER_TOKEN</code> in <code>.env</code>.
+          </div>
+          <button
+            className="qa-btn-primary"
+            disabled={!status?.configured}
+            onClick={() => { window.location.href = "/api/auth/gads/start"; }}
+            style={{ padding: "8px 20px" }}
+          >
+            Connect Google Ads
+          </button>
+          {!status?.configured && (
+            <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted)" }}>
+              Set <code>GOOGLE_ADS_CLIENT_ID</code> and <code>GOOGLE_ADS_CLIENT_SECRET</code> in <code>.env</code> first.
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }

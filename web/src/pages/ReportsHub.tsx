@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { fetchHistory, type HealthRunMeta } from "../api";
 import { formatDeviceDateTime, formatDurationMs } from "../lib/time";
 
+import { ErrorBanner, EmptyState } from "../components/UI";
 export default function ReportsHub() {
   const [latest, setLatest] = useState<HealthRunMeta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,11 +58,11 @@ export default function ReportsHub() {
       </div>
 
       <h2 style={{ fontSize: "0.875rem", fontWeight: 600, margin: "32px 0 14px", color: "var(--muted)" }}>Recent reports</h2>
-      {err ? <div className="qa-alert qa-alert--error" style={{ marginTop: 8 }}>{err}</div> : null}
+      {err ? <ErrorBanner error={err} /> : null}
       {loading ? (
-        <div className="qa-empty">Loading recent reports…</div>
+        <EmptyState title="Loading recent reports…" />
       ) : latest.length === 0 ? (
-        <div className="qa-empty">No runs yet. Start a crawl from the Dashboard.</div>
+        <EmptyState title="No runs yet. Start a crawl from the Dashboard." />
       ) : (
         <motion.ul
           initial={{ opacity: 0 }}

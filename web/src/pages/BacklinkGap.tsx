@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
 import { fetchBacklinkGap } from "../api";
 
+import { LoadingPanel } from "../components/UI";
 type SortField = "url" | "count";
 type SortDir = "asc" | "desc";
 
@@ -173,9 +174,7 @@ export default function BacklinkGap() {
         </div>
       )}
       {loading && (
-        <div className="qa-loading-panel" style={{ marginTop: 20 }}>
-          <div className="qa-spinner" />Analyzing backlink gap...
-        </div>
+        <LoadingPanel message="Analyzing backlink gap…" />
       )}
 
       {data && !loading && (

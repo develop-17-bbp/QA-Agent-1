@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
 import { fetchLocalSeo } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const CATEGORY_ORDER = ["NAP & Contact", "Schema Markup", "Localization", "Discoverability"];
 
 const STATUS_COLOR: Record<string, string> = {
@@ -54,8 +55,8 @@ export default function LocalSeo() {
         <button className="qa-btn-primary" onClick={analyze} disabled={loading || !businessName.trim() || !location.trim() || !runId}>{loading ? "Analyzing..." : "Run Checklist"}</button>
       </div>
 
-      {error && <div className="qa-alert qa-alert--error">{error}</div>}
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Running local SEO checks against crawl + live HTML...</div>}
+      {error && <ErrorBanner error={error} />}
+      {loading && <LoadingPanel message="Running local SEO checks against crawl + live HTML…" />}
 
       {data && !loading && (
         <>

@@ -4,6 +4,7 @@ import { fetchHistory, streamUrl, type HealthRunMeta } from "../api";
 import JobCard from "../components/JobCard";
 import type { HealthSsePayload } from "../types/healthSse";
 
+import { ErrorBanner } from "../components/UI";
 export default function RunHistory() {
   const [days, setDays] = useState<{ date: string; runs: HealthRunMeta[] }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +52,7 @@ export default function RunHistory() {
         </p>
       </motion.div>
 
-      {err ? <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{err}</div> : null}
+      {err ? <ErrorBanner error={err} /> : null}
 
       <h2 style={{ fontSize: "0.875rem", fontWeight: 600, margin: "24px 0 14px", color: "var(--muted)" }}>
         Activity · {totalRuns} run{totalRuns === 1 ? "" : "s"}

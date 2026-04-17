@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { fetchKeywordLists, saveKeywordListApi, deleteKeywordListApi, analyzeKeywordListApi } from "../api";
 
+import { ErrorBanner, EmptyState } from "../components/UI";
 export default function KeywordManager() {
   const [lists, setLists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +48,7 @@ export default function KeywordManager() {
       <h1 className="qa-page-title">Keyword Manager</h1>
       <p className="qa-page-desc" style={{ marginBottom: 16 }}>Create, manage, and analyze keyword lists. Lists are saved locally for persistence.</p>
 
-      {error && <div className="qa-alert qa-alert--error" style={{ marginBottom: 16 }}>{error}</div>}
+      {error && <ErrorBanner error={error} />}
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {/* Create new list */}
@@ -62,7 +63,7 @@ export default function KeywordManager() {
         <div className="qa-panel" style={{ padding: 16, flex: "1 1 320px" }}>
           <div className="qa-panel-title" style={{ marginBottom: 12 }}>Your Lists ({lists.length})</div>
           {loading && <div style={{ color: "var(--text-secondary)" }}>Loading...</div>}
-          {!loading && lists.length === 0 && <div className="qa-empty">No lists yet. Create one to get started.</div>}
+          {!loading && lists.length === 0 && <EmptyState title="No lists yet. Create one to get started." />}
           <div style={{ maxHeight: 300, overflowY: "auto" }}>
             {lists.map((l: any) => (
               <div key={l.name} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>

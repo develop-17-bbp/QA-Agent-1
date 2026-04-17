@@ -1,40 +1,54 @@
+import { lazy, Suspense } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
+
+// ── Eager loads (core pages) ──────────────────────────────────────────────
 import Dashboard from "./pages/Dashboard";
-import RunHistory from "./pages/RunHistory";
-import ReportsHub from "./pages/ReportsHub";
-import RunDetail from "./pages/RunDetail";
-import Upload from "./pages/Upload";
-import QueryLab from "./pages/QueryLab";
-import SiteAudit from "./pages/SiteAudit";
-import OnPageSeoChecker from "./pages/OnPageSeoChecker";
-import PositionTracking from "./pages/PositionTracking";
-import DomainOverview from "./pages/DomainOverview";
-import OrganicRankings from "./pages/OrganicRankings";
-import TopPages from "./pages/TopPages";
-import CompareDomains from "./pages/CompareDomains";
-import KeywordGap from "./pages/KeywordGap";
-import BacklinkGap from "./pages/BacklinkGap";
-import KeywordOverview from "./pages/KeywordOverview";
-import KeywordMagicTool from "./pages/KeywordMagicTool";
-import KeywordStrategyBuilder from "./pages/KeywordStrategyBuilder";
-import KeywordManager from "./pages/KeywordManager";
-import SeoWritingAssistant from "./pages/SeoWritingAssistant";
-import SeoContentTemplate from "./pages/SeoContentTemplate";
-import TopicResearch from "./pages/TopicResearch";
-import ContentAudit from "./pages/ContentAudit";
-import PostTracking from "./pages/PostTracking";
-import Backlinks from "./pages/Backlinks";
-import ReferringDomains from "./pages/ReferringDomains";
-import BacklinkAudit from "./pages/BacklinkAudit";
-import TrafficAnalytics from "./pages/TrafficAnalytics";
-import BrandMonitoring from "./pages/BrandMonitoring";
-import LogFileAnalyzer from "./pages/LogFileAnalyzer";
-import LocalSeo from "./pages/LocalSeo";
-import SerpAnalyzer from "./pages/SerpAnalyzer";
-import AgenticCrawl from "./pages/AgenticCrawl";
-import GoogleConnections from "./pages/GoogleConnections";
-import UrlReport from "./pages/UrlReport";
+
+// ── Lazy loads (code-split per route) ─────────────────────────────────────
+const RunHistory = lazy(() => import("./pages/RunHistory"));
+const ReportsHub = lazy(() => import("./pages/ReportsHub"));
+const RunDetail = lazy(() => import("./pages/RunDetail"));
+const Upload = lazy(() => import("./pages/Upload"));
+const QueryLab = lazy(() => import("./pages/QueryLab"));
+const SiteAudit = lazy(() => import("./pages/SiteAudit"));
+const OnPageSeoChecker = lazy(() => import("./pages/OnPageSeoChecker"));
+const PositionTracking = lazy(() => import("./pages/PositionTracking"));
+const DomainOverview = lazy(() => import("./pages/DomainOverview"));
+const OrganicRankings = lazy(() => import("./pages/OrganicRankings"));
+const TopPages = lazy(() => import("./pages/TopPages"));
+const CompareDomains = lazy(() => import("./pages/CompareDomains"));
+const KeywordGap = lazy(() => import("./pages/KeywordGap"));
+const BacklinkGap = lazy(() => import("./pages/BacklinkGap"));
+const KeywordOverview = lazy(() => import("./pages/KeywordOverview"));
+const KeywordMagicTool = lazy(() => import("./pages/KeywordMagicTool"));
+const KeywordStrategyBuilder = lazy(() => import("./pages/KeywordStrategyBuilder"));
+const KeywordManager = lazy(() => import("./pages/KeywordManager"));
+const SeoWritingAssistant = lazy(() => import("./pages/SeoWritingAssistant"));
+const SeoContentTemplate = lazy(() => import("./pages/SeoContentTemplate"));
+const TopicResearch = lazy(() => import("./pages/TopicResearch"));
+const ContentAudit = lazy(() => import("./pages/ContentAudit"));
+const PostTracking = lazy(() => import("./pages/PostTracking"));
+const Backlinks = lazy(() => import("./pages/Backlinks"));
+const ReferringDomains = lazy(() => import("./pages/ReferringDomains"));
+const BacklinkAudit = lazy(() => import("./pages/BacklinkAudit"));
+const TrafficAnalytics = lazy(() => import("./pages/TrafficAnalytics"));
+const BrandMonitoring = lazy(() => import("./pages/BrandMonitoring"));
+const LogFileAnalyzer = lazy(() => import("./pages/LogFileAnalyzer"));
+const LocalSeo = lazy(() => import("./pages/LocalSeo"));
+const SerpAnalyzer = lazy(() => import("./pages/SerpAnalyzer"));
+const AgenticCrawl = lazy(() => import("./pages/AgenticCrawl"));
+const GoogleConnections = lazy(() => import("./pages/GoogleConnections"));
+const UrlReport = lazy(() => import("./pages/UrlReport"));
+
+function LazyFallback() {
+  return (
+    <div className="qa-loading-panel" style={{ minHeight: 300 }}>
+      <span className="qa-spinner qa-spinner--lg" />
+      <span style={{ color: "var(--muted)", fontSize: 13 }}>Loading…</span>
+    </div>
+  );
+}
 
 function DashboardRoute() {
   const { state } = useLocation();
@@ -44,65 +58,65 @@ function DashboardRoute() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        {/* Workspace */}
-        <Route path="/" element={<DashboardRoute />} />
-        <Route path="/history" element={<RunHistory />} />
-        <Route path="/reports" element={<ReportsHub />} />
-        <Route path="/upload" element={<Upload />} />
-        <Route path="/run/:runId" element={<RunDetail />} />
+    <Suspense fallback={<LazyFallback />}>
+      <Routes>
+        <Route element={<AppLayout />}>
+          {/* Workspace */}
+          <Route path="/" element={<DashboardRoute />} />
+          <Route path="/history" element={<RunHistory />} />
+          <Route path="/reports" element={<ReportsHub />} />
+          <Route path="/upload" element={<Upload />} />
+          <Route path="/run/:runId" element={<RunDetail />} />
 
-        {/* SEO Audit */}
-        <Route path="/site-audit" element={<SiteAudit />} />
-        <Route path="/onpage-seo-checker" element={<OnPageSeoChecker />} />
-        <Route path="/position-tracking" element={<PositionTracking />} />
+          {/* SEO Audit */}
+          <Route path="/url-report" element={<UrlReport />} />
+          <Route path="/site-audit" element={<SiteAudit />} />
+          <Route path="/onpage-seo-checker" element={<OnPageSeoChecker />} />
+          <Route path="/position-tracking" element={<PositionTracking />} />
 
-        {/* Competitive Analysis */}
-        <Route path="/domain-overview" element={<DomainOverview />} />
-        <Route path="/organic-rankings" element={<OrganicRankings />} />
-        <Route path="/top-pages" element={<TopPages />} />
-        <Route path="/compare-domains" element={<CompareDomains />} />
-        <Route path="/keyword-gap" element={<KeywordGap />} />
-        <Route path="/backlink-gap" element={<BacklinkGap />} />
-        <Route path="/traffic-analytics" element={<TrafficAnalytics />} />
+          {/* Competitive Analysis */}
+          <Route path="/domain-overview" element={<DomainOverview />} />
+          <Route path="/organic-rankings" element={<OrganicRankings />} />
+          <Route path="/top-pages" element={<TopPages />} />
+          <Route path="/compare-domains" element={<CompareDomains />} />
+          <Route path="/keyword-gap" element={<KeywordGap />} />
+          <Route path="/backlink-gap" element={<BacklinkGap />} />
+          <Route path="/traffic-analytics" element={<TrafficAnalytics />} />
 
-        {/* Keyword Research */}
-        <Route path="/keyword-overview" element={<KeywordOverview />} />
-        <Route path="/keyword-magic-tool" element={<KeywordMagicTool />} />
-        <Route path="/keyword-strategy" element={<KeywordStrategyBuilder />} />
-        <Route path="/keyword-manager" element={<KeywordManager />} />
+          {/* Keyword Research */}
+          <Route path="/keyword-overview" element={<KeywordOverview />} />
+          <Route path="/keyword-magic-tool" element={<KeywordMagicTool />} />
+          <Route path="/keyword-strategy" element={<KeywordStrategyBuilder />} />
+          <Route path="/keyword-manager" element={<KeywordManager />} />
 
-        {/* Content Marketing */}
-        <Route path="/seo-writing-assistant" element={<SeoWritingAssistant />} />
-        <Route path="/topic-research" element={<TopicResearch />} />
-        <Route path="/seo-content-template" element={<SeoContentTemplate />} />
-        <Route path="/content-audit" element={<ContentAudit />} />
-        <Route path="/post-tracking" element={<PostTracking />} />
+          {/* Content Marketing */}
+          <Route path="/seo-writing-assistant" element={<SeoWritingAssistant />} />
+          <Route path="/topic-research" element={<TopicResearch />} />
+          <Route path="/seo-content-template" element={<SeoContentTemplate />} />
+          <Route path="/content-audit" element={<ContentAudit />} />
+          <Route path="/post-tracking" element={<PostTracking />} />
 
-        {/* Link Building */}
-        <Route path="/backlinks" element={<Backlinks />} />
-        <Route path="/referring-domains" element={<ReferringDomains />} />
-        <Route path="/backlink-audit" element={<BacklinkAudit />} />
+          {/* Link Building */}
+          <Route path="/backlinks" element={<Backlinks />} />
+          <Route path="/referring-domains" element={<ReferringDomains />} />
+          <Route path="/backlink-audit" element={<BacklinkAudit />} />
 
-        {/* AI Tools */}
-        <Route path="/query-lab" element={<QueryLab />} />
-        <Route path="/serp-analyzer" element={<SerpAnalyzer />} />
-        <Route path="/agentic-crawl" element={<AgenticCrawl />} />
+          {/* AI Tools */}
+          <Route path="/query-lab" element={<QueryLab />} />
+          <Route path="/serp-analyzer" element={<SerpAnalyzer />} />
+          <Route path="/agentic-crawl" element={<AgenticCrawl />} />
 
-        {/* Monitoring */}
-        <Route path="/brand-monitoring" element={<BrandMonitoring />} />
-        <Route path="/log-file-analyzer" element={<LogFileAnalyzer />} />
+          {/* Monitoring */}
+          <Route path="/brand-monitoring" element={<BrandMonitoring />} />
+          <Route path="/log-file-analyzer" element={<LogFileAnalyzer />} />
 
-        {/* Local SEO */}
-        <Route path="/local-seo" element={<LocalSeo />} />
+          {/* Local SEO */}
+          <Route path="/local-seo" element={<LocalSeo />} />
 
-        {/* URL Report */}
-        <Route path="/url-report" element={<UrlReport />} />
-
-        {/* Integrations */}
-        <Route path="/google-connections" element={<GoogleConnections />} />
-      </Route>
-    </Routes>
+          {/* Integrations */}
+          <Route path="/google-connections" element={<GoogleConnections />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }

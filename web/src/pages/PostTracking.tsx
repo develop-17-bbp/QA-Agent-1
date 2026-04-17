@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
 import { fetchPostTracking } from "../api";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 export default function PostTracking() {
   const [runId, setRunId] = useState("");
   const [baselineRunId, setBaselineRunId] = useState("");
@@ -31,8 +32,8 @@ export default function PostTracking() {
         <button className="qa-btn-primary" onClick={track} disabled={loading || !runId} style={{ alignSelf: "flex-end" }}>{loading ? "Tracking..." : "Track Changes"}</button>
       </div>
 
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 16 }}>{error}</div>}
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Tracking posts...</div>}
+      {error && <ErrorBanner error={error} />}
+      {loading && <LoadingPanel message="Tracking posts…" />}
 
       {data && !loading && (
         <>

@@ -5,6 +5,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchTrafficAnalytics, queryGscAnalytics, fetchGa4Totals } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
+import { LoadingPanel, ErrorBanner } from "../components/UI";
 const SOURCE_COLORS: Record<string, string> = {
   organic: "#38a169",
   direct: "#111111",
@@ -123,8 +124,8 @@ export default function TrafficAnalytics() {
       </p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <div className="qa-loading-panel" style={{ marginTop: 20 }}><div className="qa-spinner" />Querying real traffic providers…</div>}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {loading && <LoadingPanel message="Querying real traffic providers…" />}
+      {error && <ErrorBanner error={error} />}
 
       {data?.dataQuality && !loading && (
         <div className="qa-panel" style={{ padding: 12, marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>

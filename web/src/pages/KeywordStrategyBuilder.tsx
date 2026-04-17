@@ -4,6 +4,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchKeywordStrategy, fetchGscPagesBatch } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 
+import { ErrorBanner } from "../components/UI";
 function bestGscForKeyword(urls: string[], gscPages: Map<string, any>) {
   for (const u of urls ?? []) {
     const p = gscPages.get(u);
@@ -71,7 +72,7 @@ export default function KeywordStrategyBuilder() {
       <RunSelector value={runId} onChange={load} label="Select run" />
 
       {loading && <div className="qa-panel" style={{ marginTop: 20 }}><div className="qa-loading-panel">Extracting from crawl + Google Suggest...</div></div>}
-      {error && <div className="qa-alert qa-alert--error" style={{ marginTop: 20 }}>{error}</div>}
+      {error && <ErrorBanner error={error} />}
 
       {data && !loading && (
         <>
