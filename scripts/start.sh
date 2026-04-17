@@ -59,6 +59,8 @@ if command -v ollama >/dev/null 2>&1; then
     echo "==> Starting Ollama in background…"
     ollama serve >/dev/null 2>&1 &
     OLLAMA_PID=$!
+    # Stop Ollama when this script exits (Ctrl+C, kill, etc.)
+    trap 'echo "==> Stopping Ollama (pid $OLLAMA_PID)…"; kill $OLLAMA_PID 2>/dev/null; exit' INT TERM EXIT
     # Wait up to 8 s for Ollama to become ready
     for i in $(seq 1 16); do
       sleep 0.5

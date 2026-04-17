@@ -2336,6 +2336,8 @@ export async function runHealthDashboard(options: {
 
       // LLM Router stats
       if (req.method === "GET" && url.pathname === "/api/llm-stats") {
+        // Ensure Ollama availability is probed before returning stats
+        await checkOllamaAvailable();
         const stats = getLlmRouterStats();
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
         res.end(JSON.stringify(stats));
@@ -2811,12 +2813,16 @@ export async function runHealthDashboard(options: {
   console.log(`[qa-agent] Live dashboard: ${baseUrl}`);
 
   // ── Auto-start Ollama if installed but not running ───────────────────────
+  let ollamaChildPid: number | null = null; // track so we can stop on shutdown
+  let ollamaWasAlreadyRunning = false;
+
   void (async () => {
     const ollamaUrl = process.env.OLLAMA_BASE_URL?.trim() || "http://127.0.0.1:11434";
     try {
       const probe = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(1500) });
       if (probe.ok) {
         console.log("[qa-agent] Ollama already running at", ollamaUrl);
+        ollamaWasAlreadyRunning = true;
         return;
       }
     } catch {
@@ -2824,12 +2830,12 @@ export async function runHealthDashboard(options: {
     }
     try {
       const child = spawn("ollama", ["serve"], {
-        detached: true,
+        detached: false, // keep attached so we can kill on exit
         stdio: "ignore",
         windowsHide: true,
       });
-      child.unref();
-      console.log("[qa-agent] Started Ollama (pid", child.pid, ") — waiting for ready…");
+      ollamaChildPid = child.pid ?? null;
+      console.log("[qa-agent] Started Ollama (pid", ollamaChildPid, ") — waiting for ready…");
       // Poll up to 10 s
       for (let i = 0; i < 20; i++) {
         await new Promise((r) => setTimeout(r, 500));
@@ -2847,6 +2853,20 @@ export async function runHealthDashboard(options: {
       }
     }
   })();
+
+  // ── Graceful shutdown: stop Ollama if we started it ─────────────────────
+  function shutdownOllama() {
+    if (ollamaChildPid && !ollamaWasAlreadyRunning) {
+      console.log("[qa-agent] Stopping Ollama (pid", ollamaChildPid, ")…");
+      try {
+        process.kill(ollamaChildPid);
+      } catch { /* already stopped */ }
+      ollamaChildPid = null;
+    }
+  }
+  process.on("exit", shutdownOllama);
+  process.on("SIGINT", () => { shutdownOllama(); process.exit(0); });
+  process.on("SIGTERM", () => { shutdownOllama(); process.exit(0); });
 
   // ── Daily GSC position cron ──────────────────────────────────────────────
   // Runs once at startup (after 30s delay) and then every 24 hours.
