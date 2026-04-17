@@ -35,7 +35,8 @@ const TOKEN_FILE = path.join(process.cwd(), "data", "google-tokens.json");
 export const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 export const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 export const USERINFO_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
-export const DEFAULT_SCOPES = [GSC_SCOPE, GA4_SCOPE, USERINFO_SCOPE];
+export const ADS_SCOPE = "https://www.googleapis.com/auth/adwords";
+export const DEFAULT_SCOPES = [GSC_SCOPE, GA4_SCOPE, USERINFO_SCOPE, ADS_SCOPE];
 
 interface StoredTokens {
   accessToken: string;

@@ -13,7 +13,12 @@
 
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL?.trim() || "llama3.2";
 const OLLAMA_BASE = process.env.OLLAMA_BASE_URL?.trim() || "http://localhost:11434";
-const REQUEST_TIMEOUT_MS = 60_000;   // local models can be slower than cloud
+// Big payloads (run summaries) on CPU-only hosts routinely need 1–4 min.
+// 60s was too tight and surfaced "This operation was aborted" in the UI.
+const REQUEST_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.OLLAMA_REQUEST_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw >= 10_000 ? raw : 300_000;
+})();
 const HEALTH_CHECK_TIMEOUT_MS = 3_000;
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -75,7 +80,8 @@ export async function checkOllamaAvailable(force = false): Promise<boolean> {
 
 async function callOllama(prompt: string, jsonMode: boolean): Promise<{ text: string; model: string }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
   try {
     const body: Record<string, unknown> = {
       model: OLLAMA_MODEL,
@@ -100,6 +106,13 @@ async function callOllama(prompt: string, jsonMode: boolean): Promise<{ text: st
     const text = data.response?.trim();
     if (!text) throw new Error("Ollama returned empty response");
     return { text, model: OLLAMA_MODEL };
+  } catch (e) {
+    if (timedOut || (e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message)))) {
+      throw new Error(
+        `Ollama timed out after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s. Increase OLLAMA_REQUEST_TIMEOUT_MS or use a smaller model (OLLAMA_MODEL).`,
+      );
+    }
+    throw e;
   } finally {
     clearTimeout(timeout);
   }

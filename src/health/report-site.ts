@@ -2106,11 +2106,15 @@ export function buildMasterHealthHtml(
     return (b.durationMs ?? 0) - (a.durationMs ?? 0);
   });
 
+  let lastBrokenSite = -1;
   const brokenRows =
     brokenAll.length === 0
       ? `<tr data-filter-skip="1"><td colspan="7"><div class="empty-state">No broken internal links across all sites.</div></td></tr>`
       : brokenAll
           .map((row) => {
+            const isFirstForSite = row.siteIndex !== lastBrokenSite;
+            lastBrokenSite = row.siteIndex;
+            const anchorId = isFirstForSite ? ` id="site-${row.siteIndex}-broken"` : "";
             const { siteIndex: _si, ...b } = row;
             const ms = b.durationMs ?? 0;
             const ft = `${b.siteHostname} ${b.foundOn} ${b.target} ${b.error ?? ""}`.toLowerCase();
@@ -2122,7 +2126,7 @@ export function buildMasterHealthHtml(
               String(b.status ?? ""),
               b.error ?? "",
             ]);
-            return `<tr data-issue-key="${esc(ikey)}" data-filter-text="${esc(ft)}" data-filter-ms="${String(ms)}" data-filter-result="${brokenHttpKind(b.status)}">
+            return `<tr${anchorId} data-issue-key="${esc(ikey)}" data-filter-text="${esc(ft)}" data-filter-ms="${String(ms)}" data-filter-result="${brokenHttpKind(b.status)}">
   <td>${esc(b.siteHostname)}</td>
   <td>${esc(b.foundOn)}</td>
   <td><a href="${esc(b.target)}">${esc(b.target)}</a></td>
@@ -2145,8 +2149,12 @@ export function buildMasterHealthHtml(
     return b.durationMs - a.durationMs;
   });
 
+  let lastPagesSite = -1;
   const pageRows = pagesAll
     .map((row) => {
+      const isFirstForSite = row.siteIndex !== lastPagesSite;
+      lastPagesSite = row.siteIndex;
+      const anchorId = isFirstForSite ? ` id="site-${row.siteIndex}-pages"` : "";
       const { siteIndex: _siteIdx, ...p } = row;
       const ft = `${p.siteHostname} ${p.url} ${p.contentType ?? ""} ${p.documentTitle ?? ""}`.toLowerCase();
       const sizeCell = pageBodySizeCell(p);
@@ -2157,7 +2165,7 @@ export function buildMasterHealthHtml(
       const pageKey = issueKeyHash(["page", p.siteHostname, p.url]);
       const triage = p.ok ? triageEmptyCell() : triageSelectCell(pageKey);
       const issueAttr = p.ok ? "" : ` data-issue-key="${esc(pageKey)}"`;
-      return `<tr class="${p.ok ? "row-ok" : "row-err"}"${issueAttr} data-filter-text="${esc(ft)}" data-filter-ms="${String(p.durationMs)}" data-filter-result="${pageFetchFilterKey(p)}">
+      return `<tr${anchorId} class="${p.ok ? "row-ok" : "row-err"}"${issueAttr} data-filter-text="${esc(ft)}" data-filter-ms="${String(p.durationMs)}" data-filter-result="${pageFetchFilterKey(p)}">
   <td>${esc(p.siteHostname)}</td>
   <td><a href="${esc(p.url)}">${esc(p.url)}</a></td>
   <td>${cellPageTitleHtml(p)}</td>
@@ -2195,14 +2203,19 @@ export function buildMasterHealthHtml(
     <table class="data-table" id="master-table-links">
       <thead><tr><th>Site</th><th>Target</th><th>HTTP</th><th class="num">Time (ms)</th><th>Method</th><th>Result</th><th>Triage</th></tr></thead>
       <tbody>
-        ${linksAll
+        ${(() => {
+          let lastLinksSite = -1;
+          return linksAll
           .map((row) => {
+            const isFirstForSite = row.siteIndex !== lastLinksSite;
+            lastLinksSite = row.siteIndex;
+            const anchorId = isFirstForSite ? ` id="site-${row.siteIndex}-links"` : "";
             const { siteIndex: _si, ...l } = row;
             const ft = `${l.siteHostname} ${l.target}`.toLowerCase();
             const linkKey = issueKeyHash(["link", l.siteHostname, l.target, l.method]);
             const triage = l.ok ? triageEmptyCell() : triageSelectCell(linkKey);
             const issueAttr = l.ok ? "" : ` data-issue-key="${esc(linkKey)}"`;
-            return `<tr class="${l.ok ? "row-ok" : "row-err"}"${issueAttr} data-filter-text="${esc(ft)}" data-filter-ms="${String(l.durationMs)}" data-filter-result="${l.ok ? "ok" : "failed"}">
+            return `<tr${anchorId} class="${l.ok ? "row-ok" : "row-err"}"${issueAttr} data-filter-text="${esc(ft)}" data-filter-ms="${String(l.durationMs)}" data-filter-result="${l.ok ? "ok" : "failed"}">
           <td>${esc(l.siteHostname)}</td>
           <td><a href="${esc(l.target)}">${esc(l.target)}</a></td>
           <td>${l.status}</td>
@@ -2212,7 +2225,8 @@ export function buildMasterHealthHtml(
           ${triage}
         </tr>`;
           })
-          .join("\n")}
+          .join("\n");
+        })()}
       </tbody>
     </table>
     </div>`,
@@ -2224,12 +2238,19 @@ export function buildMasterHealthHtml(
       const sa = computePageAggregateStats(r.crawl.pages);
       const folder = healthSiteOutputDirName(i, r.startUrl);
       const thumb = buildMasterStartPageThumbs(r.crawl.startPageScreenshot, folder);
-      return `<tr data-site-hostname="${esc(r.hostname)}">
-  <td>${esc(r.hostname)}</td>
+      const brokenCount = r.crawl.brokenLinks.length;
+      const linksCount = r.crawl.linkChecks?.length ?? 0;
+      const jumpChips = [
+        brokenCount > 0 ? `<a href="#site-${i}-broken" title="Jump to this site's broken links">broken</a>` : null,
+        `<a href="#site-${i}-pages" title="Jump to this site's pages">pages</a>`,
+        linksCount > 0 ? `<a href="#site-${i}-links" title="Jump to this site's link checks">links</a>` : null,
+      ].filter(Boolean).join(" · ");
+      return `<tr id="site-${i}" data-site-hostname="${esc(r.hostname)}">
+  <td><div style="font-weight:600">${esc(r.hostname)}</div><div class="idx-jump" style="font-size:0.78rem;margin-top:4px;color:var(--muted)">${jumpChips}</div></td>
   <td class="master-screenshots-cell">${thumb}</td>
   <td><a href="${esc(r.startUrl)}">${esc(r.startUrl)}</a></td>
   <td class="num">${r.crawl.pagesVisited}</td>
-  <td class="num">${r.crawl.brokenLinks.length}</td>
+  <td class="num">${brokenCount}</td>
   <td class="num">${sa.count ? sa.avgMs : "—"}</td>
   <td class="num">${sa.count ? `${sa.successPct}%` : "—"}</td>
   <td class="num">${sa.count ? formatBytes(sa.totalBytes) : "—"}</td>
