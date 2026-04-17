@@ -63,11 +63,15 @@ import { ReportCache, type CachedReportData } from "./cache.js";
 import { fetchSuggestions, fetchQuestionSuggestions } from "./providers/google-suggest.js";
 import { fetchKeywordTrend } from "./providers/google-trends.js";
 import { fetchKeywordVolume, isGoogleAdsConfigured } from "./providers/google-ads.js";
+import { fetchCruxRecord, isCruxConfigured, type CruxFormFactor } from "./providers/crux.js";
+import { GEO_TARGETS } from "./providers/geo-targets.js";
 import {
   loadTrackedPairs, saveTrackedPairs, addTrackedPair, removeTrackedPair,
   appendSnapshot, getHistoryForKeyword, getHistoryForDomain, getAllStats,
   type TrackedPair,
 } from "./position-db.js";
+import { sitesConfigSchema } from "../config/schema.js";
+import { orchestrateRun } from "../orchestrate.js";
 
 function webDistRoot(): string {
   return path.join(process.cwd(), "web", "dist");
@@ -2306,12 +2310,14 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/serp-analysis") {
         let body: string;
         try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { keywords?: string[]; targetDomain?: string };
+        let payload: { keywords?: string[]; targetDomain?: string; region?: string };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const keywords = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string" && k.trim().length > 0) : [];
         if (keywords.length === 0) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keywords required" })); return; }
+        const { ddgRegionCode } = await import("./providers/geo-targets.js");
+        const regionCode = ddgRegionCode(payload.region ?? "US");
         try {
-          const result = await runSerpAnalysis(keywords, typeof payload.targetDomain === "string" ? payload.targetDomain.trim() : undefined);
+          const result = await runSerpAnalysis(keywords, typeof payload.targetDomain === "string" ? payload.targetDomain.trim() : undefined, regionCode);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
@@ -2322,12 +2328,14 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/serp-search") {
         let body: string;
         try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { query?: string };
+        let payload: { query?: string; region?: string };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const query = typeof payload.query === "string" ? payload.query.trim() : "";
         if (!query) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "query required" })); return; }
+        const { ddgRegionCode } = await import("./providers/geo-targets.js");
+        const regionCode = ddgRegionCode(payload.region ?? "US");
         try {
-          const result = await searchSerp(query);
+          const result = await searchSerp(query, regionCode);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
@@ -2460,6 +2468,86 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=86400" });
           res.end(JSON.stringify({ configured: true, results }));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Chrome UX Report (real-user Web Vitals) ──
+      if (req.method === "GET" && url.pathname === "/api/crux") {
+        const target = url.searchParams.get("url") ?? "";
+        const formFactor = (url.searchParams.get("formFactor") ?? "PHONE") as CruxFormFactor;
+        if (!target) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "url required" })); return; }
+        if (!isCruxConfigured()) {
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ configured: false, error: "Set CRUX_API_KEY in .env (enable 'Chrome UX Report API' in Google Cloud)." }));
+          return;
+        }
+        try {
+          const record = await fetchCruxRecord(target, formFactor);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=86400" });
+          res.end(JSON.stringify({ configured: true, record }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Geo targets (country list for region selector) ──
+      if (req.method === "GET" && url.pathname === "/api/geo-targets") {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=604800" });
+        res.end(JSON.stringify({ targets: GEO_TARGETS.map(({ iso, name }) => ({ iso, name })) }));
+        return;
+      }
+
+      // ── Form tests (legacy `qa-agent run` surfaced in dashboard) ──
+      if (req.method === "GET" && url.pathname === "/api/form-tests/sites") {
+        try {
+          const configPath = path.join(process.cwd(), "config", "sites.json");
+          const raw = await readFile(configPath, "utf8").catch(() => null);
+          if (!raw) { res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ configured: false, error: "config/sites.json not found. Copy config/sites.example.json to config/sites.json and edit it." })); return; }
+          const parsed = sitesConfigSchema.safeParse(JSON.parse(raw));
+          if (!parsed.success) { res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ configured: false, error: `config/sites.json invalid: ${parsed.error.issues.map((i) => i.path.join(".") + ": " + i.message).join("; ")}` })); return; }
+          const sites = parsed.data.sites.map((s) => ({
+            id: s.id,
+            name: s.name,
+            enabled: s.enabled !== false,
+            url: s.url,
+            forms: s.forms.length,
+            hasLiveAgent: !!s.liveAgent && s.liveAgent.enabled !== false,
+            captcha: s.forms.find((f) => f.captcha && f.captcha.strategy !== "none")?.captcha?.strategy ?? null,
+            success: s.success.type,
+          }));
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ configured: true, sites }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/form-tests/run") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { siteId?: string; headless?: boolean };
+        try { payload = body ? JSON.parse(body) : {}; } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        try {
+          const configPath = path.join(process.cwd(), "config", "sites.json");
+          const raw = await readFile(configPath, "utf8").catch(() => null);
+          if (!raw) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "config/sites.json not found" })); return; }
+          const parsed = sitesConfigSchema.safeParse(JSON.parse(raw));
+          if (!parsed.success) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: `Invalid config: ${parsed.error.issues.map((i) => i.message).join("; ")}` })); return; }
+          const filteredSites = payload.siteId ? parsed.data.sites.filter((s) => s.id === payload.siteId) : parsed.data.sites;
+          if (filteredSites.length === 0) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: `No site with id "${payload.siteId}"` })); return; }
+          const artifactsRoot = path.join(process.cwd(), "artifacts", "form-tests");
+          const summary = await orchestrateRun({
+            config: { sites: filteredSites, defaultNotify: parsed.data.defaultNotify },
+            configPath,
+            concurrency: Math.min(3, filteredSites.length),
+            artifactsRoot,
+            headless: payload.headless !== false,
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(summary));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) }));
+        }
         return;
       }
 

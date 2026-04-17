@@ -3,6 +3,7 @@ import { useState } from "react";
 import { BarChart, Bar, ResponsiveContainer } from "recharts";
 import { fetchKeywordResearch, fetchKeywordSuggestions, fetchKeywordTrends, fetchGscKeywordStats, type GscSite } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
+import { useRegion } from "../components/RegionPicker";
 
 import { ErrorBanner } from "../components/UI";
 /**
@@ -51,6 +52,7 @@ export default function KeywordOverview() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
   const [trend, setTrend] = useState<any>(null);
+  const [region] = useRegion();
 
   const research = async () => {
     const kw = keyword.trim();
@@ -65,7 +67,7 @@ export default function KeywordOverview() {
       const [main, sugg, tr] = await Promise.allSettled([
         fetchKeywordResearch(kw),
         fetchKeywordSuggestions(kw),
-        fetchKeywordTrends(kw),
+        fetchKeywordTrends(kw, region),
       ]);
       if (main.status === "fulfilled") setData(main.value);
       else setError(main.reason?.message ?? String(main.reason));

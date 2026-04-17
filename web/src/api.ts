@@ -264,8 +264,8 @@ export function fetchAgenticSession(sessionId: string) { return postApi<any>("/a
 export async function fetchAgenticSessions(): Promise<any[]> { const res = await fetch("/api/agentic/sessions"); if (!res.ok) throw new Error(await res.text()); return res.json() as Promise<any[]>; }
 
 // SERP Analysis
-export function fetchSerpAnalysis(keywords: string[], targetDomain?: string) { return postApi<any>("/api/serp-analysis", { keywords, targetDomain }); }
-export function fetchSerpSearch(query: string) { return postApi<any>("/api/serp-search", { query }); }
+export function fetchSerpAnalysis(keywords: string[], targetDomain?: string, region?: string) { return postApi<any>("/api/serp-analysis", { keywords, targetDomain, region }); }
+export function fetchSerpSearch(query: string, region?: string) { return postApi<any>("/api/serp-search", { query, region }); }
 
 // External backlinks (OPR + Common Crawl + URLScan + Wayback)
 export function fetchExternalBacklinks(domain: string) { return postApi<any>("/api/external-backlinks", { domain }); }
@@ -345,6 +345,47 @@ export async function fetchPositionHistoryForKeyword(domain: string, keyword: st
 // Keyword Volume (Google Ads Keyword Planner)
 export async function fetchKeywordVolume(keywords: string[], geo = "US"): Promise<any> {
   const res = await fetch("/api/keyword-volume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keywords, geo }) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Chrome UX Report (real-user Web Vitals)
+export async function fetchCrux(url: string, formFactor: "PHONE" | "DESKTOP" | "TABLET" = "PHONE"): Promise<any> {
+  const res = await fetch(`/api/crux?url=${encodeURIComponent(url)}&formFactor=${formFactor}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Geo targets (country list for the region picker)
+export type GeoTarget = { iso: string; name: string };
+let _geoCache: Promise<{ targets: GeoTarget[] }> | null = null;
+export function fetchGeoTargets(): Promise<{ targets: GeoTarget[] }> {
+  if (!_geoCache) {
+    _geoCache = fetch("/api/geo-targets")
+      .then((r) => { if (!r.ok) throw new Error("failed to load regions"); return r.json(); })
+      .catch((e) => { _geoCache = null; throw e; });
+  }
+  return _geoCache;
+}
+
+// Form tests (legacy `qa-agent run` surfaced on the dashboard)
+export type FormTestSite = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  url: string;
+  forms: number;
+  hasLiveAgent: boolean;
+  captcha: "none" | "pause_after_fields" | "wait_for_selector" | null;
+  success: "url_contains" | "text_visible" | "selector_visible";
+};
+export async function fetchFormTestSites(): Promise<{ configured: boolean; error?: string; sites?: FormTestSite[] }> {
+  const res = await fetch("/api/form-tests/sites");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function runFormTest(payload: { siteId?: string; headless?: boolean }): Promise<any> {
+  const res = await fetch("/api/form-tests/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

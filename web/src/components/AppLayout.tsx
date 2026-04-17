@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { fetchGoogleAuthStatus, fetchLlmStats } from "../api";
 import { usePageTitle } from "../hooks/usePageTitle";
+import RegionPicker from "./RegionPicker";
 
 // ─── Data honesty ────────────────────────────────────────────────────────────
 type SourceClass = "real" | "llm-safe" | "mixed";
@@ -20,7 +21,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/backlinks": "real", "/referring-domains": "real", "/backlink-audit": "real",
   "/query-lab": "mixed", "/serp-analyzer": "real", "/agentic-crawl": "llm-safe",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
-  "/url-report": "mixed",
+  "/url-report": "mixed", "/form-tests": "real",
 };
 
 const DOT_COLORS: Record<SourceClass, string> = {
@@ -115,6 +116,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Brand Monitoring", path: "/brand-monitoring" },
       { label: "Log File Analyzer", path: "/log-file-analyzer" },
       { label: "Local SEO", path: "/local-seo" },
+      { label: "Form Tests", path: "/form-tests" },
     ],
   },
 ];
@@ -275,6 +277,8 @@ function Topbar() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <StatusBar />
+          <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+          <RegionPicker compact label="Region" />
           <div style={{ width: 1, height: 20, background: "var(--border)" }} />
           <div style={{ display: "flex", gap: 2 }}>
             {[

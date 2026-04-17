@@ -370,7 +370,7 @@ export async function runAgenticPipeline(config: AgenticSessionConfig): Promise<
 
 // ── Standalone SERP analysis (no crawl needed) ──────────────────────────────
 
-export async function runSerpAnalysis(keywords: string[], targetDomain?: string): Promise<{
+export async function runSerpAnalysis(keywords: string[], targetDomain?: string, regionCode = "us-en"): Promise<{
   results: SerpResponse[];
   competitors: SerpCompetitorAnalysis[];
   summary: { avgResults: number; cachedPercent: number; avgLatencyMs: number };
@@ -380,10 +380,10 @@ export async function runSerpAnalysis(keywords: string[], targetDomain?: string)
 
   for (const kw of keywords) {
     try {
-      const serp = await searchSerp(kw);
+      const serp = await searchSerp(kw, regionCode);
       results.push(serp);
       if (targetDomain) {
-        competitors.push(await analyzeCompetitors(kw, targetDomain));
+        competitors.push(await analyzeCompetitors(kw, targetDomain, regionCode));
       }
     } catch { /* skip failed queries */ }
   }

@@ -23,6 +23,7 @@ import {
   fetchKeywordSuggestions,
   fetchKeywordVolume,
 } from "../api";
+import { useRegion } from "../components/RegionPicker";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -177,6 +178,7 @@ export default function UrlReport() {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
   const [progress, setProgress] = useState<string[]>([]);
+  const [region] = useRegion();
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function runReport() {
@@ -237,7 +239,7 @@ export default function UrlReport() {
 
       if (keywords.length > 0) {
         try {
-          const volData = await fetchKeywordVolume(keywords.slice(0, 12));
+          const volData = await fetchKeywordVolume(keywords.slice(0, 12), region);
           for (const item of volData?.results ?? []) {
             volumeMap.set(item.keyword?.toLowerCase(), item);
           }

@@ -26,6 +26,7 @@
 import { dp, ProviderError, type DataPoint } from "./types.js";
 import { cacheGet, cacheSet, registerLimit, tryConsume } from "./rate-limit.js";
 import { getAccessToken } from "./google-auth.js";
+import { googleAdsGeoId } from "./geo-targets.js";
 
 const PROVIDER = "google-ads";
 registerLimit(PROVIDER, 500, 24 * 60 * 60 * 1000);
@@ -150,7 +151,7 @@ export async function fetchKeywordVolume(keywords: string[], geo = "US", lang = 
         },
         body: JSON.stringify({
           language: `languageConstants/${lang}`,
-          geoTargetConstants: [`geoTargetConstants/${geoToTargetId(geo)}`],
+          geoTargetConstants: [`geoTargetConstants/${googleAdsGeoId(geo)}`],
           keywordSeed: { keywords: batch },
           keywordPlanNetwork: "GOOGLE_SEARCH",
           includeAdultKeywords: false,
@@ -191,12 +192,3 @@ export async function fetchKeywordVolume(keywords: string[], geo = "US", lang = 
   return results;
 }
 
-/** Maps ISO country code to Google Ads geo target constant ID */
-function geoToTargetId(geo: string): number {
-  const MAP: Record<string, number> = {
-    US: 2840, GB: 2826, IN: 2356, CA: 2124, AU: 2036,
-    DE: 2276, FR: 2250, JP: 2392, BR: 2076, SG: 2702,
-    NZ: 2554, ZA: 2710, AE: 2784, PH: 2608, NG: 2566,
-  };
-  return MAP[geo.toUpperCase()] ?? 2840;
-}

@@ -40,6 +40,7 @@ const SerpAnalyzer = lazy(() => import("./pages/SerpAnalyzer"));
 const AgenticCrawl = lazy(() => import("./pages/AgenticCrawl"));
 const GoogleConnections = lazy(() => import("./pages/GoogleConnections"));
 const UrlReport = lazy(() => import("./pages/UrlReport"));
+const FormTests = lazy(() => import("./pages/FormTests"));
 
 function LazyFallback() {
   return (
@@ -112,6 +113,9 @@ export default function App() {
 
           {/* Local SEO */}
           <Route path="/local-seo" element={<LocalSeo />} />
+
+          {/* Form / flow tests (Playwright) */}
+          <Route path="/form-tests" element={<FormTests />} />
 
           {/* Integrations */}
           <Route path="/google-connections" element={<GoogleConnections />} />

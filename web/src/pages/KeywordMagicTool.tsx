@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { fetchKeywordMagic, fetchKeywordSuggestions, fetchKeywordTrends, fetchKeywordVolume, queryGscAnalytics } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
+import RegionPicker, { useRegion } from "../components/RegionPicker";
 
 import { ErrorBanner } from "../components/UI";
 const INTENT_COLORS: Record<string, string> = { Informational: "#3182ce", Commercial: "#dd6b20", Transactional: "#38a169", Navigational: "#111111" };
@@ -43,6 +44,7 @@ export default function KeywordMagicTool() {
   const [questions, setQuestions] = useState<string[]>([]);
   const [trend, setTrend] = useState<any>(null);
   const [volumeMap, setVolumeMap] = useState<Map<string, any>>(new Map());
+  const [region] = useRegion();
 
   const overlay = useGoogleOverlay(gscDomain.trim() || undefined);
 
@@ -55,14 +57,14 @@ export default function KeywordMagicTool() {
       const [main, sugg, tr] = await Promise.allSettled([
         fetchKeywordMagic(term),
         fetchKeywordSuggestions(term),
-        fetchKeywordTrends(term),
+        fetchKeywordTrends(term, region),
       ]);
       if (main.status === "fulfilled") {
         setData(main.value);
         // Fetch volume for discovered keywords (silent — only works if Google Ads configured)
         const kws: string[] = (main.value?.keywords ?? []).slice(0, 20).map((k: any) => k.keyword).filter(Boolean);
         if (kws.length > 0) {
-          fetchKeywordVolume(kws).then(r => {
+          fetchKeywordVolume(kws, region).then(r => {
             if (!r?.configured) return;
             const m = new Map<string, any>();
             for (const row of r.results ?? []) m.set(row.keyword, row);
@@ -108,6 +110,7 @@ export default function KeywordMagicTool() {
 
       <div className="qa-panel" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <input className="qa-input" value={seed} onChange={e => setSeed(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Enter seed keyword..." style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
+        <RegionPicker compact />
         <button className="qa-btn-primary" onClick={() => search()} disabled={loading || !seed.trim()} style={{ padding: "8px 24px" }}>{loading ? "Researching..." : "Research"}</button>
         <input className="qa-input" value={gscDomain} onChange={e => setGscDomain(e.target.value)} placeholder="Your domain for GSC overlay (optional — e.g. example.com)" style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
         {overlay.connected && overlay.matchedGscSite && (

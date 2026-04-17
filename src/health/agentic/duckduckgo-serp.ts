@@ -208,9 +208,9 @@ function parseDdgHtml(html: string): { results: SerpResult[]; relatedSearches: s
 
 // ── Core scraper ─────────────────────────────────────────────────────────────
 
-async function fetchDdgHtml(query: string): Promise<string> {
+async function fetchDdgHtml(query: string, regionCode: string): Promise<string> {
   const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]!;
-  const params = new URLSearchParams({ q: query, kl: "us-en", t: "h_", ia: "web" });
+  const params = new URLSearchParams({ q: query, kl: regionCode, t: "h_", ia: "web" });
   const url = `https://html.duckduckgo.com/html/?${params.toString()}`;
 
   const controller = new AbortController();
@@ -235,11 +235,12 @@ async function fetchDdgHtml(query: string): Promise<string> {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-export async function searchSerp(query: string): Promise<SerpResponse> {
+export async function searchSerp(query: string, regionCode = "us-en"): Promise<SerpResponse> {
   if (!query.trim()) throw new Error("Query required");
 
-  // Check cache first
-  const cached = getCached(query);
+  // Region is part of the cache key so users switching regions don't see stale us-en results.
+  const cacheKey = `${regionCode}::${query}`;
+  const cached = getCached(cacheKey);
   if (cached) return cached;
 
   await waitForRateLimit();
@@ -251,7 +252,7 @@ export async function searchSerp(query: string): Promise<SerpResponse> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) await new Promise(r => setTimeout(r, RETRY_DELAY_MS * attempt));
     try {
-      const html = await fetchDdgHtml(query);
+      const html = await fetchDdgHtml(query, regionCode);
       const { results, relatedSearches } = parseDdgHtml(html);
 
       const response: SerpResponse = {
@@ -264,7 +265,7 @@ export async function searchSerp(query: string): Promise<SerpResponse> {
         latencyMs: Date.now() - t0,
       };
 
-      if (results.length > 0) setCache(query, response);
+      if (results.length > 0) setCache(cacheKey, response);
       return response;
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
@@ -274,11 +275,11 @@ export async function searchSerp(query: string): Promise<SerpResponse> {
   throw lastError ?? new Error("SERP scrape failed");
 }
 
-export async function searchSerpBatch(queries: string[]): Promise<SerpResponse[]> {
+export async function searchSerpBatch(queries: string[], regionCode = "us-en"): Promise<SerpResponse[]> {
   const results: SerpResponse[] = [];
   for (const q of queries) {
     try {
-      results.push(await searchSerp(q));
+      results.push(await searchSerp(q, regionCode));
     } catch (e) {
       results.push({
         query: q,
@@ -294,8 +295,8 @@ export async function searchSerpBatch(queries: string[]): Promise<SerpResponse[]
   return results;
 }
 
-export async function analyzeCompetitors(query: string, targetDomain: string): Promise<SerpCompetitorAnalysis> {
-  const serp = await searchSerp(query);
+export async function analyzeCompetitors(query: string, targetDomain: string, regionCode = "us-en"): Promise<SerpCompetitorAnalysis> {
+  const serp = await searchSerp(query, regionCode);
   const targetHost = targetDomain.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
 
   let yourPosition: number | null = null;

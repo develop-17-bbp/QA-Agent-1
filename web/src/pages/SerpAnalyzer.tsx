@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { fetchSerpAnalysis, queryGscAnalytics } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
+import { useRegion } from "../components/RegionPicker";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
 const DIFF_COLORS = { easy: "#38a169", medium: "#dd6b20", hard: "#e53e3e" };
@@ -14,6 +15,7 @@ export default function SerpAnalyzer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [gscPositions, setGscPositions] = useState<Map<string, any>>(new Map());
+  const [region] = useRegion();
 
   const overlay = useGoogleOverlay(targetDomain.trim() || undefined);
 
@@ -21,7 +23,7 @@ export default function SerpAnalyzer() {
     const kws = keywords.split("\n").map(k => k.trim()).filter(Boolean);
     if (kws.length === 0) return;
     setLoading(true); setError(""); setData(null);
-    try { setData(await fetchSerpAnalysis(kws, targetDomain.trim() || undefined)); } catch (e: any) { setError(e.message); }
+    try { setData(await fetchSerpAnalysis(kws, targetDomain.trim() || undefined, region)); } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   };
 
