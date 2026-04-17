@@ -41,6 +41,7 @@ const AgenticCrawl = lazy(() => import("./pages/AgenticCrawl"));
 const GoogleConnections = lazy(() => import("./pages/GoogleConnections"));
 const UrlReport = lazy(() => import("./pages/UrlReport"));
 const FormTests = lazy(() => import("./pages/FormTests"));
+const KeywordImpact = lazy(() => import("./pages/KeywordImpact"));
 
 function LazyFallback() {
   return (
@@ -87,6 +88,7 @@ export default function App() {
           {/* Keyword Research */}
           <Route path="/keyword-overview" element={<KeywordOverview />} />
           <Route path="/keyword-magic-tool" element={<KeywordMagicTool />} />
+          <Route path="/keyword-impact" element={<KeywordImpact />} />
           <Route path="/keyword-strategy" element={<KeywordStrategyBuilder />} />
           <Route path="/keyword-manager" element={<KeywordManager />} />
 

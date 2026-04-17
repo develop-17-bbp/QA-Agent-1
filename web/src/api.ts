@@ -390,6 +390,22 @@ export async function runFormTest(payload: { siteId?: string; headless?: boolean
   return res.json();
 }
 
+// AI one-line fix recommendations for a batch of broken links.
+export type BrokenLinkInput = { foundOn: string; target: string; status?: number; error?: string };
+export type LinkFixRecommendation = { foundOn: string; target: string; recommendation: string };
+export async function fetchLinkFixRecommendations(links: BrokenLinkInput[]): Promise<{ recommendations: LinkFixRecommendation[] }> {
+  const res = await fetch("/api/link-fix-recommendations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ links }) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Keyword Impact Predictor — "what if my site targeted this keyword?"
+export async function fetchKeywordImpact(payload: { url: string; keyword: string; region: string }): Promise<any> {
+  const res = await fetch("/api/keyword-impact", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // LLM Router Stats
 export function fetchLlmStats(): Promise<any> {
   return dedupFetch("/api/llm-stats", async () => {

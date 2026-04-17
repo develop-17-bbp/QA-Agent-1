@@ -21,7 +21,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/backlinks": "real", "/referring-domains": "real", "/backlink-audit": "real",
   "/query-lab": "mixed", "/serp-analyzer": "real", "/agentic-crawl": "llm-safe",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
-  "/url-report": "mixed", "/form-tests": "real",
+  "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
 };
 
 const DOT_COLORS: Record<SourceClass, string> = {
@@ -80,6 +80,7 @@ const NAV_GROUPS: NavGroup[] = [
     tools: [
       { label: "Keyword Overview", path: "/keyword-overview" },
       { label: "Keyword Magic Tool", path: "/keyword-magic-tool" },
+      { label: "Keyword Impact Predictor", path: "/keyword-impact" },
       { label: "Keyword Gap", path: "/keyword-gap" },
       { label: "Keyword Strategy", path: "/keyword-strategy" },
       { label: "Keyword Manager", path: "/keyword-manager" },

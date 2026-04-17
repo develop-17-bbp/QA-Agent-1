@@ -65,6 +65,8 @@ import { fetchKeywordTrend } from "./providers/google-trends.js";
 import { fetchKeywordVolume, isGoogleAdsConfigured } from "./providers/google-ads.js";
 import { fetchCruxRecord, isCruxConfigured, type CruxFormFactor } from "./providers/crux.js";
 import { GEO_TARGETS } from "./providers/geo-targets.js";
+import { recommendLinkFixes, type BrokenLinkInput } from "./modules/link-fix-advisor.js";
+import { predictKeywordImpact } from "./modules/keyword-impact-predictor.js";
 import {
   loadTrackedPairs, saveTrackedPairs, addTrackedPair, removeTrackedPair,
   appendSnapshot, getHistoryForKeyword, getHistoryForDomain, getAllStats,
@@ -2467,6 +2469,40 @@ export async function runHealthDashboard(options: {
           const results = await fetchKeywordVolume(keywords, payload.geo ?? "US");
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=86400" });
           res.end(JSON.stringify({ configured: true, results }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── AI fix recommendations for a list of broken links ──
+      if (req.method === "POST" && url.pathname === "/api/link-fix-recommendations") {
+        let body: string;
+        try { body = await readBody(req, 256_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { links?: BrokenLinkInput[] };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const links = Array.isArray(payload.links) ? payload.links.filter((l): l is BrokenLinkInput => !!l && typeof l.foundOn === "string" && typeof l.target === "string").slice(0, 100) : [];
+        if (links.length === 0) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "links array required" })); return; }
+        try {
+          const recommendations = await recommendLinkFixes(links);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
+          res.end(JSON.stringify({ recommendations }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Keyword Impact Predictor ──
+      if (req.method === "POST" && url.pathname === "/api/keyword-impact") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { url?: string; keyword?: string; region?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const targetUrl = typeof payload.url === "string" ? payload.url.trim() : "";
+        const keyword = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
+        const region = typeof payload.region === "string" && payload.region.trim() ? payload.region.trim() : "US";
+        if (!targetUrl || !keyword) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "url and keyword required" })); return; }
+        try {
+          const result = await predictKeywordImpact({ url: targetUrl, keyword, region });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
+          res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
         return;
       }
