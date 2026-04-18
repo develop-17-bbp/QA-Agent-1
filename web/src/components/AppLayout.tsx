@@ -118,6 +118,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Log File Analyzer", path: "/log-file-analyzer" },
       { label: "Local SEO", path: "/local-seo" },
       { label: "Form Tests", path: "/form-tests" },
+      { label: "Link Fix Advisor", path: "/link-fix-advisor" },
     ],
   },
 ];

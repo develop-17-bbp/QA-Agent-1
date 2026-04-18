@@ -399,6 +399,14 @@ export async function fetchLinkFixRecommendations(links: BrokenLinkInput[]): Pro
   return res.json();
 }
 
+// All broken links across a run, flat with site hostname for triage.
+export type BrokenLinkRow = { siteHostname: string; foundOn: string; target: string; status?: number; error?: string; durationMs?: number };
+export async function fetchBrokenLinks(runId: string): Promise<{ runId: string; generatedAt: string; links: BrokenLinkRow[] }> {
+  const res = await fetch(`/api/broken-links/${encodeURIComponent(runId)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // Keyword Impact Predictor — "what if my site targeted this keyword?"
 export async function fetchKeywordImpact(payload: { url: string; keyword: string; region: string }): Promise<any> {
   const res = await fetch("/api/keyword-impact", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });

@@ -2473,6 +2473,25 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── List broken links across a run (flat, with site hostname) ──
+      if (req.method === "GET" && url.pathname.startsWith("/api/broken-links/")) {
+        const runIdP = url.pathname.slice("/api/broken-links/".length);
+        if (!runIdP || !isSafeRunIdSegment(runIdP)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad runId" })); return; }
+        try {
+          const raw = await loadRawReportsForRun(outRoot, runIdP);
+          if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return; }
+          const links: Array<{ siteHostname: string; foundOn: string; target: string; status?: number; error?: string; durationMs?: number }> = [];
+          for (const r of raw.reports) {
+            for (const b of r.crawl.brokenLinks ?? []) {
+              links.push({ siteHostname: r.hostname, foundOn: b.foundOn, target: b.target, status: b.status, error: b.error, durationMs: b.durationMs });
+            }
+          }
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=120" });
+          res.end(JSON.stringify({ runId: runIdP, generatedAt: raw.generatedAt, links }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
       // ── AI fix recommendations for a list of broken links ──
       if (req.method === "POST" && url.pathname === "/api/link-fix-recommendations") {
         let body: string;

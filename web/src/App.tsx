@@ -42,6 +42,7 @@ const GoogleConnections = lazy(() => import("./pages/GoogleConnections"));
 const UrlReport = lazy(() => import("./pages/UrlReport"));
 const FormTests = lazy(() => import("./pages/FormTests"));
 const KeywordImpact = lazy(() => import("./pages/KeywordImpact"));
+const LinkFixAdvisor = lazy(() => import("./pages/LinkFixAdvisor"));
 
 function LazyFallback() {
   return (
@@ -118,6 +119,9 @@ export default function App() {
 
           {/* Form / flow tests (Playwright) */}
           <Route path="/form-tests" element={<FormTests />} />
+
+          {/* AI-powered link fix advisor */}
+          <Route path="/link-fix-advisor" element={<LinkFixAdvisor />} />
 
           {/* Integrations */}
           <Route path="/google-connections" element={<GoogleConnections />} />
