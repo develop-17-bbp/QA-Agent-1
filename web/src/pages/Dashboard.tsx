@@ -175,6 +175,56 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
         </div>
       </motion.div>
 
+      {/* ── New-flagship quick-start tiles ─────────────────────────────── */}
+      <motion.div
+        initial="hidden"
+        animate="show"
+        variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.15 } } }}
+        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12, marginBottom: 22 }}
+      >
+        {[
+          { to: "/keyword-impact", icon: "◎", title: "Keyword Impact Predictor", desc: "URL + keyword → metrics, recommendations, projections — all grounded in real providers.", accent: "#111" },
+          { to: "/link-fix-advisor", icon: "⚙", title: "Link Fix Advisor", desc: "Every broken link with its origin + an AI one-line remediation.", accent: "#16a34a" },
+          { to: "/form-tests", icon: "▣", title: "Form & Flow Tests", desc: "Playwright smoke tests for contact forms and chat handoffs.", accent: "#475569" },
+        ].map((tile) => (
+          <motion.div
+            key={tile.to}
+            variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } } }}
+            whileHover={{ y: -3, transition: { duration: 0.18 } }}
+          >
+            <Link
+              to={tile.to}
+              style={{
+                display: "block",
+                padding: 18,
+                borderRadius: "var(--radius)",
+                border: "1px solid var(--border)",
+                background: "var(--panel)",
+                textDecoration: "none",
+                color: "inherit",
+                position: "relative",
+                overflow: "hidden",
+                height: "100%",
+                boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+              }}
+            >
+              <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${tile.accent}08, transparent 60%)`, pointerEvents: "none" }} />
+              <div style={{ position: "relative" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 8, background: tile.accent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700 }}>{tile.icon}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: tile.accent, letterSpacing: "0.1em", textTransform: "uppercase" }}>New</span>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 14.5, color: "var(--text)", letterSpacing: "-0.02em", marginBottom: 4 }}>{tile.title}</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>{tile.desc}</div>
+                <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: tile.accent, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  Open <span style={{ fontSize: 13 }}>→</span>
+                </div>
+              </div>
+            </Link>
+          </motion.div>
+        ))}
+      </motion.div>
+
       <RunProgressBanner state={runBanner} />
 
       <motion.section

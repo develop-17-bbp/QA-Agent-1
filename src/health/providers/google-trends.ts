@@ -92,16 +92,30 @@ export async function fetchKeywordTrend(keyword: string, geo = ""): Promise<Keyw
     throw new ProviderError(PROVIDER, "Rate limit exhausted");
   }
 
-  // Step 1: explore → widgets + tokens
+  // Step 1: explore → widgets + tokens.
+  // Google Trends aggressively throttles datacenter IPs — we retry once after
+  // a short backoff, then return a soft-empty result instead of throwing so
+  // consumers (Keyword Impact, Keyword Overview) can degrade gracefully
+  // rather than propagating a hard failure to the UI.
   const reqBody = {
     comparisonItem: [{ keyword: clean, geo, time: "today 12-m" }],
     category: 0,
     property: "",
   };
   const exploreUrl = `${EXPLORE_URL}?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(reqBody))}&tz=0`;
-  const explore = await fetchTrendsJson<ExploreResponse>(exploreUrl);
+  let explore = await fetchTrendsJson<ExploreResponse>(exploreUrl);
   if (!explore || !Array.isArray(explore.widgets)) {
-    throw new ProviderError(PROVIDER, "Explore endpoint returned unusable response (IP may be throttled)");
+    await new Promise((r) => setTimeout(r, 1500));
+    explore = await fetchTrendsJson<ExploreResponse>(exploreUrl);
+  }
+  if (!explore || !Array.isArray(explore.widgets)) {
+    const fallback: KeywordTrendResult = {
+      trend12mo: dp([], PROVIDER, "low", TTL_MS, "Google Trends throttled — empty series returned"),
+      peakValue: dp(0, PROVIDER, "low", TTL_MS),
+      avgValue: dp(0, PROVIDER, "low", TTL_MS),
+    };
+    cacheSet(cacheKey, fallback, 10 * 60 * 1000); // short cache so we retry in 10 min
+    return fallback;
   }
 
   // Find timeline and related_queries widgets

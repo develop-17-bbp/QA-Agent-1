@@ -21,7 +21,7 @@
  */
 
 import { load } from "cheerio";
-import { routeLlmJson } from "../agentic/llm-router.js";
+import { routeLlmJson, checkOllamaAvailable } from "../agentic/llm-router.js";
 import { fetchKeywordVolume, isGoogleAdsConfigured } from "../providers/google-ads.js";
 import { fetchKeywordTrend } from "../providers/google-trends.js";
 import { searchSerp } from "../agentic/duckduckgo-serp.js";
@@ -45,6 +45,11 @@ export interface ProjectedPoint {
 
 export interface KeywordImpactResult {
   request: KeywordImpactRequest;
+  /** False when the local LLM couldn't be reached — UI should degrade by
+   *  hiding synthesis panels but still showing evidence cards + charts. */
+  llmAvailable: boolean;
+  /** If llmAvailable is false, a short human-readable explanation. */
+  llmError?: string;
   evidence: {
     volume: {
       avgMonthlySearches: number | null;
@@ -240,7 +245,29 @@ ${evidenceBlock}
 
 Respond with ONLY the JSON object, no prose.`;
 
+  const emptyAnalysis = (): KeywordImpactResult["analysis"] => ({
+    difficultyScore: 0, opportunityScore: 0,
+    verdict: "", fitWithCurrentContent: "",
+    keyMetricsToWatch: [], recommendations: [], risks: [], quickWins: [], projections: [],
+  });
+
+  // Probe Ollama up-front so the UI gets a clean llmAvailable=false instead of
+  // a hard error when the local model isn't running. The evidence panels still
+  // render from the real providers.
+  const ollamaOk = await checkOllamaAvailable().catch(() => false);
+  if (!ollamaOk) {
+    return {
+      request: { url: req.url, keyword: req.keyword, region },
+      llmAvailable: false,
+      llmError: "Local Ollama is not running. Evidence below is live, but the AI synthesis panels are hidden until Ollama is started (ollama serve).",
+      evidence: { volume: volumeEvidence, trend: trendEvidence, serp: serpEvidence, targetPage: pageEvidence, domainAuthority: daEvidence, missingFields },
+      analysis: emptyAnalysis(),
+    };
+  }
+
   let analysis: KeywordImpactResult["analysis"];
+  let llmAvailable = true;
+  let llmError: string | undefined;
   try {
     const { data } = await routeLlmJson<KeywordImpactResult["analysis"]>(prompt);
     analysis = {
@@ -255,21 +282,15 @@ Respond with ONLY the JSON object, no prose.`;
       projections: normalizeProjections(data.projections),
     };
   } catch (e) {
-    analysis = {
-      difficultyScore: 50,
-      opportunityScore: 50,
-      verdict: `Could not run the local LLM synthesis: ${e instanceof Error ? e.message : String(e)}`,
-      fitWithCurrentContent: "",
-      keyMetricsToWatch: [],
-      recommendations: [],
-      risks: [],
-      quickWins: [],
-      projections: [],
-    };
+    llmAvailable = false;
+    llmError = e instanceof Error ? e.message : String(e);
+    analysis = emptyAnalysis();
   }
 
   return {
     request: { url: req.url, keyword: req.keyword, region },
+    llmAvailable,
+    llmError,
     evidence: { volume: volumeEvidence, trend: trendEvidence, serp: serpEvidence, targetPage: pageEvidence, domainAuthority: daEvidence, missingFields },
     analysis,
   };

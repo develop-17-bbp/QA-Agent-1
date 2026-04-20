@@ -9,6 +9,8 @@ type Projection = { period: "3-month" | "6-month" | "12-month"; rankingEstimate:
 
 type ImpactResult = {
   request: { url: string; keyword: string; region: string };
+  llmAvailable: boolean;
+  llmError?: string;
   evidence: {
     volume: { avgMonthlySearches: number | null; competition: string | null; competitionIndex: number | null; lowBidUsd: number | null; highBidUsd: number | null };
     trend: { interestLast12m: number | null; direction: "up" | "down" | "flat" | "unknown"; monthly: { month: string; value: number }[] };
@@ -201,20 +203,42 @@ export default function KeywordImpact() {
 
         {!loading && result && e && a && (
           <motion.div key="result" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-            {/* ── Hero scores ─────────────────────────────────────────────────── */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, marginBottom: 18 }}>
-              <ScoreDial label="Opportunity" value={a.opportunityScore} />
-              <ScoreDial label="Difficulty" value={a.difficultyScore} invertColor />
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="qa-panel" style={{ padding: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>Verdict</div>
-                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, color: "var(--text)" }}>{a.verdict}</p>
-                {a.fitWithCurrentContent && (
-                  <p style={{ margin: "10px 0 0", fontSize: 12, lineHeight: 1.5, color: "var(--muted)", fontStyle: "italic" }}>
-                    Content fit: {a.fitWithCurrentContent}
-                  </p>
-                )}
+            {!result.llmAvailable && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                className="qa-panel"
+                style={{
+                  padding: "14px 18px",
+                  marginBottom: 16,
+                  background: "linear-gradient(135deg, rgba(234,179,8,0.08), rgba(234,179,8,0.02))",
+                  border: "1px solid rgba(234,179,8,0.4)",
+                  display: "flex", alignItems: "flex-start", gap: 12,
+                }}
+              >
+                <span style={{ fontSize: 18, lineHeight: 1 }}>⚠︎</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>AI synthesis unavailable — evidence still live</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.55 }}>{result.llmError ?? "Local Ollama is not reachable."}</div>
+                </div>
               </motion.div>
-            </div>
+            )}
+
+            {/* ── Hero scores (LLM-derived — hide when unavailable) ────────────── */}
+            {result.llmAvailable && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, marginBottom: 18 }}>
+                <ScoreDial label="Opportunity" value={a.opportunityScore} />
+                <ScoreDial label="Difficulty" value={a.difficultyScore} invertColor />
+                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="qa-panel" style={{ padding: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>Verdict</div>
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, color: "var(--text)" }}>{a.verdict}</p>
+                  {a.fitWithCurrentContent && (
+                    <p style={{ margin: "10px 0 0", fontSize: 12, lineHeight: 1.5, color: "var(--muted)", fontStyle: "italic" }}>
+                      Content fit: {a.fitWithCurrentContent}
+                    </p>
+                  )}
+                </motion.div>
+              </div>
+            )}
 
             {/* ── Evidence cards ──────────────────────────────────────────────── */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 18 }}>
@@ -291,8 +315,8 @@ export default function KeywordImpact() {
               )}
             </div>
 
-            {/* ── Projections timeline ──────────────────────────────────────── */}
-            {a.projections.length > 0 && (
+            {/* ── Projections timeline (LLM-derived) ──────────────────────── */}
+            {result.llmAvailable && a.projections.length > 0 && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="qa-panel" style={{ padding: 22, marginBottom: 18 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", marginBottom: 12 }}>Projected outcomes</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
@@ -322,13 +346,15 @@ export default function KeywordImpact() {
               </motion.div>
             )}
 
-            {/* ── Lists: recommendations / risks / quick wins / metrics ─────── */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-              <ListCard title="Recommendations" items={a.recommendations} icon="✓" color="#111" />
-              <ListCard title="Quick wins" items={a.quickWins} icon="⚡" color="#16a34a" />
-              <ListCard title="Risks" items={a.risks} icon="!" color="#dc2626" />
-              <ListCard title="Metrics to watch" items={a.keyMetricsToWatch} icon="◉" color="#475569" />
-            </div>
+            {/* ── Lists (LLM-derived) ──────────────────────────────────────── */}
+            {result.llmAvailable && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+                <ListCard title="Recommendations" items={a.recommendations} icon="✓" color="#111" />
+                <ListCard title="Quick wins" items={a.quickWins} icon="⚡" color="#16a34a" />
+                <ListCard title="Risks" items={a.risks} icon="!" color="#dc2626" />
+                <ListCard title="Metrics to watch" items={a.keyMetricsToWatch} icon="◉" color="#475569" />
+              </div>
+            )}
 
             {e.missingFields.length > 0 && (
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="qa-footnote" style={{ marginTop: 18 }}>

@@ -38,6 +38,7 @@ export default function LinkFixAdvisor() {
   const [fixes, setFixes] = useState<Map<string, string>>(new Map());
   const [fixing, setFixing] = useState(false);
   const [filter, setFilter] = useState("");
+  const [visibleCount, setVisibleCount] = useState(100);
 
   useEffect(() => {
     fetchHistory().then((h) => {
@@ -55,6 +56,7 @@ export default function LinkFixAdvisor() {
     setLinks(null);
     setFixes(new Map());
     setError("");
+    setVisibleCount(100);
     fetchBrokenLinks(selectedRunId)
       .then((r) => setLinks(r.links))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
@@ -68,17 +70,24 @@ export default function LinkFixAdvisor() {
     return links.filter((l) => `${l.siteHostname} ${l.foundOn} ${l.target} ${l.error ?? ""}`.toLowerCase().includes(q));
   }, [links, filter]);
 
+  /**
+   * Runs the AI fix-suggestions endpoint against a specific slice of links
+   * (what's currently visible). Pagination lets the user process a huge
+   * broken-link haul in 100-at-a-time batches instead of hammering Ollama
+   * with 500+ prompts in one go.
+   */
   const runAiFixes = async () => {
-    if (!links || links.length === 0) return;
+    if (!filtered || filtered.length === 0) return;
+    const batch = filtered.slice(0, visibleCount);
     setFixing(true);
     setError("");
     try {
-      const input = links.map((l) => ({ foundOn: l.foundOn, target: l.target, status: l.status, error: l.error }));
+      const input = batch.map((l) => ({ foundOn: l.foundOn, target: l.target, status: l.status, error: l.error }));
       const { recommendations } = await fetchLinkFixRecommendations(input);
-      const map = new Map<string, string>();
-      for (let i = 0; i < links.length; i++) {
+      const map = new Map(fixes);
+      for (let i = 0; i < batch.length; i++) {
         const rec = recommendations[i]?.recommendation ?? "";
-        if (rec) map.set(keyFor(links[i]!), rec);
+        if (rec) map.set(keyFor(batch[i]!), rec);
       }
       setFixes(map);
     } catch (e) {
@@ -88,7 +97,11 @@ export default function LinkFixAdvisor() {
     }
   };
 
+  const loadMore = () => setVisibleCount((v) => v + 100);
   const fixedCount = fixes.size;
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = filtered.length > visibleCount;
+  const pendingFixesInView = visible.filter((l) => !fixes.has(keyFor(l))).length;
 
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
@@ -129,10 +142,15 @@ export default function LinkFixAdvisor() {
         <button
           className="qa-btn-primary"
           onClick={runAiFixes}
-          disabled={fixing || !links || links.length === 0}
+          disabled={fixing || !links || pendingFixesInView === 0}
           style={{ padding: "10px 20px", whiteSpace: "nowrap" }}
+          title={filtered.length > visibleCount ? "Only the currently visible batch is sent to the LLM — click 'Load next 100' to process more." : ""}
         >
-          {fixing ? "Thinking…" : `Get AI fix suggestions${links && links.length > 0 ? ` (${links.length})` : ""}`}
+          {fixing
+            ? "Thinking…"
+            : pendingFixesInView === 0
+              ? "All visible fixed ✓"
+              : `Get AI fix suggestions (${pendingFixesInView})`}
         </button>
       </div>
 
@@ -157,7 +175,8 @@ export default function LinkFixAdvisor() {
           <motion.div key="table" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, fontSize: 12, color: "var(--muted)" }}>
               <span>
-                <strong style={{ color: "var(--text)" }}>{filtered.length}</strong> of {links?.length ?? 0} broken link{(links?.length ?? 0) === 1 ? "" : "s"}
+                Showing <strong style={{ color: "var(--text)" }}>{visible.length}</strong> of {filtered.length} broken link{filtered.length === 1 ? "" : "s"}
+                {links && filtered.length !== links.length && <span> ({links.length} before filter)</span>}
                 {fixedCount > 0 && <span style={{ marginLeft: 10 }}>· <strong style={{ color: "var(--ok)" }}>{fixedCount}</strong> with AI fix</span>}
               </span>
               <span style={{ fontSize: 11 }}>Origin = page where the broken link appears</span>
@@ -174,7 +193,7 @@ export default function LinkFixAdvisor() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((l, i) => {
+                  {visible.map((l, i) => {
                     const rec = fixes.get(keyFor(l));
                     return (
                       <motion.tr
@@ -219,6 +238,17 @@ export default function LinkFixAdvisor() {
                 </tbody>
               </table>
             </div>
+            {hasMore && (
+              <div style={{ marginTop: 14, textAlign: "center" }}>
+                <button
+                  className="qa-btn-ghost"
+                  onClick={loadMore}
+                  style={{ padding: "8px 24px", fontSize: 13 }}
+                >
+                  Load next 100 ({filtered.length - visibleCount} more)
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

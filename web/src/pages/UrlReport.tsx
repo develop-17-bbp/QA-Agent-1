@@ -14,6 +14,7 @@
  */
 
 import { useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
   fetchHistory,
   fetchSiteAudit,
@@ -24,6 +25,7 @@ import {
   fetchKeywordVolume,
   fetchSecurityGrade,
   fetchWayback,
+  fetchCrux,
 } from "../api";
 import { useRegion } from "../components/RegionPicker";
 
@@ -102,24 +104,36 @@ function ScoreRing({ score, label }: { score: number; label: string }) {
   const color = pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444";
   const r = 30;
   const circ = 2 * Math.PI * r;
-  const dash = (pct / 100) * circ;
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}
+    >
       <svg width={74} height={74} viewBox="0 0 74 74">
         <circle cx={37} cy={37} r={r} fill="none" stroke="var(--border)" strokeWidth={6} />
-        <circle
+        <motion.circle
           cx={37} cy={37} r={r}
           fill="none"
           stroke={color}
           strokeWidth={6}
-          strokeDasharray={`${dash} ${circ - dash}`}
+          strokeDasharray={circ}
           strokeLinecap="round"
           transform="rotate(-90 37 37)"
+          initial={{ strokeDashoffset: circ }}
+          animate={{ strokeDashoffset: circ * (1 - pct / 100) }}
+          transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
         />
-        <text x={37} y={41} textAnchor="middle" fontSize={15} fontWeight={700} fill={color}>{pct}</text>
+        <motion.text
+          x={37} y={41} textAnchor="middle" fontSize={15} fontWeight={700} fill={color}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.4 }}
+        >
+          {pct}
+        </motion.text>
       </svg>
       <span style={{ fontSize: 11, color: "var(--muted)" }}>{label}</span>
-    </div>
+    </motion.div>
   );
 }
 
@@ -174,6 +188,7 @@ interface ReportData {
   volumeMap: Map<string, any>;
   securityGrade: any | null;
   wayback: any | null;
+  crux: any | null;
 }
 
 export default function UrlReport() {
@@ -223,7 +238,7 @@ export default function UrlReport() {
       }
 
       // 2. Fire everything in parallel
-      const [auditResult, onpageResult, daResult, backlinksResult, suggestResult, securityResult, waybackResult] = await Promise.allSettled([
+      const [auditResult, onpageResult, daResult, backlinksResult, suggestResult, securityResult, waybackResult, cruxResult] = await Promise.allSettled([
         runId ? fetchSiteAudit(runId) : Promise.resolve(null),
         runId ? fetchOnPageSeoChecker(runId, url) : Promise.resolve(null),
         fetchDomainAuthority(domain),
@@ -231,6 +246,7 @@ export default function UrlReport() {
         fetchKeywordSuggestions(domain.split(".")[0]),
         fetchSecurityGrade(domain),
         fetchWayback(url),
+        fetchCrux(url, "PHONE"),
       ]);
 
       setProgress((p) => [...p, "Data received — fetching keyword volumes…"]);
@@ -268,6 +284,7 @@ export default function UrlReport() {
         volumeMap,
         securityGrade: securityResult.status === "fulfilled" ? securityResult.value : null,
         wayback: waybackResult.status === "fulfilled" ? waybackResult.value : null,
+        crux: cruxResult.status === "fulfilled" ? cruxResult.value : null,
       });
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
@@ -357,8 +374,49 @@ function formatWaybackDate(ts: string | undefined): string {
   return `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
 }
 
+// Core Web Vitals thresholds (from https://web.dev/vitals/).
+// Returns "good" | "needs-improvement" | "poor" given a p75 number.
+function rateVital(metric: "lcp" | "inp" | "cls" | "fcp" | "ttfb", p75: number): "good" | "ni" | "poor" {
+  const T: Record<string, [number, number]> = {
+    lcp: [2500, 4000], inp: [200, 500], cls: [0.1, 0.25], fcp: [1800, 3000], ttfb: [800, 1800],
+  };
+  const [g, p] = T[metric]!;
+  if (p75 <= g) return "good";
+  if (p75 <= p) return "ni";
+  return "poor";
+}
+const RATING_COLOR: Record<string, string> = { good: "#16a34a", ni: "#d97706", poor: "#dc2626" };
+const RATING_LABEL: Record<string, string> = { good: "Good", ni: "Needs work", poor: "Poor" };
+
+function CwvMetric({ label, p75, metric, unit }: { label: string; p75: number | null; metric: "lcp" | "inp" | "cls" | "fcp" | "ttfb"; unit: string }) {
+  const rating = p75 != null ? rateVital(metric, p75) : null;
+  const display = p75 == null
+    ? "—"
+    : metric === "cls"
+      ? p75.toFixed(3)
+      : p75 >= 1000
+        ? (p75 / 1000).toFixed(2) + "s"
+        : Math.round(p75) + unit;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{label}</div>
+        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{metric.toUpperCase()} · p75</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "ui-monospace, Menlo, monospace", color: rating ? RATING_COLOR[rating] : "var(--muted)" }}>{display}</div>
+        {rating && (
+          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99, color: "#fff", background: RATING_COLOR[rating], textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            {RATING_LABEL[rating]}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ReportView({ report }: { report: ReportData }) {
-  const { domain, url, audit, onpage, da, backlinks, suggestions, volumeMap, securityGrade, wayback } = report;
+  const { domain, url, audit, onpage, da, backlinks, suggestions, volumeMap, securityGrade, wayback, crux } = report;
 
   const auditScore = audit?.score ?? audit?.healthScore ?? null;
   const onpageScore = val(onpage?.overallScore) ?? null;
@@ -505,6 +563,34 @@ function ReportView({ report }: { report: ReportData }) {
             })()
           ) : (
             <NotAvailable reason="Mozilla Observatory scan unavailable. The service may be rate limiting or temporarily unreachable." />
+          )}
+        </Card>
+
+        {/* ── Chrome UX Report — real-user Web Vitals ─────────── */}
+        <Card title="Real-user Web Vitals" icon="◐">
+          {crux?.configured === false ? (
+            <NotAvailable reason="CrUX not configured. Add CRUX_API_KEY to .env and enable 'Chrome UX Report API' in Google Cloud." />
+          ) : crux?.record ? (
+            (() => {
+              const r = crux.record;
+              return (
+                <>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>
+                    PHONE · {r.collectionPeriod?.firstDate} → {r.collectionPeriod?.lastDate}
+                  </div>
+                  <CwvMetric label="Largest Contentful Paint" p75={r.lcp?.value?.p75 ?? null} metric="lcp" unit="ms" />
+                  <CwvMetric label="Interaction to Next Paint" p75={r.inp?.value?.p75 ?? null} metric="inp" unit="ms" />
+                  <CwvMetric label="Cumulative Layout Shift" p75={r.cls?.value?.p75 ?? null} metric="cls" unit="" />
+                  <CwvMetric label="First Contentful Paint" p75={r.fcp?.value?.p75 ?? null} metric="fcp" unit="ms" />
+                  <CwvMetric label="Time to First Byte" p75={r.ttfb?.value?.p75 ?? null} metric="ttfb" unit="ms" />
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10, fontStyle: "italic" }}>
+                    Field data — what real Chrome users experienced over the last 28 days.
+                  </div>
+                </>
+              );
+            })()
+          ) : (
+            <NotAvailable reason="Not enough real-user samples for this URL in the CrUX dataset. Lower-traffic pages often aren't indexed." />
           )}
         </Card>
 
