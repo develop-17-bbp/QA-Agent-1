@@ -82,7 +82,7 @@ export default function LinkFixAdvisor() {
     setFixing(true);
     setError("");
     try {
-      const input = batch.map((l) => ({ foundOn: l.foundOn, target: l.target, status: l.status, error: l.error }));
+      const input = batch.map((l) => ({ foundOn: l.foundOn, target: l.target, status: l.status, error: l.error, anchorText: l.anchorText, linkContext: l.linkContext }));
       const { recommendations } = await fetchLinkFixRecommendations(input);
       const map = new Map(fixes);
       for (let i = 0; i < batch.length; i++) {
@@ -185,16 +185,17 @@ export default function LinkFixAdvisor() {
               <table className="qa-table">
                 <thead>
                   <tr>
-                    <th style={{ width: 160 }}>Site</th>
-                    <th>Found on (origin)</th>
+                    <th style={{ width: 140 }}>Site</th>
+                    <th>Found on (origin page)</th>
                     <th>Broken target</th>
-                    <th style={{ width: 80 }}>HTTP</th>
-                    <th style={{ minWidth: 280 }}>Error / AI fix</th>
+                    <th style={{ width: 70 }}>HTTP</th>
+                    <th style={{ minWidth: 260 }}>Anchor / HTML / AI fix</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((l, i) => {
                     const rec = fixes.get(keyFor(l));
+                    const originIsPlaceholder = l.foundOn.startsWith("(") && l.foundOn.endsWith(")");
                     return (
                       <motion.tr
                         key={keyFor(l) + i}
@@ -204,9 +205,13 @@ export default function LinkFixAdvisor() {
                       >
                         <td style={{ fontWeight: 600, wordBreak: "break-all" }}>{l.siteHostname}</td>
                         <td style={{ wordBreak: "break-all" }}>
-                          <a href={l.foundOn} target="_blank" rel="noreferrer" style={{ color: "var(--text)", textDecoration: "none", fontSize: 12 }}>
-                            {l.foundOn}
-                          </a>
+                          {originIsPlaceholder ? (
+                            <span style={{ color: "var(--muted)", fontSize: 12, fontStyle: "italic" }}>{l.foundOn}</span>
+                          ) : (
+                            <a href={l.foundOn} target="_blank" rel="noreferrer" style={{ color: "var(--text)", textDecoration: "none", fontSize: 12 }}>
+                              {l.foundOn}
+                            </a>
+                          )}
                         </td>
                         <td style={{ wordBreak: "break-all" }}>
                           <a href={l.target} target="_blank" rel="noreferrer" style={{ color: "#dc2626", fontSize: 12, textDecoration: "underline" }}>
@@ -219,18 +224,39 @@ export default function LinkFixAdvisor() {
                           </span>
                         </td>
                         <td>
-                          {rec ? (
-                            <motion.div
-                              initial={{ opacity: 0, y: 4 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, lineHeight: 1.5, color: "var(--text)" }}
-                            >
-                              <span style={{ background: "#16a34a", color: "#fff", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>AI FIX</span>
-                              <span>{rec}</span>
-                            </motion.div>
-                          ) : (
-                            <span style={{ color: "var(--muted)", fontSize: 12 }}>{l.error ?? "—"}</span>
-                          )}
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {l.anchorText && (
+                              <div style={{ fontSize: 12, color: "var(--text)" }}>
+                                <span style={{ color: "var(--muted)", fontSize: 10.5, marginRight: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>Anchor</span>
+                                <span style={{ fontWeight: 600 }}>"{l.anchorText}"</span>
+                              </div>
+                            )}
+                            {l.linkContext && (
+                              <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.4 }}>
+                                …{l.linkContext}…
+                              </div>
+                            )}
+                            {l.outerHtml && (
+                              <details style={{ fontSize: 11 }}>
+                                <summary style={{ cursor: "pointer", color: "var(--muted)" }}>HTML snippet</summary>
+                                <pre style={{ margin: "6px 0 0", padding: 8, background: "#f8fafc", border: "1px solid var(--border)", borderRadius: 4, fontSize: 11, overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                                  {l.outerHtml}
+                                </pre>
+                              </details>
+                            )}
+                            {rec ? (
+                              <motion.div
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, lineHeight: 1.5, color: "var(--text)" }}
+                              >
+                                <span style={{ background: "#16a34a", color: "#fff", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>AI FIX</span>
+                                <span>{rec}</span>
+                              </motion.div>
+                            ) : !l.anchorText && !l.linkContext && !l.outerHtml ? (
+                              <span style={{ color: "var(--muted)", fontSize: 12 }}>{l.error ?? "—"}</span>
+                            ) : null}
+                          </div>
                         </td>
                       </motion.tr>
                     );

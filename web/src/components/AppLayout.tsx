@@ -22,6 +22,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/query-lab": "mixed", "/serp-analyzer": "real", "/agentic-crawl": "llm-safe",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
   "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
+  "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
 };
 
 const DOT_COLORS: Record<SourceClass, string> = {
@@ -72,6 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Top Pages", path: "/top-pages" },
       { label: "Compare Domains", path: "/compare-domains" },
       { label: "Traffic Analytics", path: "/traffic-analytics" },
+      { label: "AI Competitive Estimator", path: "/competitive-estimator" },
     ],
   },
   {

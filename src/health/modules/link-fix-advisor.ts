@@ -18,6 +18,10 @@ export interface BrokenLinkInput {
   target: string;
   status?: number;
   error?: string;
+  /** Optional anchor text from the `<a>` tag — helps LLM infer intent. */
+  anchorText?: string;
+  /** Optional surrounding-text context for the link on the origin page. */
+  linkContext?: string;
 }
 
 export interface LinkFixRecommendation {
@@ -31,7 +35,16 @@ function fixCacheKey(input: BrokenLinkInput): string {
 }
 
 async function fetchBatch(batch: BrokenLinkInput[]): Promise<string[]> {
-  const rows = batch.map((b, i) => `${i + 1}. Found on: ${b.foundOn}\n   Target: ${b.target}\n   Status: ${b.status ?? "network error"}${b.error ? ` — ${b.error}` : ""}`).join("\n\n");
+  const rows = batch.map((b, i) => {
+    const lines = [
+      `${i + 1}. Found on: ${b.foundOn}`,
+      `   Target: ${b.target}`,
+      `   Status: ${b.status ?? "network error"}${b.error ? ` — ${b.error}` : ""}`,
+    ];
+    if (b.anchorText) lines.push(`   Anchor: "${b.anchorText}"`);
+    if (b.linkContext) lines.push(`   Context: ${b.linkContext}`);
+    return lines.join("\n");
+  }).join("\n\n");
   const prompt = `You are an SEO triage engineer. For each broken link below, give ONE actionable remediation in a single sentence (max 18 words). No preamble, no numbering, no markdown. Return ONLY a JSON array of ${batch.length} strings, in the same order.
 
 Guidance:

@@ -1,5 +1,12 @@
 export interface BrokenLinkRecord {
-  /** Page where the bad link was found */
+  /**
+   * Page where the bad link was found. When the crawler parses a page's HTML
+   * and finds an `<a href>` that resolves to a broken target, this is that
+   * page's URL. Special placeholder values still exist for older records:
+   *   "(crawl)" — the page itself failed to load (no origin exists)
+   *   "(listed URL)" — URL came from the user's input list, not discovered
+   *   "(discovered, not crawled)" — legacy fallback when origin map was empty
+   */
   foundOn: string;
   /** Resolved target URL */
   target: string;
@@ -7,6 +14,12 @@ export interface BrokenLinkRecord {
   error?: string;
   /** Wall-clock time for the HTTP request that detected the issue (ms). */
   durationMs?: number;
+  /** Visible text of the `<a>` tag that referenced the broken target (when available). */
+  anchorText?: string;
+  /** Short plain-text context: ~60 chars of text around the `<a>` tag for SEO-team review. */
+  linkContext?: string;
+  /** The `<a>` tag's outer HTML as it appears on the origin page (capped at 400 chars). */
+  outerHtml?: string;
 }
 
 /**

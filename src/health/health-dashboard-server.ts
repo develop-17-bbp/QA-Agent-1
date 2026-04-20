@@ -67,6 +67,7 @@ import { fetchCruxRecord, isCruxConfigured, type CruxFormFactor } from "./provid
 import { GEO_TARGETS } from "./providers/geo-targets.js";
 import { recommendLinkFixes, type BrokenLinkInput } from "./modules/link-fix-advisor.js";
 import { predictKeywordImpact } from "./modules/keyword-impact-predictor.js";
+import { estimateCompetitive } from "./modules/competitive-estimator.js";
 import { fetchSecurityGrade } from "./providers/mozilla-observatory.js";
 import { fetchClosestSnapshot, fetchSnapshotHistory } from "./providers/wayback-machine.js";
 import {
@@ -2483,10 +2484,20 @@ export async function runHealthDashboard(options: {
         try {
           const raw = await loadRawReportsForRun(outRoot, runIdP);
           if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return; }
-          const links: Array<{ siteHostname: string; foundOn: string; target: string; status?: number; error?: string; durationMs?: number }> = [];
+          const links: Array<{ siteHostname: string; foundOn: string; target: string; status?: number; error?: string; durationMs?: number; anchorText?: string; linkContext?: string; outerHtml?: string }> = [];
           for (const r of raw.reports) {
             for (const b of r.crawl.brokenLinks ?? []) {
-              links.push({ siteHostname: r.hostname, foundOn: b.foundOn, target: b.target, status: b.status, error: b.error, durationMs: b.durationMs });
+              links.push({
+                siteHostname: r.hostname,
+                foundOn: b.foundOn,
+                target: b.target,
+                status: b.status,
+                error: b.error,
+                durationMs: b.durationMs,
+                anchorText: b.anchorText,
+                linkContext: b.linkContext,
+                outerHtml: b.outerHtml,
+              });
             }
           }
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=120" });
@@ -2526,6 +2537,18 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── AI Competitive Estimator (free-tier only) ──
+      if (req.method === "GET" && url.pathname === "/api/competitive-estimate") {
+        const domain = (url.searchParams.get("domain") ?? "").trim();
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const result = await estimateCompetitive(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
         return;
       }
 

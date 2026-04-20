@@ -454,8 +454,20 @@ export async function crawlSite(options: {
   const pages: PageFetchRecord[] = [];
   const brokenLinks: BrokenLinkRecord[] = [];
   const linkChecks: LinkCheckRecord[] = [];
-  /** Every unique same-origin URL we discover from <a href> — verify even if not crawled */
-  const discoveredInternal = new Set<string>();
+  /**
+   * Every unique same-origin URL we discover from <a href>, mapped to the list
+   * of origin pages where it was found and the anchor/context captured on each
+   * origin. We emit one BrokenLinkRecord per (target, origin) pair so SEO teams
+   * can see which specific page contains the broken link and the `<a>` tag
+   * exactly as it appears in the HTML.
+   */
+  interface LinkRef {
+    originPage: string;
+    anchorText?: string;
+    linkContext?: string;
+    outerHtml?: string;
+  }
+  const discoveredInternal = new Map<string, LinkRef[]>();
 
   let outstanding = 0;
 
@@ -500,7 +512,40 @@ export async function crawlSite(options: {
       if (!href) return;
       const abs = normalizeHref(href, pageUrl);
       if (!abs || !sameOrigin(abs, pageUrl)) return;
-      discoveredInternal.add(abs);
+
+      // Capture per-link provenance so broken-link reports can point at the
+      // exact <a> tag on the exact origin page, not a category placeholder.
+      const anchorText = $(el).text().replace(/\s+/g, " ").trim().slice(0, 160) || undefined;
+      const outerRaw = $.html(el) ?? "";
+      const outerHtml = outerRaw.length > 400 ? outerRaw.slice(0, 400) + "…" : outerRaw;
+      // Context = up to ~60 chars of text on either side of the <a> within its parent.
+      let linkContext: string | undefined;
+      try {
+        const parentText = $(el).parent().text().replace(/\s+/g, " ").trim();
+        if (parentText) {
+          const anchor = anchorText ?? "";
+          const idx = anchor ? parentText.indexOf(anchor) : -1;
+          if (idx >= 0) {
+            const before = parentText.slice(Math.max(0, idx - 60), idx).trim();
+            const after = parentText.slice(idx + anchor.length, idx + anchor.length + 60).trim();
+            const stitched = `${before} «${anchor}» ${after}`.replace(/\s+/g, " ").trim();
+            linkContext = stitched.slice(0, 200);
+          } else {
+            linkContext = parentText.slice(0, 200);
+          }
+        }
+      } catch { /* context is best-effort */ }
+
+      const refs = discoveredInternal.get(abs);
+      const ref: LinkRef = { originPage: pageUrl, anchorText, linkContext, outerHtml };
+      if (refs) {
+        // Only append a second reference if the origin page is different —
+        // multiple <a> tags to the same target on the same page would just
+        // create duplicate rows in the advisor.
+        if (!refs.some((r) => r.originPage === pageUrl)) refs.push(ref);
+      } else {
+        discoveredInternal.set(abs, [ref]);
+      }
 
       if (!visited.has(abs) && !queued.has(abs) && visited.size < maxPagesCap) {
         queue.push(abs);
@@ -540,7 +585,7 @@ export async function crawlSite(options: {
   });
 
   /** Verify discovered internal links we did not crawl (HEAD/GET), capped */
-  const toVerifyAll = [...discoveredInternal].filter((u) => !visited.has(u));
+  const toVerifyAll = [...discoveredInternal.keys()].filter((u) => !visited.has(u));
   const toVerify = toVerifyAll.slice(0, maxLinkChecksCap);
   await Promise.all(
     toVerify.map((target) =>
@@ -549,17 +594,63 @@ export async function crawlSite(options: {
         const linkOk = status >= 200 && status < 400;
         linkChecks.push({ target, status, ok: linkOk, durationMs, method });
         if (!linkOk) {
-          brokenLinks.push({
-            foundOn: "(discovered, not crawled)",
-            target,
-            status: status || undefined,
-            error: error ?? (status ? `HTTP ${status}` : undefined),
-            durationMs,
-          });
+          // Emit one BrokenLinkRecord per origin page so the SEO team can see
+          // exactly which page(s) contain the broken <a href>. Anchor text +
+          // outerHtml are passed through so the Link Fix Advisor can show the
+          // exact tag as it appears in the HTML.
+          const refs = discoveredInternal.get(target) ?? [];
+          if (refs.length === 0) {
+            brokenLinks.push({
+              foundOn: "(discovered, not crawled)",
+              target,
+              status: status || undefined,
+              error: error ?? (status ? `HTTP ${status}` : undefined),
+              durationMs,
+            });
+          } else {
+            for (const ref of refs) {
+              brokenLinks.push({
+                foundOn: ref.originPage,
+                target,
+                status: status || undefined,
+                error: error ?? (status ? `HTTP ${status}` : undefined),
+                durationMs,
+                anchorText: ref.anchorText,
+                linkContext: ref.linkContext,
+                outerHtml: ref.outerHtml,
+              });
+            }
+          }
         }
       }),
     ),
   );
+
+  /**
+   * Second pass: for pages that we actually crawled AND that returned a bad
+   * status (broken target), also attribute them back to the pages that linked
+   * to them. The initial "(crawl)" record at line ~490 stays (it represents
+   * the failed fetch itself), but we add per-origin records so the SEO team
+   * sees "page X links to broken page Y" for crawled-but-broken targets too.
+   */
+  for (const p of pages) {
+    if (p.ok) continue;
+    const refs = discoveredInternal.get(p.url);
+    if (!refs || refs.length === 0) continue;
+    for (const ref of refs) {
+      if (ref.originPage === p.url) continue; // don't self-attribute
+      brokenLinks.push({
+        foundOn: ref.originPage,
+        target: p.url,
+        status: p.status || undefined,
+        error: p.error ?? (p.status ? `HTTP ${p.status}` : undefined),
+        durationMs: p.durationMs,
+        anchorText: ref.anchorText,
+        linkContext: ref.linkContext,
+        outerHtml: ref.outerHtml,
+      });
+    }
+  }
 
   /** Ensure the listed URL appears in `pages` (same canonical href as start). */
   const listedCanonical = canonicalHref(options.startUrl);

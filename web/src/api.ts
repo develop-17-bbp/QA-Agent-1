@@ -405,7 +405,7 @@ export async function runFormTest(payload: { siteId?: string; headless?: boolean
 }
 
 // AI one-line fix recommendations for a batch of broken links.
-export type BrokenLinkInput = { foundOn: string; target: string; status?: number; error?: string };
+export type BrokenLinkInput = { foundOn: string; target: string; status?: number; error?: string; anchorText?: string; linkContext?: string };
 export type LinkFixRecommendation = { foundOn: string; target: string; recommendation: string };
 export async function fetchLinkFixRecommendations(links: BrokenLinkInput[]): Promise<{ recommendations: LinkFixRecommendation[] }> {
   const res = await fetch("/api/link-fix-recommendations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ links }) });
@@ -414,7 +414,17 @@ export async function fetchLinkFixRecommendations(links: BrokenLinkInput[]): Pro
 }
 
 // All broken links across a run, flat with site hostname for triage.
-export type BrokenLinkRow = { siteHostname: string; foundOn: string; target: string; status?: number; error?: string; durationMs?: number };
+export type BrokenLinkRow = {
+  siteHostname: string;
+  foundOn: string;
+  target: string;
+  status?: number;
+  error?: string;
+  durationMs?: number;
+  anchorText?: string;
+  linkContext?: string;
+  outerHtml?: string;
+};
 export async function fetchBrokenLinks(runId: string): Promise<{ runId: string; generatedAt: string; links: BrokenLinkRow[] }> {
   const res = await fetch(`/api/broken-links/${encodeURIComponent(runId)}`);
   if (!res.ok) throw new Error(await res.text());
@@ -424,6 +434,46 @@ export async function fetchBrokenLinks(runId: string): Promise<{ runId: string; 
 // Keyword Impact Predictor — "what if my site targeted this keyword?"
 export async function fetchKeywordImpact(payload: { url: string; keyword: string; region: string }): Promise<any> {
   const res = await fetch("/api/keyword-impact", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// AI Competitive Estimator — free-tier ranges for any domain's backlinks, traffic, keyword universe.
+export type CompetitiveEstimateSignals = {
+  domain: string;
+  fetchedAt: string;
+  trancoRank?: { value: number; source: string; confidence: string };
+  trancoPercentile?: { value: number; source: string; confidence: string };
+  domainAuthority?: { value: number; source: string; confidence: string };
+  cloudflareRank?: { value: number; source: string; confidence: string };
+  wikipediaMonthlyViews?: { value: number; source: string; confidence: string };
+  googleTrendsLatest?: { value: number; source: string; confidence: string };
+  cruxPresent?: { value: boolean; source: string; confidence: string };
+  commonCrawlReferringHosts?: { value: number; source: string; confidence: string };
+  commonCrawlDomainHits?: { value: number; source: string; confidence: string };
+  serpVisibilityCount?: { value: number; source: string; confidence: string };
+  missingFields: string[];
+  providersHit: string[];
+  providersFailed: string[];
+};
+export type CompetitiveEstimateResponse = {
+  domain: string;
+  fetchedAt: string;
+  signals: CompetitiveEstimateSignals;
+  baseline: { backlinks: number; monthlyOrganicTraffic: number; keywordUniverse: number };
+  estimates: {
+    backlinks: { min: number; max: number; mid: number; confidence: "high" | "medium" | "low" };
+    monthlyOrganicTraffic: { min: number; max: number; mid: number; confidence: "high" | "medium" | "low" };
+    keywordUniverse: { estimate: number; confidence: "high" | "medium" | "low" };
+  };
+  methodology: string;
+  caveats: string[];
+  drivers: string[];
+  llmAvailable: boolean;
+  llmError?: string;
+};
+export async function fetchCompetitiveEstimate(domain: string): Promise<CompetitiveEstimateResponse> {
+  const res = await fetch(`/api/competitive-estimate?domain=${encodeURIComponent(domain)}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
