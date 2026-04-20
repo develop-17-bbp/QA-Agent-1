@@ -68,6 +68,7 @@ import { GEO_TARGETS } from "./providers/geo-targets.js";
 import { recommendLinkFixes, type BrokenLinkInput } from "./modules/link-fix-advisor.js";
 import { predictKeywordImpact } from "./modules/keyword-impact-predictor.js";
 import { fetchSecurityGrade } from "./providers/mozilla-observatory.js";
+import { fetchClosestSnapshot, fetchSnapshotHistory } from "./providers/wayback-machine.js";
 import {
   loadTrackedPairs, saveTrackedPairs, addTrackedPair, removeTrackedPair,
   appendSnapshot, getHistoryForKeyword, getHistoryForDomain, getAllStats,
@@ -2524,6 +2525,32 @@ export async function runHealthDashboard(options: {
           const result = await predictKeywordImpact({ url: targetUrl, keyword, region });
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
           res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Wayback Machine snapshots (no auth) ──
+      if (req.method === "GET" && url.pathname === "/api/wayback") {
+        const target = url.searchParams.get("url") ?? "";
+        if (!target) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "url required" })); return; }
+        try {
+          const [closest, history] = await Promise.allSettled([
+            fetchClosestSnapshot(target),
+            fetchSnapshotHistory(target, 24),
+          ]);
+          const firstSnap = history.status === "fulfilled" ? history.value.value[0] : undefined;
+          const lastSnap = history.status === "fulfilled" ? history.value.value[history.value.value.length - 1] : undefined;
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=86400" });
+          res.end(JSON.stringify({
+            url: target,
+            closest: closest.status === "fulfilled" ? closest.value.value : null,
+            first: firstSnap ?? null,
+            last: lastSnap ?? null,
+            snapshotsByYear: history.status === "fulfilled"
+              ? history.value.value.map((s) => ({ year: Number(s.timestamp.slice(0, 4)), url: s.url }))
+              : [],
+            totalTracked: history.status === "fulfilled" ? history.value.value.length : 0,
+          }));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
         return;
       }

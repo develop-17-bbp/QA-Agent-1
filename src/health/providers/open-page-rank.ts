@@ -28,7 +28,11 @@ interface OprResponse {
 }
 
 function resolveKey(): string | undefined {
-  return process.env.OPR_API_KEY?.trim() || process.env.OPEN_PAGERANK_API_KEY?.trim();
+  return (
+    process.env.OPR_API_KEY?.trim() ||
+    process.env.OPEN_PAGERANK_API_KEY?.trim() ||
+    process.env.OPEN_PAGE_RANK_API_KEY?.trim()
+  );
 }
 
 export function isOpenPageRankConfigured(): boolean {

@@ -363,6 +363,13 @@ export async function fetchSecurityGrade(domain: string): Promise<any> {
   return res.json();
 }
 
+// Wayback Machine — first/last snapshot + yearly coverage (no auth)
+export async function fetchWayback(url: string): Promise<any> {
+  const res = await fetch(`/api/wayback?url=${encodeURIComponent(url)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // Geo targets (country list for the region picker)
 export type GeoTarget = { iso: string; name: string };
 let _geoCache: Promise<{ targets: GeoTarget[] }> | null = null;

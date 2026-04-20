@@ -23,6 +23,7 @@ import {
   fetchKeywordSuggestions,
   fetchKeywordVolume,
   fetchSecurityGrade,
+  fetchWayback,
 } from "../api";
 import { useRegion } from "../components/RegionPicker";
 
@@ -172,6 +173,7 @@ interface ReportData {
   suggestions: any;
   volumeMap: Map<string, any>;
   securityGrade: any | null;
+  wayback: any | null;
 }
 
 export default function UrlReport() {
@@ -221,13 +223,14 @@ export default function UrlReport() {
       }
 
       // 2. Fire everything in parallel
-      const [auditResult, onpageResult, daResult, backlinksResult, suggestResult, securityResult] = await Promise.allSettled([
+      const [auditResult, onpageResult, daResult, backlinksResult, suggestResult, securityResult, waybackResult] = await Promise.allSettled([
         runId ? fetchSiteAudit(runId) : Promise.resolve(null),
         runId ? fetchOnPageSeoChecker(runId, url) : Promise.resolve(null),
         fetchDomainAuthority(domain),
         fetchExternalBacklinks(domain),
         fetchKeywordSuggestions(domain.split(".")[0]),
         fetchSecurityGrade(domain),
+        fetchWayback(url),
       ]);
 
       setProgress((p) => [...p, "Data received — fetching keyword volumes…"]);
@@ -264,6 +267,7 @@ export default function UrlReport() {
         suggestions: suggestData,
         volumeMap,
         securityGrade: securityResult.status === "fulfilled" ? securityResult.value : null,
+        wayback: waybackResult.status === "fulfilled" ? waybackResult.value : null,
       });
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
@@ -348,8 +352,13 @@ const GRADE_COLORS: Record<string, string> = {
   "F": "#7f1d1d",
 };
 
+function formatWaybackDate(ts: string | undefined): string {
+  if (!ts || ts.length < 8) return "—";
+  return `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
+}
+
 function ReportView({ report }: { report: ReportData }) {
-  const { domain, url, audit, onpage, da, backlinks, suggestions, volumeMap, securityGrade } = report;
+  const { domain, url, audit, onpage, da, backlinks, suggestions, volumeMap, securityGrade, wayback } = report;
 
   const auditScore = audit?.score ?? audit?.healthScore ?? null;
   const onpageScore = val(onpage?.overallScore) ?? null;
@@ -496,6 +505,56 @@ function ReportView({ report }: { report: ReportData }) {
             })()
           ) : (
             <NotAvailable reason="Mozilla Observatory scan unavailable. The service may be rate limiting or temporarily unreachable." />
+          )}
+        </Card>
+
+        {/* ── Wayback Machine history ──────────────────────────── */}
+        <Card title="Historical presence" icon="◯">
+          {wayback && !wayback.error && (wayback.totalTracked > 0 || wayback.closest) ? (
+            <>
+              <KV label="First archived" value={formatWaybackDate(wayback.first?.timestamp)} />
+              <KV label="Last snapshot" value={formatWaybackDate(wayback.last?.timestamp)} />
+              <KV label="Snapshots tracked" value={`${wayback.totalTracked ?? 0} (1/year)`} />
+              {wayback.snapshotsByYear?.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--muted)", marginBottom: 6 }}>Coverage by year</div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 56 }}>
+                    {(() => {
+                      const years: number[] = wayback.snapshotsByYear.map((s: any) => s.year);
+                      const minYear = Math.min(...years);
+                      const maxYear = Math.max(...years);
+                      const present = new Set(years);
+                      const bars: any[] = [];
+                      for (let y = minYear; y <= maxYear; y++) {
+                        bars.push({ year: y, present: present.has(y) });
+                      }
+                      return bars.map((b) => (
+                        <div
+                          key={b.year}
+                          title={`${b.year} · ${b.present ? "archived" : "gap"}`}
+                          style={{
+                            flex: 1, minWidth: 4, height: b.present ? "100%" : "30%",
+                            background: b.present ? "#111" : "var(--border)",
+                            borderRadius: 2,
+                          }}
+                        />
+                      ));
+                    })()}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+                    <span>{Math.min(...wayback.snapshotsByYear.map((s: any) => s.year))}</span>
+                    <span>{Math.max(...wayback.snapshotsByYear.map((s: any) => s.year))}</span>
+                  </div>
+                </div>
+              )}
+              {wayback.last?.url && (
+                <a href={wayback.last.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--muted)", display: "inline-block", marginTop: 10 }}>
+                  View latest snapshot on Wayback →
+                </a>
+              )}
+            </>
+          ) : (
+            <NotAvailable reason="No Wayback Machine snapshots for this URL. Internet Archive hasn't captured it yet." />
           )}
         </Card>
 
