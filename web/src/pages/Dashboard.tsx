@@ -5,6 +5,7 @@ import { startRun, streamUrl, fetchHistory, fetchLlmStats } from "../api";
 import type { HealthSsePayload } from "../types/healthSse";
 import OptionWithTooltip from "../components/OptionWithTooltip";
 import RunProgressBanner, { type RunBannerState } from "../components/RunProgressBanner";
+import { DataSourceLegend } from "../components/AppLayout";
 
 export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
   const [urlsText, setUrlsText] = useState(initialUrls ?? "");
@@ -173,6 +174,16 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
             </div>
           </div>
         </div>
+      </motion.div>
+
+      {/* ── Data-source legend (always visible so SEO teammates know what the nav dots mean) ──────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, delay: 0.1 }}
+        style={{ marginBottom: 22 }}
+      >
+        <DataSourceLegend />
       </motion.div>
 
       {/* ── New-flagship quick-start tiles ─────────────────────────────── */}

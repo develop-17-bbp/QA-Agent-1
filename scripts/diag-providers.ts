@@ -30,8 +30,8 @@ async function probe(name: string, fn: () => Promise<string>): Promise<void> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const status: Status =
-      /not set|not configured|missing|unconfigured/i.test(msg) ? "unconfigured" :
-      /no data|empty|not in index|no results|no snapshots/i.test(msg) ? "empty" : "error";
+      /not set|not configured|missing|unconfigured|not yet consented|not connected|visit \/google-connections/i.test(msg) ? "unconfigured" :
+      /no data|empty|not in index|not in top|no results|no snapshots|page not found|site not verified/i.test(msg) ? "empty" : "error";
     rows.push({ provider: name, status, detail: msg.slice(0, 140), latencyMs: Date.now() - t0 });
   }
 }
