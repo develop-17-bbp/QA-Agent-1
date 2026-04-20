@@ -53,7 +53,17 @@ export interface CruxRecord {
 }
 
 function resolveKey(): string | undefined {
-  return process.env.CRUX_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
+  // Primary: CRUX_API_KEY, then GOOGLE_API_KEY (shared Google key). Third
+  // fallback: reuse PAGESPEED_API_KEY when REUSE_PAGESPEED_KEY_FOR_CRUX=true.
+  // This avoids forcing users to generate a second GCP key if they've already
+  // enabled "Chrome UX Report API" on the same project as PageSpeed Insights.
+  const direct = process.env.CRUX_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
+  if (direct) return direct;
+  if (process.env.REUSE_PAGESPEED_KEY_FOR_CRUX?.trim().toLowerCase() === "true") {
+    const shared = process.env.PAGESPEED_API_KEY?.trim();
+    if (shared) return shared;
+  }
+  return undefined;
 }
 
 export function isCruxConfigured(): boolean {
