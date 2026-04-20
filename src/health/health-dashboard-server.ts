@@ -68,6 +68,14 @@ import { GEO_TARGETS } from "./providers/geo-targets.js";
 import { recommendLinkFixes, type BrokenLinkInput } from "./modules/link-fix-advisor.js";
 import { predictKeywordImpact } from "./modules/keyword-impact-predictor.js";
 import { estimateCompetitive } from "./modules/competitive-estimator.js";
+import {
+  addCompetitorPair,
+  removeCompetitorPair,
+  listCompetitorPairs as listCompetitorRankPairs,
+  checkAndRecord as checkAndRecordCompetitorRank,
+  getAllCompetitorStats,
+  getCompetitorHistory,
+} from "./modules/competitor-rank.js";
 import { fetchSecurityGrade } from "./providers/mozilla-observatory.js";
 import { fetchClosestSnapshot, fetchSnapshotHistory } from "./providers/wayback-machine.js";
 import {
@@ -2537,6 +2545,60 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Competitor Rank Tracker (free-tier DDG + Brave) ──
+      if (req.method === "GET" && url.pathname === "/api/competitor-rank") {
+        try {
+          const pairs = await listCompetitorRankPairs();
+          const stats = await getAllCompetitorStats();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ pairs, stats }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/competitor-rank") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { domain?: string; keyword?: string; regionCode?: string; recordSnapshot?: boolean };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        const keyword = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
+        const region = typeof payload.regionCode === "string" && payload.regionCode.trim() ? payload.regionCode.trim() : "US";
+        if (!domain || !keyword) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain and keyword required" })); return; }
+        try {
+          await addCompetitorPair(domain, keyword, region);
+          const result = await checkAndRecordCompetitorRank(domain, keyword, region);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
+        return;
+      }
+      if (req.method === "DELETE" && url.pathname.startsWith("/api/competitor-rank/")) {
+        const rest = url.pathname.slice("/api/competitor-rank/".length);
+        const parts = rest.split("/");
+        if (parts.length !== 2 || !parts[0] || !parts[1]) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain/keyword required in path" })); return; }
+        const domain = decodeURIComponent(parts[0]);
+        const keyword = decodeURIComponent(parts[1]);
+        try {
+          await removeCompetitorPair(domain, keyword);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
+        return;
+      }
+      if (req.method === "GET" && url.pathname.startsWith("/api/competitor-rank-history/")) {
+        const rest = url.pathname.slice("/api/competitor-rank-history/".length);
+        const parts = rest.split("/");
+        if (parts.length !== 2 || !parts[0] || !parts[1]) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain/keyword required in path" })); return; }
+        const domain = decodeURIComponent(parts[0]);
+        const keyword = decodeURIComponent(parts[1]);
+        try {
+          const history = await getCompetitorHistory(domain, keyword);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ domain, keyword, history }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
         return;
       }
 

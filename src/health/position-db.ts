@@ -15,16 +15,28 @@ import path from "node:path";
 export interface PositionSnapshot {
   /** ISO 8601 date string (YYYY-MM-DD) of the snapshot. */
   at: string;
-  /** Average search position (1 = top). null if not in GSC. */
+  /** Average search position (1 = top). null if not in GSC / SERP. */
   position: number | null;
   clicks: number;
   impressions: number;
   ctr: number;
+  /** For competitor tracking: DuckDuckGo rank. `position` above is GSC or the preferred source. */
+  ddgRank?: number | null;
+  /** For competitor tracking: Brave Search rank. */
+  braveRank?: number | null;
+  /** True when ddgRank and braveRank differ by >10 positions (noise signal). */
+  discrepancy?: boolean;
+  /** ISO 2-letter country code used at snapshot time. */
+  regionCode?: string;
 }
 
 export interface TrackedPair {
   domain: string;
   keyword: string;
+  /** When true, this is a competitor pair (rank checked via DDG/Brave, not GSC). */
+  isCompetitor?: boolean;
+  /** ISO 2-letter country code (defaults to "US" when unset). */
+  regionCode?: string;
 }
 
 const DATA_ROOT = path.join(process.cwd(), "data", "position-history");
@@ -71,9 +83,14 @@ export async function saveTrackedPairs(pairs: TrackedPair[]): Promise<void> {
   await writeFile(TRACKED_FILE, JSON.stringify(unique, null, 2), "utf8");
 }
 
-export async function addTrackedPair(domain: string, keyword: string): Promise<void> {
+export async function addTrackedPair(domain: string, keyword: string, opts?: { isCompetitor?: boolean; regionCode?: string }): Promise<void> {
   const pairs = await loadTrackedPairs();
-  pairs.push({ domain: domain.trim(), keyword: keyword.trim() });
+  pairs.push({
+    domain: domain.trim(),
+    keyword: keyword.trim(),
+    isCompetitor: opts?.isCompetitor || undefined,
+    regionCode: opts?.regionCode || undefined,
+  });
   await saveTrackedPairs(pairs);
 }
 
@@ -81,6 +98,11 @@ export async function removeTrackedPair(domain: string, keyword: string): Promis
   const pairs = await loadTrackedPairs();
   const filtered = pairs.filter(p => !(p.domain === domain && p.keyword === keyword));
   await saveTrackedPairs(filtered);
+}
+
+export async function listCompetitorPairs(): Promise<TrackedPair[]> {
+  const pairs = await loadTrackedPairs();
+  return pairs.filter((p) => p.isCompetitor === true);
 }
 
 // ── Snapshot I/O ───────────────────────────────────────────────────────────

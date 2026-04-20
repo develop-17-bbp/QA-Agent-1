@@ -44,6 +44,7 @@ const FormTests = lazy(() => import("./pages/FormTests"));
 const KeywordImpact = lazy(() => import("./pages/KeywordImpact"));
 const LinkFixAdvisor = lazy(() => import("./pages/LinkFixAdvisor"));
 const CompetitiveEstimator = lazy(() => import("./pages/CompetitiveEstimator"));
+const CompetitorRankTracker = lazy(() => import("./pages/CompetitorRankTracker"));
 
 function LazyFallback() {
   return (
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="/backlink-gap" element={<BacklinkGap />} />
           <Route path="/traffic-analytics" element={<TrafficAnalytics />} />
           <Route path="/competitive-estimator" element={<CompetitiveEstimator />} />
+          <Route path="/competitor-rank-tracker" element={<CompetitorRankTracker />} />
 
           {/* Keyword Research */}
           <Route path="/keyword-overview" element={<KeywordOverview />} />

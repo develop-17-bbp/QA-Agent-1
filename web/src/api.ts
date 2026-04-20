@@ -478,6 +478,60 @@ export async function fetchCompetitiveEstimate(domain: string): Promise<Competit
   return res.json();
 }
 
+// Competitor Rank Tracker — DDG + Brave cross-check for competitor keyword positions.
+export type CompetitorRankPair = { domain: string; keyword: string; isCompetitor?: boolean; regionCode?: string };
+export type CompetitorRankSnapshot = {
+  at: string;
+  position: number | null;
+  ddgRank?: number | null;
+  braveRank?: number | null;
+  discrepancy?: boolean;
+  regionCode?: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+};
+export type CompetitorRankStats = {
+  domain: string;
+  keyword: string;
+  regionCode: string;
+  latest: CompetitorRankSnapshot | null;
+  delta7d: number | null;
+  delta30d: number | null;
+  best: number | null;
+  worst: number | null;
+  snapshotCount: number;
+};
+export type CompetitorRankResult = {
+  domain: string;
+  keyword: string;
+  regionCode: string;
+  ddgRank: number | null;
+  braveRank: number | null;
+  discrepancy: boolean;
+  checkedAt: string;
+  errors: Partial<Record<"ddg" | "brave", string>>;
+};
+export async function listCompetitorRank(): Promise<{ pairs: CompetitorRankPair[]; stats: CompetitorRankStats[] }> {
+  const res = await fetch("/api/competitor-rank");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function addCompetitorRank(domain: string, keyword: string, regionCode = "US"): Promise<CompetitorRankResult> {
+  const res = await fetch("/api/competitor-rank", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, keyword, regionCode }) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function removeCompetitorRank(domain: string, keyword: string): Promise<void> {
+  const res = await fetch(`/api/competitor-rank/${encodeURIComponent(domain)}/${encodeURIComponent(keyword)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
+}
+export async function fetchCompetitorRankHistory(domain: string, keyword: string): Promise<{ domain: string; keyword: string; history: CompetitorRankSnapshot[] }> {
+  const res = await fetch(`/api/competitor-rank-history/${encodeURIComponent(domain)}/${encodeURIComponent(keyword)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // LLM Router Stats
 export function fetchLlmStats(): Promise<any> {
   return dedupFetch("/api/llm-stats", async () => {
