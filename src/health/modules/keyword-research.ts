@@ -19,6 +19,7 @@ import { fetchKeywordTrend } from "../providers/google-trends.js";
 import { fetchSuggestions, fetchQuestionSuggestions } from "../providers/google-suggest.js";
 import { fetchBestMatchPageviews } from "../providers/wikipedia-pageviews.js";
 import { searchSerp } from "../agentic/duckduckgo-serp.js";
+import { ddgRegionCode } from "../providers/geo-targets.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -139,9 +140,10 @@ function estimateVolumeFromSignals(args: {
 
 // ── Main function ───────────────────────────────────────────────────
 
-export async function researchKeyword(keyword: string): Promise<KeywordResearchData> {
+export async function researchKeyword(keyword: string, regionCode = "US"): Promise<KeywordResearchData> {
   const clean = keyword.trim();
   if (!clean) throw new Error("Empty keyword");
+  const region = regionCode.trim().toUpperCase() || "US";
 
   const providersHit: string[] = [];
   const providersFailed: string[] = [];
@@ -150,12 +152,15 @@ export async function researchKeyword(keyword: string): Promise<KeywordResearchD
   const estimatedFields: string[] = [];
 
   // ── Parallel provider fetches ───────────────────────────────────
+  // Every call below is explicitly region-scoped so Google's IP-based
+  // geolocation doesn't leak local (e.g., Noida/India) results into a
+  // US-region overview.
   const [trendRes, autoRes, questionRes, wikiRes, serpRes] = await Promise.allSettled([
-    fetchKeywordTrend(clean),
-    fetchSuggestions(clean),
-    fetchQuestionSuggestions(clean),
+    fetchKeywordTrend(clean, region),
+    fetchSuggestions(clean, "en", region),
+    fetchQuestionSuggestions(clean, "en", region),
     fetchBestMatchPageviews([clean, clean.replace(/\s+/g, "_")]),
-    searchSerp(clean),
+    searchSerp(clean, ddgRegionCode(region)),
   ]);
 
   // ── Google Trends ───────────────────────────────────────────────
@@ -257,18 +262,27 @@ export async function researchKeyword(keyword: string): Promise<KeywordResearchD
   const variationsTotalVolume = variations.reduce((a, v) => a + v.volume, 0);
   const questionsTotalVolume = questionsTyped.reduce((a, v) => a + v.volume, 0);
 
-  // ── Country volumes: distribute US-centric default ──────────────
-  // (Real per-country breakdown requires paid data; this is an approximation.)
-  const countryVolumes: CountryVolume[] = volume > 0
-    ? [
-        { country: "United States", code: "US", volume: Math.round(volume * 0.45) },
-        { country: "India", code: "IN", volume: Math.round(volume * 0.15) },
-        { country: "United Kingdom", code: "UK", volume: Math.round(volume * 0.1) },
-        { country: "Canada", code: "CA", volume: Math.round(volume * 0.06) },
-        { country: "Australia", code: "AU", volume: Math.round(volume * 0.05) },
-        { country: "Germany", code: "DE", volume: Math.round(volume * 0.05) },
-      ]
-    : [];
+  // ── Country volumes: distributed around the SELECTED region ─────
+  // (Real per-country breakdown requires paid data; this is an approximation
+  // that puts the user's chosen region at the top share so the numbers don't
+  // contradict the region picker they just used.)
+  const COUNTRY_POOL: { country: string; code: string }[] = [
+    { country: "United States", code: "US" },
+    { country: "India", code: "IN" },
+    { country: "United Kingdom", code: "UK" },
+    { country: "Canada", code: "CA" },
+    { country: "Australia", code: "AU" },
+    { country: "Germany", code: "DE" },
+  ];
+  const SHARES = [0.45, 0.15, 0.1, 0.06, 0.05, 0.05];
+  const countryVolumes: CountryVolume[] = (() => {
+    if (volume <= 0) return [];
+    const sel = COUNTRY_POOL.findIndex((c) => c.code === region || (region === "GB" && c.code === "UK"));
+    const ordered = sel >= 0
+      ? [COUNTRY_POOL[sel]!, ...COUNTRY_POOL.filter((_, i) => i !== sel)]
+      : COUNTRY_POOL;
+    return ordered.map((c, i) => ({ ...c, volume: Math.round(volume * (SHARES[i] ?? 0.02)) }));
+  })();
 
   // ── LLM pass for intent + cluster labels + nothing else ─────────
   let intent: KeywordResearchData["intent"] = "informational";

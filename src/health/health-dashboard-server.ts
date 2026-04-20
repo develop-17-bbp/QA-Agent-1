@@ -1655,15 +1655,16 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/keyword-suggestions") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { keyword?: string; locale?: string };
+        let payload: { keyword?: string; locale?: string; country?: string };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const kw = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
         if (!kw) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keyword required" })); return; }
         const locale = typeof payload.locale === "string" ? payload.locale : "en";
+        const country = typeof payload.country === "string" ? payload.country : "";
         try {
           const [sugg, questions] = await Promise.allSettled([
-            fetchSuggestions(kw, locale),
-            fetchQuestionSuggestions(kw, locale),
+            fetchSuggestions(kw, locale, country),
+            fetchQuestionSuggestions(kw, locale, country),
           ]);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=86400" });
           res.end(JSON.stringify({
@@ -1696,12 +1697,13 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/keyword-magic") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { seedKeyword?: string };
+        let payload: { seedKeyword?: string; region?: string };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const seed = typeof payload.seedKeyword === "string" ? payload.seedKeyword.trim() : "";
+        const region = typeof payload.region === "string" && payload.region.trim() ? payload.region.trim() : "US";
         if (!seed) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "seedKeyword required" })); return; }
         try {
-          const result = await generateMagicKeywords(seed);
+          const result = await generateMagicKeywords(seed, region);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
@@ -2398,13 +2400,14 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/keyword-research") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { keyword?: string };
+        let payload: { keyword?: string; region?: string };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const kw = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
+        const region = typeof payload.region === "string" && payload.region.trim() ? payload.region.trim() : "US";
         if (!kw) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keyword required" })); return; }
         try {
           const { researchKeyword } = await import("./modules/keyword-research.js");
-          const result = await researchKeyword(kw);
+          const result = await researchKeyword(kw, region);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) {

@@ -65,8 +65,8 @@ export default function KeywordOverview() {
     setTrend(null);
     try {
       const [main, sugg, tr] = await Promise.allSettled([
-        fetchKeywordResearch(kw),
-        fetchKeywordSuggestions(kw),
+        fetchKeywordResearch(kw, region),
+        fetchKeywordSuggestions(kw, "en", region),
         fetchKeywordTrends(kw, region),
       ]);
       if (main.status === "fulfilled") setData(main.value);

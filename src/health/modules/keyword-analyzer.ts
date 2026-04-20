@@ -159,11 +159,11 @@ function deriveTrend(trend12mo: number[]): Trend {
  * invent search volumes, difficulty, or CPCs — intent is classified by
  * deterministic regex instead.
  */
-export async function generateMagicKeywords(seed: string): Promise<MagicKeywordsResult> {
+export async function generateMagicKeywords(seed: string, regionCode = "US"): Promise<MagicKeywordsResult> {
   const clean = seed.trim();
   if (!clean) return emptyResult(clean);
 
-  const research = await researchKeyword(clean);
+  const research = await researchKeyword(clean, regionCode);
   const now = Date.now();
 
   const { providersHit, providersFailed, realDataFields, estimatedFields, missingFields } = research.dataQuality;

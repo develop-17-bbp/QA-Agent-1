@@ -18,11 +18,12 @@ const PROVIDER = "google-suggest";
 registerLimit(PROVIDER, 300, 60_000); // ~5 req/s — well within soft limits
 const TTL_MS = 24 * 60 * 60 * 1000;   // 24h cache — suggestions don't change often
 
-export async function fetchSuggestions(keyword: string, locale = "en"): Promise<DataPoint<string[]>> {
+export async function fetchSuggestions(keyword: string, locale = "en", country = ""): Promise<DataPoint<string[]>> {
   const clean = keyword.trim().toLowerCase();
   if (!clean) throw new ProviderError(PROVIDER, "Empty keyword");
 
-  const cacheKey = `${PROVIDER}:${locale}:${clean}`;
+  const gl = country.trim().toLowerCase(); // ISO 2-letter, lowercased for Google's gl param
+  const cacheKey = `${PROVIDER}:${locale}:${gl}:${clean}`;
   const cached = cacheGet<string[]>(cacheKey);
   if (cached) return dp(cached, PROVIDER, "high", TTL_MS, "cached");
 
@@ -30,7 +31,11 @@ export async function fetchSuggestions(keyword: string, locale = "en"): Promise<
     throw new ProviderError(PROVIDER, "Rate limit exhausted");
   }
 
-  const url = `https://suggestqueries.google.com/complete/search?client=firefox&hl=${encodeURIComponent(locale)}&q=${encodeURIComponent(clean)}`;
+  // gl = country hint (two-letter ISO). Without it Google geolocates by IP,
+  // which on an Indian dev machine leaks Noida/India-biased suggestions even
+  // when the user explicitly picked another region.
+  const glParam = gl ? `&gl=${encodeURIComponent(gl)}` : "";
+  const url = `https://suggestqueries.google.com/complete/search?client=firefox&hl=${encodeURIComponent(locale)}${glParam}&q=${encodeURIComponent(clean)}`;
   const data = await httpGetJson<[string, string[]]>(url);
   if (!data || !Array.isArray(data) || !Array.isArray(data[1])) {
     throw new ProviderError(PROVIDER, "Unexpected response shape");
@@ -45,12 +50,12 @@ export async function fetchSuggestions(keyword: string, locale = "en"): Promise<
  * Expand a seed keyword with question-shaped autocomplete completions
  * (who / what / why / how / when / where / is / can / will / do).
  */
-export async function fetchQuestionSuggestions(keyword: string, locale = "en"): Promise<DataPoint<string[]>> {
+export async function fetchQuestionSuggestions(keyword: string, locale = "en", country = ""): Promise<DataPoint<string[]>> {
   const prefixes = ["who", "what", "why", "how", "when", "where", "is", "can", "will", "do"];
   const results: string[] = [];
   for (const p of prefixes) {
     try {
-      const sugg = await fetchSuggestions(`${p} ${keyword}`, locale);
+      const sugg = await fetchSuggestions(`${p} ${keyword}`, locale, country);
       for (const s of sugg.value) {
         if (s.includes("?") || /^(who|what|why|how|when|where|is|can|will|do)\b/i.test(s)) {
           results.push(s);

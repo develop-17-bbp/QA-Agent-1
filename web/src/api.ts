@@ -152,11 +152,11 @@ export async function askAiAboutRun(runId: string, question: string): Promise<st
 // Keyword Research (standalone, LLM-assisted)
 // ---------------------------------------------------------------------------
 
-export async function fetchKeywordResearch(keyword: string): Promise<any> {
+export async function fetchKeywordResearch(keyword: string, region = "US"): Promise<any> {
   const res = await fetch("/api/keyword-research", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ keyword }),
+    body: JSON.stringify({ keyword, region }),
   });
   if (!res.ok) {
     let errMsg: string;
@@ -244,7 +244,7 @@ export function fetchBacklinkGap(runIdA: string, runIdB: string) { return postAp
 export function fetchPostTracking(runId: string, baselineRunId?: string) { return postApi<any>("/api/post-tracking", { runId, baselineRunId }); }
 
 // Standalone LLM-assisted endpoints (no runId required)
-export function fetchKeywordMagic(seedKeyword: string) { return postApi<any>("/api/keyword-magic", { seedKeyword }); }
+export function fetchKeywordMagic(seedKeyword: string, region = "US") { return postApi<any>("/api/keyword-magic", { seedKeyword, region }); }
 export function fetchSeoWritingAssistant(runId: string, url: string) { return postApi<any>("/api/seo-writing-assistant", { runId, url }); }
 export function fetchSeoContentTemplate(keyword: string) { return postApi<any>("/api/seo-content-template", { keyword }); }
 export function fetchTopicResearch(topic: string, runId?: string) { return postApi<any>("/api/topic-research", { topic, runId }); }
@@ -276,8 +276,9 @@ export function fetchDomainAuthority(domain: string) {
 }
 
 // Keyword Suggestions (Google Autocomplete — no key needed)
-export function fetchKeywordSuggestions(keyword: string, locale = "en") {
-  return postApi<{ suggestions: string[]; questions: string[]; source: string }>("/api/keyword-suggestions", { keyword, locale });
+// country is an ISO 2-letter code (e.g. "US", "IN") for the gl param.
+export function fetchKeywordSuggestions(keyword: string, locale = "en", country = "") {
+  return postApi<{ suggestions: string[]; questions: string[]; source: string }>("/api/keyword-suggestions", { keyword, locale, country });
 }
 
 // Keyword Trends (Google Trends)

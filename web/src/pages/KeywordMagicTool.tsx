@@ -55,8 +55,8 @@ export default function KeywordMagicTool() {
     setLoading(true); setError(""); setSuggestions([]); setQuestions([]); setTrend(null);
     try {
       const [main, sugg, tr] = await Promise.allSettled([
-        fetchKeywordMagic(term),
-        fetchKeywordSuggestions(term),
+        fetchKeywordMagic(term, region),
+        fetchKeywordSuggestions(term, "en", region),
         fetchKeywordTrends(term, region),
       ]);
       if (main.status === "fulfilled") {
