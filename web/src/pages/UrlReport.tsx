@@ -22,6 +22,7 @@ import {
   fetchExternalBacklinks,
   fetchKeywordSuggestions,
   fetchKeywordVolume,
+  fetchSecurityGrade,
 } from "../api";
 import { useRegion } from "../components/RegionPicker";
 
@@ -170,6 +171,7 @@ interface ReportData {
   backlinks: any;
   suggestions: any;
   volumeMap: Map<string, any>;
+  securityGrade: any | null;
 }
 
 export default function UrlReport() {
@@ -219,12 +221,13 @@ export default function UrlReport() {
       }
 
       // 2. Fire everything in parallel
-      const [auditResult, onpageResult, daResult, backlinksResult, suggestResult] = await Promise.allSettled([
+      const [auditResult, onpageResult, daResult, backlinksResult, suggestResult, securityResult] = await Promise.allSettled([
         runId ? fetchSiteAudit(runId) : Promise.resolve(null),
         runId ? fetchOnPageSeoChecker(runId, url) : Promise.resolve(null),
         fetchDomainAuthority(domain),
         fetchExternalBacklinks(domain),
         fetchKeywordSuggestions(domain.split(".")[0]),
+        fetchSecurityGrade(domain),
       ]);
 
       setProgress((p) => [...p, "Data received — fetching keyword volumes…"]);
@@ -260,6 +263,7 @@ export default function UrlReport() {
         backlinks: backlinksResult.status === "fulfilled" ? backlinksResult.value : null,
         suggestions: suggestData,
         volumeMap,
+        securityGrade: securityResult.status === "fulfilled" ? securityResult.value : null,
       });
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
@@ -336,8 +340,16 @@ export default function UrlReport() {
 
 // ─── Report rendering ─────────────────────────────────────────────────────────
 
+const GRADE_COLORS: Record<string, string> = {
+  "A+": "#16a34a", "A": "#16a34a", "A-": "#22c55e",
+  "B+": "#84cc16", "B": "#ca8a04", "B-": "#d97706",
+  "C+": "#ea580c", "C": "#dc2626", "C-": "#dc2626",
+  "D+": "#b91c1c", "D": "#b91c1c", "D-": "#991b1b",
+  "F": "#7f1d1d",
+};
+
 function ReportView({ report }: { report: ReportData }) {
-  const { domain, url, audit, onpage, da, backlinks, suggestions, volumeMap } = report;
+  const { domain, url, audit, onpage, da, backlinks, suggestions, volumeMap, securityGrade } = report;
 
   const auditScore = audit?.score ?? audit?.healthScore ?? null;
   const onpageScore = val(onpage?.overallScore) ?? null;
@@ -423,6 +435,67 @@ function ReportView({ report }: { report: ReportData }) {
             <NotAvailable reason="OpenPageRank not configured. Add OPEN_PAGE_RANK_API_KEY to .env (free at openpagerank.com)." />
           ) : (
             <NotAvailable reason="Domain authority data unavailable." />
+          )}
+        </Card>
+
+        {/* ── Security Grade (Mozilla Observatory) ─────────────── */}
+        <Card title="Security Grade" icon="◐">
+          {securityGrade && !securityGrade.error ? (
+            (() => {
+              const grade = securityGrade.grade?.value as string | null;
+              const score = securityGrade.score?.value as number | null;
+              const passed = securityGrade.testsPassed?.value as number | undefined;
+              const failed = securityGrade.testsFailed?.value as number | undefined;
+              const failedTests = (securityGrade.failedTests?.value ?? []) as { name: string; result: string; scoreModifier: number }[];
+              const details = securityGrade.details ?? {};
+              const color = grade ? GRADE_COLORS[grade] ?? "#94a3b8" : "#94a3b8";
+              return (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
+                    <div style={{
+                      width: 64, height: 64, borderRadius: 14, background: color, color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em",
+                    }}>
+                      {grade ?? "—"}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, color: "var(--muted)" }}>Observatory score</div>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>{score !== null && score !== undefined ? `${score}/100` : "—"}</div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                        {passed ?? 0} passed · {failed ?? 0} failed
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 12px", fontSize: 12.5 }}>
+                    <DetailPill label="CSP" on={details.contentSecurityPolicy} />
+                    <DetailPill label="HSTS" on={details.httpStrictTransportSecurity} />
+                    <DetailPill label="X-Content-Type" on={details.xContentTypeOptions} />
+                    <DetailPill label="X-Frame-Options" on={details.xFrameOptions} />
+                    <DetailPill label="Referrer-Policy" on={details.referrerPolicy} />
+                    <DetailPill label="SRI" on={details.subresourceIntegrity} />
+                  </div>
+                  {failedTests.length > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--muted)", marginBottom: 6 }}>Failing tests</div>
+                      {failedTests.slice(0, 4).map((t, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", borderBottom: "1px solid var(--border)", color: "var(--muted)" }}>
+                          <span>{t.name}</span>
+                          <span style={{ color: "#dc2626", fontWeight: 600 }}>{t.scoreModifier}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {securityGrade.scanUrl?.value && (
+                    <a href={securityGrade.scanUrl.value} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--muted)", display: "inline-block", marginTop: 10 }}>
+                      Open full Mozilla Observatory scan →
+                    </a>
+                  )}
+                </>
+              );
+            })()
+          ) : (
+            <NotAvailable reason="Mozilla Observatory scan unavailable. The service may be rate limiting or temporarily unreachable." />
           )}
         </Card>
 
@@ -519,6 +592,19 @@ function NotAvailable({ reason }: { reason: string }) {
     <div style={{ padding: "18px 0", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
       <div style={{ fontSize: 22, marginBottom: 8 }}>—</div>
       {reason}
+    </div>
+  );
+}
+
+function DetailPill({ label, on }: { label: string; on: boolean | undefined }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <span style={{
+        width: 8, height: 8, borderRadius: "50%",
+        background: on ? "#16a34a" : "#dc2626",
+        flexShrink: 0,
+      }} />
+      <span style={{ color: on ? "var(--text)" : "var(--muted)" }}>{label}</span>
     </div>
   );
 }

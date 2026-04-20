@@ -256,7 +256,7 @@ export function fetchLocalSeo(businessName: string, location: string, runId?: st
 export function fetchKeywordLists() { return postApi<any>("/api/keyword-lists", {}); }
 export function saveKeywordListApi(name: string, keywords: string[]) { return postApi<any>("/api/keyword-lists/save", { name, keywords }); }
 export function deleteKeywordListApi(name: string) { return postApi<any>("/api/keyword-lists/delete", { name }); }
-export function analyzeKeywordListApi(keywords: string[]) { return postApi<any>("/api/keyword-lists/analyze", { keywords }); }
+export function analyzeKeywordListApi(keywords: string[], region?: string) { return postApi<any>("/api/keyword-lists/analyze", { keywords, region }); }
 
 // Agentic Pipeline
 export function startAgenticPipeline(targetUrl: string, keywords: string[]) { return postApi<{ sessionId: string; status: string }>("/api/agentic/start", { targetUrl, keywords }); }
@@ -352,6 +352,13 @@ export async function fetchKeywordVolume(keywords: string[], geo = "US"): Promis
 // Chrome UX Report (real-user Web Vitals)
 export async function fetchCrux(url: string, formFactor: "PHONE" | "DESKTOP" | "TABLET" = "PHONE"): Promise<any> {
   const res = await fetch(`/api/crux?url=${encodeURIComponent(url)}&formFactor=${formFactor}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Mozilla Observatory — HTTPS / security header grade (A+ … F)
+export async function fetchSecurityGrade(domain: string): Promise<any> {
+  const res = await fetch(`/api/security-grade?domain=${encodeURIComponent(domain)}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { fetchKeywordLists, saveKeywordListApi, deleteKeywordListApi, analyzeKeywordListApi } from "../api";
+import { useRegion } from "../components/RegionPicker";
 
 import { ErrorBanner, EmptyState } from "../components/UI";
 export default function KeywordManager() {
@@ -13,6 +14,7 @@ export default function KeywordManager() {
   const [analysis, setAnalysis] = useState<any>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
+  const [region] = useRegion();
 
   const loadLists = async () => {
     try { const res = await fetchKeywordLists(); setLists(res.lists ?? []); } catch { /* ignore */ }
@@ -39,7 +41,7 @@ export default function KeywordManager() {
 
   const analyze = async (kws: string[]) => {
     setAnalyzing(true); setAnalysis(null);
-    try { setAnalysis(await analyzeKeywordListApi(kws)); } catch (e: any) { setError(e.message); }
+    try { setAnalysis(await analyzeKeywordListApi(kws, region)); } catch (e: any) { setError(e.message); }
     finally { setAnalyzing(false); }
   };
 

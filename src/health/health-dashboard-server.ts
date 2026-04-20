@@ -67,6 +67,7 @@ import { fetchCruxRecord, isCruxConfigured, type CruxFormFactor } from "./provid
 import { GEO_TARGETS } from "./providers/geo-targets.js";
 import { recommendLinkFixes, type BrokenLinkInput } from "./modules/link-fix-advisor.js";
 import { predictKeywordImpact } from "./modules/keyword-impact-predictor.js";
+import { fetchSecurityGrade } from "./providers/mozilla-observatory.js";
 import {
   loadTrackedPairs, saveTrackedPairs, addTrackedPair, removeTrackedPair,
   appendSnapshot, getHistoryForKeyword, getHistoryForDomain, getAllStats,
@@ -2247,12 +2248,13 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/keyword-lists/analyze") {
         let body: string;
         try { body = await readBody(req, 64_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { keywords?: string[] };
+        let payload: { keywords?: string[]; region?: string };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const keywords = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string") : [];
         if (keywords.length === 0) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keywords required" })); return; }
+        const region = typeof payload.region === "string" && payload.region.trim() ? payload.region.trim() : "US";
         try {
-          const result = await analyzeKeywordList(keywords);
+          const result = await analyzeKeywordList(keywords, region);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
@@ -2522,6 +2524,18 @@ export async function runHealthDashboard(options: {
           const result = await predictKeywordImpact({ url: targetUrl, keyword, region });
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
           res.end(JSON.stringify(result));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── Security grade (Mozilla Observatory — no auth) ──
+      if (req.method === "GET" && url.pathname === "/api/security-grade") {
+        const domain = url.searchParams.get("domain") ?? "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const grade = await fetchSecurityGrade(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
+          res.end(JSON.stringify(grade));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
         return;
       }
