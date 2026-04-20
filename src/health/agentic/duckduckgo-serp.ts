@@ -213,6 +213,15 @@ async function fetchDdgHtml(query: string, regionCode: string): Promise<string> 
   const params = new URLSearchParams({ q: query, kl: regionCode, t: "h_", ia: "web" });
   const url = `https://html.duckduckgo.com/html/?${params.toString()}`;
 
+  // DDG HTML regioning: the `kl=` URL param is ONLY a fallback — DDG primarily
+  // reads the `kl` cookie for its region preference. Without both set, the
+  // endpoint geolocates by the caller's IP, which on an Indian dev machine
+  // surfaces Noida/India results even when the user picked US. We therefore
+  // send `kl` as both a cookie AND a URL param, and add the `ah=<country>`
+  // hint cookie for extra safety.
+  const countryFromKl = regionCode.split("-")[0]?.toLowerCase() || "us"; // "us-en" -> "us"
+  const cookieHeader = `kl=${regionCode}; ah=${countryFromKl}`;
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -221,6 +230,7 @@ async function fetchDdgHtml(query: string, regionCode: string): Promise<string> 
         "User-Agent": ua,
         "Accept": "text/html,application/xhtml+xml",
         "Accept-Language": "en-US,en;q=0.9",
+        Cookie: cookieHeader,
       },
       signal: controller.signal,
       redirect: "follow",
