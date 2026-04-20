@@ -532,6 +532,13 @@ export async function fetchCompetitorRankHistory(domain: string, keyword: string
   return res.json();
 }
 
+// GSC Links CSV import (Google deprecated the API — feed the UI export here).
+export async function uploadGscLinksCsv(domain: string, csv: string): Promise<{ ok: boolean; reportType: string; rowCount: number }> {
+  const res = await fetch("/api/gsc-links/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, csv }) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // LLM Router Stats
 export function fetchLlmStats(): Promise<any> {
   return dedupFetch("/api/llm-stats", async () => {

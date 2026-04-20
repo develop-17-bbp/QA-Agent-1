@@ -20,6 +20,7 @@ import { searchDomainReferences, isUrlscanConfigured } from "../providers/urlsca
 import { fetchDomainAuthority, isOpenPageRankConfigured } from "../providers/open-page-rank.js";
 import { fetchSnapshotHistory } from "../providers/wayback-machine.js";
 import { fetchBingBacklinks, isBingWmtConfigured, type BingLinkRow } from "../providers/bing-webmaster.js";
+import { fetchGscLinksBundle, type GscLinksBundle } from "../providers/gsc-links-csv.js";
 
 function safeHostname(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
@@ -136,6 +137,8 @@ export interface ExternalBacklinkReport {
   bingTotalLinks: number;
   /** Anchor-text samples extracted from Common Crawl WARC records — real link anchors from the open web. */
   anchorSamples: WarcAnchor[];
+  /** Parsed Google Search Console Links CSVs for this domain (when imported). */
+  gscLinks?: GscLinksBundle | null;
   providersHit: string[];
   providersFailed: string[];
   dataQuality: {
@@ -255,6 +258,17 @@ export async function discoverExternalBacklinks(domain: string): Promise<Externa
     providersFailed.push("bing-webmaster");
   }
 
+  // GSC Links CSV bundle (if previously uploaded)
+  let gscLinks: GscLinksBundle | null = null;
+  try {
+    const bundle = await fetchGscLinksBundle(clean);
+    if (bundle) {
+      gscLinks = bundle.value;
+      providersHit.push("gsc-links-csv");
+      realDataFields.push("gscLinks");
+    }
+  } catch { /* missing is fine */ }
+
   // Anchor-text samples via Common Crawl WARC byte-range fetch — real anchors
   // from the open web pointing at our target. We sample the first 15 CDX hits
   // to keep the per-estimate cost bounded.
@@ -291,6 +305,7 @@ export async function discoverExternalBacklinks(domain: string): Promise<Externa
     bingBacklinks,
     bingTotalLinks,
     anchorSamples: anchorSamples.slice(0, 100),
+    gscLinks,
     providersHit: Array.from(new Set(providersHit)),
     providersFailed: Array.from(new Set(providersFailed)),
     dataQuality: {

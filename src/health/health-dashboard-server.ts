@@ -68,6 +68,7 @@ import { GEO_TARGETS } from "./providers/geo-targets.js";
 import { recommendLinkFixes, type BrokenLinkInput } from "./modules/link-fix-advisor.js";
 import { predictKeywordImpact } from "./modules/keyword-impact-predictor.js";
 import { estimateCompetitive } from "./modules/competitive-estimator.js";
+import { ingestGscLinksCsv, fetchGscLinksBundle } from "./providers/gsc-links-csv.js";
 import {
   addCompetitorPair,
   removeCompetitorPair,
@@ -2545,6 +2546,33 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
+        return;
+      }
+
+      // ── GSC Links CSV import (UI upload → persisted bundle → link-analyzer enrich) ──
+      if (req.method === "POST" && url.pathname === "/api/gsc-links/upload") {
+        let body: string;
+        try { body = await readBody(req, 5_000_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Body too large (5 MB cap) or unreadable" })); return; }
+        let payload: { domain?: string; csv?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        const csv = typeof payload.csv === "string" ? payload.csv : "";
+        if (!domain || !csv) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain and csv required" })); return; }
+        try {
+          const result = await ingestGscLinksCsv(domain, csv);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: true, ...result }));
+        } catch (e) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
+        return;
+      }
+      if (req.method === "GET" && url.pathname.startsWith("/api/gsc-links/")) {
+        const domain = decodeURIComponent(url.pathname.slice("/api/gsc-links/".length));
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const bundle = await fetchGscLinksBundle(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ bundle: bundle ? bundle.value : null }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
         return;
       }
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
-import { fetchBacklinks, fetchExternalBacklinks } from "../api";
+import { fetchBacklinks, fetchExternalBacklinks, uploadGscLinksCsv } from "../api";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
 export default function Backlinks() {
@@ -24,6 +24,22 @@ export default function Backlinks() {
     try { setExtData(await fetchExternalBacklinks(dom)); }
     catch (e: any) { setExtError(e.message); }
     finally { setExtLoading(false); }
+  };
+
+  const handleGscCsvUpload = async (file: File) => {
+    const dom = extDomain.trim();
+    if (!dom) { setExtError("Enter a domain above first, then upload the CSV."); return; }
+    setExtError("");
+    try {
+      const csv = await file.text();
+      const result = await uploadGscLinksCsv(dom, csv);
+      // After upload, re-fetch the external backlink report so the new bundle surfaces.
+      const refreshed = await fetchExternalBacklinks(dom);
+      setExtData(refreshed);
+      alert(`Imported ${result.rowCount} rows from ${result.reportType}. GSC Links data is now available in this report.`);
+    } catch (e: any) {
+      setExtError(e.message);
+    }
   };
 
   const healthData = data?.healthDistribution ? [
@@ -125,7 +141,25 @@ export default function Backlinks() {
           </button>
         </div>
 
-        {extLoading && <LoadingPanel message="Querying OpenPageRank, Common Crawl, URLScan and Wayback Machine…" />}
+        <div style={{ marginTop: 10, padding: 10, border: "1px dashed var(--border)", borderRadius: 6, fontSize: 12 }}>
+          <strong>Import Google Search Console Links (CSV)</strong>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
+            Google deprecated the Links API. Download the CSV from Search Console → Links → "Top linking sites" / "Top linked pages" / "Top linking text" (one file per report).
+            Enter the domain above, then upload — the parsed bundle is persisted and enriches this report below.
+          </div>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleGscCsvUpload(f);
+              if (e.target) e.target.value = "";
+            }}
+            style={{ fontSize: 12 }}
+          />
+        </div>
+
+        {extLoading && <LoadingPanel message="Querying OpenPageRank, Common Crawl, URLScan, Wayback, Bing Webmaster Tools…" />}
         {extError && <ErrorBanner error={extError} />}
 
         {extData && !extLoading && (
@@ -199,6 +233,52 @@ export default function Backlinks() {
                     </tr>
                   ))}</tbody>
                 </table>
+              </div>
+            )}
+
+            {extData.gscLinks && (
+              <div className="qa-panel" style={{ marginTop: 12, padding: 14 }}>
+                <div className="qa-panel-title">
+                  GSC Links (imported from CSV)
+                </div>
+                <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
+                  Real first-party data from Google Search Console. Imported on {new Date(extData.gscLinks.importedAt).toLocaleString()}.
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+                  {extData.gscLinks.topLinkingSites?.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Top linking sites</div>
+                      <table className="qa-table">
+                        <thead><tr><th>Source</th><th>Links</th></tr></thead>
+                        <tbody>{extData.gscLinks.topLinkingSites.slice(0, 10).map((r: any, i: number) => (
+                          <tr key={i}><td style={{ fontSize: 11 }}>{r.source}</td><td style={{ fontSize: 11, fontWeight: 600 }}>{r.links}</td></tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
+                  )}
+                  {extData.gscLinks.topLinkedPages?.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Top linked pages</div>
+                      <table className="qa-table">
+                        <thead><tr><th>Target</th><th>Links</th></tr></thead>
+                        <tbody>{extData.gscLinks.topLinkedPages.slice(0, 10).map((r: any, i: number) => (
+                          <tr key={i}><td style={{ fontSize: 11 }}>{r.target}</td><td style={{ fontSize: 11, fontWeight: 600 }}>{r.links}</td></tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
+                  )}
+                  {extData.gscLinks.topLinkingText?.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Top anchor text</div>
+                      <table className="qa-table">
+                        <thead><tr><th>Anchor</th><th>Links</th></tr></thead>
+                        <tbody>{extData.gscLinks.topLinkingText.slice(0, 10).map((r: any, i: number) => (
+                          <tr key={i}><td style={{ fontSize: 11, fontWeight: 600 }}>"{r.anchor}"</td><td style={{ fontSize: 11 }}>{r.links}</td></tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

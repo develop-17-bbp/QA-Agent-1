@@ -117,6 +117,20 @@ async function main() {
     return r ? `rank #${r.rank.value}` : "not in top-domains set";
   });
 
+  await probe("Bing Webmaster Tools", async () => {
+    const mod = await import("../src/health/providers/bing-webmaster.js");
+    if (!mod.isBingWmtConfigured()) throw new Error("BING_WEBMASTER_API_KEY not set");
+    const r = await mod.fetchBingLinkCounts(sampleUrl);
+    return r ? `${r.value.totalLinks} inbound link(s)` : "site not verified in Bing Webmaster Tools";
+  });
+
+  await probe("Brave Search", async () => {
+    const mod = await import("../src/health/providers/brave-search.js");
+    if (!mod.isBraveConfigured()) throw new Error("BRAVE_SEARCH_API_KEY not set");
+    const r = await mod.searchBrave(sampleKw, "US");
+    return `${r.value.results.length} results`;
+  });
+
   await probe("Tranco rank", async () => {
     const mod = await import("../src/health/providers/tranco-rank.js");
     const r = await mod.fetchDomainRank(sampleDomain);

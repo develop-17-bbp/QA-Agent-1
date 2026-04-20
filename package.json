@@ -20,6 +20,7 @@
     "fixture": "npm start --prefix fixture-site",
     "fixture:kill": "node scripts/kill-port.mjs 3333",
     "dashboard:kill": "node scripts/kill-port.mjs 3847",
+    "diagnose": "tsx scripts/diag-providers.ts",
     "setup-browsers": "playwright install chromium"
   },
   "engines": {
