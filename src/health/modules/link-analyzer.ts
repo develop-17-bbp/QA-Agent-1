@@ -15,10 +15,11 @@
  */
 
 import type { SiteHealthReport } from "../types.js";
-import { approximateReferringDomains, fetchDomainHits } from "../providers/common-crawl.js";
+import { approximateReferringDomains, fetchDomainHits, fetchWarcRecord, extractAnchorsToTarget, type WarcAnchor } from "../providers/common-crawl.js";
 import { searchDomainReferences, isUrlscanConfigured } from "../providers/urlscan.js";
 import { fetchDomainAuthority, isOpenPageRankConfigured } from "../providers/open-page-rank.js";
 import { fetchSnapshotHistory } from "../providers/wayback-machine.js";
+import { fetchBingBacklinks, isBingWmtConfigured, type BingLinkRow } from "../providers/bing-webmaster.js";
 
 function safeHostname(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
@@ -130,6 +131,11 @@ export interface ExternalBacklinkReport {
   recentMentions: { url: string; domain: string; title?: string; time: string }[];
   historicalSnapshots: { timestamp: string; url: string }[];
   sampleCrawledPages: { url: string; timestamp: string }[];
+  /** Real inbound links from Bing Webmaster Tools (verified-site only). */
+  bingBacklinks: BingLinkRow[];
+  bingTotalLinks: number;
+  /** Anchor-text samples extracted from Common Crawl WARC records — real link anchors from the open web. */
+  anchorSamples: WarcAnchor[];
   providersHit: string[];
   providersFailed: string[];
   dataQuality: {
@@ -151,7 +157,7 @@ export async function discoverExternalBacklinks(domain: string): Promise<Externa
   const realDataFields: string[] = [];
   const missingFields: string[] = [];
 
-  const [authRes, refRes, urlscanRes, waybackRes, ccPagesRes] = await Promise.allSettled([
+  const [authRes, refRes, urlscanRes, waybackRes, ccPagesRes, bingRes] = await Promise.allSettled([
     isOpenPageRankConfigured()
       ? fetchDomainAuthority(clean)
       : Promise.reject(new Error("OPR_API_KEY not set")),
@@ -161,6 +167,9 @@ export async function discoverExternalBacklinks(domain: string): Promise<Externa
       : searchDomainReferences(clean, 30), // anonymous call still works, lower confidence
     fetchSnapshotHistory(`https://${clean}/`, 12),
     fetchDomainHits(clean, 50),
+    isBingWmtConfigured()
+      ? fetchBingBacklinks(`https://${clean}/`, 500)
+      : Promise.reject(new Error("BING_WEBMASTER_API_KEY not set")),
   ]);
 
   // Domain authority (OpenPageRank)
@@ -234,6 +243,44 @@ export async function discoverExternalBacklinks(domain: string): Promise<Externa
     }));
   }
 
+  // Bing Webmaster Tools inbound links (verified site only)
+  let bingBacklinks: BingLinkRow[] = [];
+  let bingTotalLinks = 0;
+  if (bingRes.status === "fulfilled") {
+    providersHit.push("bing-webmaster");
+    realDataFields.push("bingBacklinks");
+    bingBacklinks = bingRes.value.value.slice(0, 500);
+    bingTotalLinks = bingRes.value.value.length;
+  } else {
+    providersFailed.push("bing-webmaster");
+  }
+
+  // Anchor-text samples via Common Crawl WARC byte-range fetch — real anchors
+  // from the open web pointing at our target. We sample the first 15 CDX hits
+  // to keep the per-estimate cost bounded.
+  const anchorSamples: WarcAnchor[] = [];
+  if (ccPagesRes.status === "fulfilled" && ccPagesRes.value.value.length > 0) {
+    const sampleHits = ccPagesRes.value.value.slice(0, 15);
+    const extractions = await Promise.allSettled(
+      sampleHits.map(async (h) => {
+        if (!h.filename || !h.offset || !h.lengthBytes) return [];
+        const off = Number.parseInt(h.offset, 10);
+        const len = Number.parseInt(h.lengthBytes, 10);
+        if (!Number.isFinite(off) || !Number.isFinite(len)) return [];
+        const html = await fetchWarcRecord(h.filename, off, len);
+        if (!html) return [];
+        return extractAnchorsToTarget(html, clean, h.url);
+      }),
+    );
+    for (const e of extractions) {
+      if (e.status === "fulfilled") anchorSamples.push(...e.value);
+    }
+    if (anchorSamples.length > 0) {
+      realDataFields.push("anchorSamples");
+      if (!providersHit.includes("common-crawl-warc")) providersHit.push("common-crawl-warc");
+    }
+  }
+
   return {
     domain: clean,
     domainAuthority,
@@ -241,6 +288,9 @@ export async function discoverExternalBacklinks(domain: string): Promise<Externa
     recentMentions,
     historicalSnapshots,
     sampleCrawledPages,
+    bingBacklinks,
+    bingTotalLinks,
+    anchorSamples: anchorSamples.slice(0, 100),
     providersHit: Array.from(new Set(providersHit)),
     providersFailed: Array.from(new Set(providersFailed)),
     dataQuality: {

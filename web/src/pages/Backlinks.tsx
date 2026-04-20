@@ -178,6 +178,52 @@ export default function Backlinks() {
                 </table>
               </div>
             )}
+
+            {(extData.bingBacklinks ?? []).length > 0 && (
+              <div className="qa-panel" style={{ marginTop: 12, padding: 14 }}>
+                <div className="qa-panel-title">
+                  Bing Webmaster Tools — Inbound Links ({extData.bingTotalLinks ?? extData.bingBacklinks.length})
+                </div>
+                <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
+                  Real inbound links from Bing's live link graph. Only returns data when the site is verified in Bing Webmaster Tools under <code>BING_WEBMASTER_API_KEY</code>.
+                </p>
+                <table className="qa-table">
+                  <thead><tr>{["Source URL", "Anchor Text", "Target on your site"].map(h => <th key={h} style={{ textAlign: "left" }}>{h}</th>)}</tr></thead>
+                  <tbody>{extData.bingBacklinks.slice(0, 30).map((b: any, i: number) => (
+                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.sourceUrl}>
+                        <a href={b.sourceUrl} target="_blank" rel="noreferrer" style={{ color: "var(--text)" }}>{b.sourceUrl}</a>
+                      </td>
+                      <td style={{ padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>{b.anchorText ? `"${b.anchorText}"` : <span style={{ color: "var(--muted)", fontWeight: 400 }}>—</span>}</td>
+                      <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.targetUrl}>{b.targetUrl}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+
+            {(extData.anchorSamples ?? []).length > 0 && (
+              <div className="qa-panel" style={{ marginTop: 12, padding: 14 }}>
+                <div className="qa-panel-title">
+                  Anchor-Text Samples from Common Crawl ({extData.anchorSamples.length})
+                </div>
+                <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
+                  Real `&lt;a&gt;` tags extracted from Common Crawl WARC records — the actual anchor text the open web uses to link to this domain.
+                </p>
+                <table className="qa-table">
+                  <thead><tr>{["Source page", "Anchor text", "Context"].map(h => <th key={h} style={{ textAlign: "left" }}>{h}</th>)}</tr></thead>
+                  <tbody>{extData.anchorSamples.slice(0, 30).map((a: any, i: number) => (
+                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.sourceUrl}>
+                        <a href={a.sourceUrl} target="_blank" rel="noreferrer" style={{ color: "var(--text)" }}>{a.sourceUrl}</a>
+                      </td>
+                      <td style={{ padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>"{a.anchorText || "—"}"</td>
+                      <td style={{ padding: "4px 10px", fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>{a.context ?? ""}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

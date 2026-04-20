@@ -16,6 +16,8 @@
 import { dp, ProviderError, type DataPoint } from "./types.js";
 import { httpGet, httpGetJson } from "./http.js";
 import { cacheGet, cacheSet, registerLimit, tryConsume } from "./rate-limit.js";
+import { gunzipSync } from "node:zlib";
+import { load } from "cheerio";
 
 const PROVIDER = "common-crawl";
 registerLimit(PROVIDER, 30, 60_000);
@@ -46,6 +48,12 @@ export interface CommonCrawlHit {
   status: string;
   mime?: string;
   length?: string;
+  /** WARC filename inside the data.commoncrawl.org S3 bucket (needed for byte-range fetches). */
+  filename?: string;
+  /** Byte offset of the record inside the WARC file. */
+  offset?: string;
+  /** Byte length of the record (offset..offset+length-1). */
+  lengthBytes?: string;
 }
 
 function parseCdxLines(raw: string): CommonCrawlHit[] {
@@ -60,6 +68,8 @@ function parseCdxLines(raw: string): CommonCrawlHit[] {
         status: string;
         mime?: string;
         length?: string;
+        filename?: string;
+        offset?: string;
       };
       if (obj.url && obj.timestamp) {
         out.push({
@@ -68,6 +78,9 @@ function parseCdxLines(raw: string): CommonCrawlHit[] {
           status: obj.status,
           mime: obj.mime,
           length: obj.length,
+          filename: obj.filename,
+          offset: obj.offset,
+          lengthBytes: obj.length,
         });
       }
     } catch {
@@ -135,6 +148,108 @@ export async function fetchDomainHits(domain: string, limit = 200): Promise<Data
  * Common Crawl Web Graph dataset (WAT files), which is large to process.
  * We surface whatever we can for free and label confidence accordingly.
  */
+/**
+ * Fetch a single WARC record from the Common Crawl public S3 bucket using a
+ * Range request on the byte offset/length recorded in the CDX row. Returns
+ * the decompressed HTML payload (record body after the WARC headers), or
+ * `undefined` if the record can't be decoded. Cost is $0 — the bucket is
+ * public and unmetered from the client side; we still respect the provider's
+ * rate limit.
+ *
+ * Typical record sizes are 5-50 KB, so one anchor-extraction lookup is cheap.
+ */
+export async function fetchWarcRecord(filename: string, offset: number, length: number): Promise<string | undefined> {
+  if (!filename || !Number.isFinite(offset) || !Number.isFinite(length) || length <= 0) return undefined;
+  if (length > 5_000_000) return undefined; // safety cap — no record should be >5 MB
+
+  if (!tryConsume(PROVIDER)) return undefined;
+
+  const url = `https://data.commoncrawl.org/${filename}`;
+  const res = await httpGet(url, {
+    timeoutMs: 30_000,
+    headers: { Range: `bytes=${offset}-${offset + length - 1}` },
+  });
+  if (!res || (res.status !== 206 && res.status !== 200)) return undefined;
+
+  let buf: Buffer;
+  try {
+    const ab = await res.arrayBuffer();
+    buf = Buffer.from(ab);
+  } catch {
+    return undefined;
+  }
+
+  // WARC records in the main WET/WARC files are gzipped per-record. The byte
+  // range gives us exactly one gzip member.
+  let decompressed: Buffer;
+  try {
+    decompressed = gunzipSync(buf);
+  } catch {
+    // If it isn't gzipped (rare, e.g. a debug fetch), assume raw.
+    decompressed = buf;
+  }
+
+  const text = decompressed.toString("utf8");
+  // WARC records have a plain-text header block followed by `\r\n\r\n` then the
+  // HTTP response (which itself has a header block + another `\r\n\r\n` and
+  // then the HTML body). Find the HTML body by locating the second delimiter.
+  const firstBreak = text.indexOf("\r\n\r\n");
+  if (firstBreak < 0) return text;
+  const afterWarc = text.slice(firstBreak + 4);
+  const secondBreak = afterWarc.indexOf("\r\n\r\n");
+  if (secondBreak < 0) return afterWarc;
+  return afterWarc.slice(secondBreak + 4);
+}
+
+export interface WarcAnchor {
+  sourceUrl: string;
+  anchorText: string;
+  targetUrl: string;
+  context?: string;
+}
+
+/**
+ * Parse HTML (typically fetched from a WARC record) and return every `<a href>`
+ * that points at the given target host (or any subdomain of it). Includes
+ * anchor text and ~50 chars of surrounding text context on either side.
+ */
+export function extractAnchorsToTarget(html: string, targetHost: string, sourceUrl: string): WarcAnchor[] {
+  if (!html || !targetHost) return [];
+  const cleanHost = targetHost.replace(/^www\./, "").toLowerCase();
+  const out: WarcAnchor[] = [];
+  let $;
+  try { $ = load(html); } catch { return []; }
+  $("a[href]").each((_, el) => {
+    const href = ($(el).attr("href") ?? "").trim();
+    if (!href) return;
+    let targetUrl = "";
+    try {
+      const abs = new URL(href, sourceUrl);
+      const h = abs.hostname.replace(/^www\./, "").toLowerCase();
+      if (h !== cleanHost && !h.endsWith(`.${cleanHost}`)) return;
+      targetUrl = abs.toString();
+    } catch { return; }
+    const anchorText = $(el).text().replace(/\s+/g, " ").trim().slice(0, 160);
+    if (!anchorText && !targetUrl) return;
+    let context: string | undefined;
+    try {
+      const parentText = $(el).parent().text().replace(/\s+/g, " ").trim();
+      if (parentText) {
+        const idx = anchorText ? parentText.indexOf(anchorText) : -1;
+        if (idx >= 0) {
+          const before = parentText.slice(Math.max(0, idx - 50), idx).trim();
+          const after = parentText.slice(idx + anchorText.length, idx + anchorText.length + 50).trim();
+          context = `${before} «${anchorText}» ${after}`.slice(0, 200);
+        } else {
+          context = parentText.slice(0, 200);
+        }
+      }
+    } catch { /* best-effort */ }
+    out.push({ sourceUrl, anchorText, targetUrl, context });
+  });
+  return out;
+}
+
 export async function approximateReferringDomains(domain: string): Promise<DataPoint<number>> {
   const hits = await fetchDomainHits(domain, 500);
   const distinctHosts = new Set<string>();
