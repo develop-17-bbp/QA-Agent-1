@@ -53,12 +53,25 @@ function stripTrendsJunk(body: string): string {
   return idx >= 0 ? body.slice(idx) : body;
 }
 
+const TRENDS_USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+];
+
 async function fetchTrendsJson<T>(url: string): Promise<T | undefined> {
+  // Trends throttles datacenter IPs aggressively. Rotate UA on every call and
+  // send browser-like headers so we look like a real Chrome session.
+  const ua = TRENDS_USER_AGENTS[Math.floor(Math.random() * TRENDS_USER_AGENTS.length)]!;
   const body = await httpGetText(url, {
     headers: {
       Accept: "application/json, text/plain, */*",
       "Accept-Language": "en-US,en;q=0.9",
-      Referer: "https://trends.google.com/trends/",
+      "User-Agent": ua,
+      Referer: "https://trends.google.com/trends/explore",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
     },
     timeoutMs: 20_000,
   });
@@ -103,16 +116,20 @@ export async function fetchKeywordTrend(keyword: string, geo = ""): Promise<Keyw
     property: "",
   };
   const exploreUrl = `${EXPLORE_URL}?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(reqBody))}&tz=0`;
+  // Retry with exponential backoff — Trends throttles hard and the first call
+  // often returns empty, but a 2-3s wait + UA rotation usually succeeds.
   let explore = await fetchTrendsJson<ExploreResponse>(exploreUrl);
-  if (!explore || !Array.isArray(explore.widgets)) {
-    await new Promise((r) => setTimeout(r, 1500));
+  const BACKOFFS_MS = [1500, 3500, 7000];
+  for (const ms of BACKOFFS_MS) {
+    if (explore && Array.isArray(explore.widgets) && explore.widgets.length > 0) break;
+    await new Promise((r) => setTimeout(r, ms));
     explore = await fetchTrendsJson<ExploreResponse>(exploreUrl);
   }
-  if (!explore || !Array.isArray(explore.widgets)) {
+  if (!explore || !Array.isArray(explore.widgets) || explore.widgets.length === 0) {
     const fallback: KeywordTrendResult = {
-      trend12mo: dp([], PROVIDER, "low", TTL_MS, "Google Trends throttled — empty series returned"),
-      peakValue: dp(0, PROVIDER, "low", TTL_MS),
-      avgValue: dp(0, PROVIDER, "low", TTL_MS),
+      trend12mo: dp([], PROVIDER, "low", TTL_MS, "throttled — Google Trends returned no widgets after 3 retries"),
+      peakValue: dp(0, PROVIDER, "low", TTL_MS, "throttled"),
+      avgValue: dp(0, PROVIDER, "low", TTL_MS, "throttled"),
     };
     cacheSet(cacheKey, fallback, 10 * 60 * 1000); // short cache so we retry in 10 min
     return fallback;

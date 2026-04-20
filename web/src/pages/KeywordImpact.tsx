@@ -12,8 +12,8 @@ type ImpactResult = {
   llmAvailable: boolean;
   llmError?: string;
   evidence: {
-    volume: { avgMonthlySearches: number | null; competition: string | null; competitionIndex: number | null; lowBidUsd: number | null; highBidUsd: number | null };
-    trend: { interestLast12m: number | null; direction: "up" | "down" | "flat" | "unknown"; monthly: { month: string; value: number }[] };
+    volume: { avgMonthlySearches: number | null; competition: string | null; competitionIndex: number | null; lowBidUsd: number | null; highBidUsd: number | null; error?: string };
+    trend: { interestLast12m: number | null; direction: "up" | "down" | "flat" | "unknown"; monthly: { month: string; value: number }[]; error?: string };
     serp: { topResults: { position: number; title: string; url: string; domain: string }[]; yourDomainPosition: number | null };
     targetPage: { title: string; h1: string | null; metaDescription: string | null; wordCount: number; keywordOccurrences: number; hreflang: string[] };
     domainAuthority: { score: number | null; pageRankDecimal: number | null };
@@ -245,7 +245,9 @@ export default function KeywordImpact() {
               <MetricCard
                 label="Monthly searches"
                 value={e.volume.avgMonthlySearches != null ? e.volume.avgMonthlySearches.toLocaleString() : "—"}
-                sub={e.volume.avgMonthlySearches != null ? `${result.request.region} · Google Ads` : "Google Ads not configured"}
+                sub={e.volume.avgMonthlySearches != null
+                  ? `${result.request.region} · Google Ads`
+                  : (e.volume.error ?? "Google Ads not configured")}
                 highlight
               />
               <MetricCard
@@ -256,7 +258,9 @@ export default function KeywordImpact() {
               <MetricCard
                 label="12-mo trend"
                 value={e.trend.direction === "up" ? "↑ Rising" : e.trend.direction === "down" ? "↓ Declining" : e.trend.direction === "flat" ? "→ Flat" : "—"}
-                sub={e.trend.interestLast12m != null ? `Avg interest: ${e.trend.interestLast12m}/100` : "Google Trends"}
+                sub={e.trend.interestLast12m != null
+                  ? `Avg interest: ${e.trend.interestLast12m}/100`
+                  : (e.trend.error ?? "Google Trends")}
               />
               <MetricCard
                 label="Domain Authority"

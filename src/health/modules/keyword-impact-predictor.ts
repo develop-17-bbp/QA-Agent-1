@@ -57,11 +57,15 @@ export interface KeywordImpactResult {
       competitionIndex: number | null;
       lowBidUsd: number | null;
       highBidUsd: number | null;
+      /** Human-readable reason volume is null (API error, scope missing, etc.). */
+      error?: string;
     };
     trend: {
       interestLast12m: number | null;
       direction: "up" | "down" | "flat" | "unknown";
       monthly: { month: string; value: number }[];
+      /** Human-readable reason monthly array is empty (Google throttle, etc.). */
+      error?: string;
     };
     serp: {
       topResults: { position: number; title: string; url: string; domain: string }[];
@@ -152,6 +156,19 @@ export async function predictKeywordImpact(req: KeywordImpactRequest): Promise<K
     volumeEvidence.highBidUsd = v.highTopOfPageBidMicros.value;
   } else {
     missingFields.push("avgMonthlySearches");
+    if (volumeRes.status === "rejected") {
+      const raw = volumeRes.reason instanceof Error ? volumeRes.reason.message : String(volumeRes.reason);
+      // Translate common failures into actionable hints for the SEO team.
+      volumeEvidence.error =
+        /ads-not-configured/i.test(raw) ? "Google Ads not configured in .env (dev token + customer ID)" :
+        /not connected|webmasters\.readonly.*scope|invalid_scope|adwords scope/i.test(raw) ? "Google OAuth token missing 'adwords' scope — reconnect at /google-connections to re-consent" :
+        /PERMISSION_DENIED.*googleads\.googleapis\.com|API has not been used/i.test(raw) ? "Enable Google Ads API on the same GCP project, then wait 1-2 min" :
+        /CUSTOMER_NOT_ENABLED|customer\.?not\.?enabled/i.test(raw) ? "Customer ID not onboarded — finish sign-up at ads.google.com for that account" :
+        /USER_PERMISSION_DENIED|not allowed|developer token/i.test(raw) ? "Developer token not approved for this customer ID, or login_customer_id required (set GOOGLE_ADS_LOGIN_CUSTOMER_ID for MCC)" :
+        /401|unauthorized|invalid_grant/i.test(raw) ? "OAuth token expired — reconnect at /google-connections" :
+        /400/i.test(raw) ? `Bad request to Google Ads API: ${raw.slice(0, 160)}` :
+        raw.slice(0, 200);
+    }
   }
 
   // ── Trend ──
@@ -167,9 +184,16 @@ export async function predictKeywordImpact(req: KeywordImpactRequest): Promise<K
       if (latest > earliest * 1.1) trendEvidence.direction = "up";
       else if (latest < earliest * 0.9) trendEvidence.direction = "down";
       else trendEvidence.direction = "flat";
+    } else if (t.trend12mo?.note?.includes("throttled") || t.trend12mo?.confidence === "low") {
+      // Trends provider returned a soft-empty series because Google is rate-limiting us.
+      trendEvidence.error = "Google Trends throttled our IP — retry in a minute; cached data will fill in automatically";
     }
   } else {
     missingFields.push("trend");
+    const raw = trendRes.reason instanceof Error ? trendRes.reason.message : String(trendRes.reason);
+    trendEvidence.error =
+      /rate limit|429|throttl/i.test(raw) ? "Google Trends throttled our IP — retry in a minute, or the 12-month chart will fill in once rate limit clears" :
+      raw.slice(0, 200);
   }
 
   // ── SERP ──
