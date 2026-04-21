@@ -288,6 +288,11 @@ export async function researchKeyword(keyword: string, regionCode = "US"): Promi
   let intent: KeywordResearchData["intent"] = "informational";
   let clusters: KeywordCluster[] = [{ label: clean, keywords: [clean, ...suggestions.slice(0, 4)] }];
 
+  // LLM narrative pass — intent + cluster labels. Gated by a soft budget so
+  // a slow Ollama model can't stretch a keyword lookup past 15s; when it
+  // trips, we fall back to a deterministic intent (from seed-keyword words)
+  // + a single cluster. That keeps the p95 latency bounded for SEO users.
+  const LLM_BUDGET_MS = Number.parseInt(process.env.QA_AGENT_KEYWORD_LLM_BUDGET_MS ?? "15000", 10);
   try {
     const prompt = `Classify the search intent of the keyword and propose up to 5 cluster labels for grouping its variations. Return ONLY valid JSON:
 {
@@ -304,7 +309,10 @@ Rules:
 - Only classify intent and propose cluster labels.
 - Up to 5 clusters, each with 3-5 real keywords drawn from the variations above.`;
 
-    const raw = await generateText(prompt);
+    const raw = await Promise.race<string>([
+      generateText(prompt),
+      new Promise<string>((_, rej) => setTimeout(() => rej(new Error("LLM budget exceeded")), LLM_BUDGET_MS)),
+    ]);
     const text = raw.trim();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
@@ -318,8 +326,14 @@ Rules:
       }
       realDataFields.push("intent", "clusters");
     }
-  } catch {
-    missingFields.push("intent-llm");
+  } catch (e) {
+    // Deterministic intent fallback from keyword surface words — covers the
+    // common buy/vs/best/how/what patterns without needing the LLM.
+    const lc = clean.toLowerCase();
+    if (/\b(buy|price|cost|discount|deal|coupon)\b/.test(lc)) intent = "transactional";
+    else if (/\b(best|top|vs|versus|compare|review)\b/.test(lc)) intent = "commercial";
+    else if (/\b(login|logon|signin|homepage)\b/.test(lc)) intent = "navigational";
+    missingFields.push(`intent-llm (${e instanceof Error ? e.message : "error"})`);
   }
 
   // CPC — we don't have a free real source for this, omit the numeric field.

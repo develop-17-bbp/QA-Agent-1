@@ -919,9 +919,98 @@ function buildMasterStartPageThumbs(shot: StartPageScreenshotMeta | undefined, f
 }
 
 /** Collapsible body (default open). PDF pipeline forces all sections open before print. */
+/**
+ * Sticky TOC injected at the top of the combined report. Lets the reader
+ * jump between top-level sections and per-site sub-rows without scrolling
+ * 10+ screens, plus one-click collapse/expand-all toggles so huge multi-
+ * site runs become skimmable.
+ */
+function buildMasterTocHtml(reports: SiteHealthReport[], hasPsi: boolean): string {
+  const sections = [
+    { id: "section-summary-by-site", label: "Summary" },
+    { id: "section-broken-internal-links-all-sites", label: "Broken links" },
+    { id: "section-pages-fetched-all-sites", label: "Pages" },
+    { id: "section-discovered-internal-link-checks-all-sites", label: "Link checks" },
+    ...(hasPsi ? [{ id: "section-pagespeed-insights-all-sites", label: "PageSpeed" }] : []),
+  ];
+  const sectionLinks = sections
+    .map((s) => `<a class="master-toc__link" href="#${s.id}">${esc(s.label)}</a>`)
+    .join("");
+  const siteLinks = reports
+    .map((r, i) => {
+      const host = esc(r.hostname);
+      return `<li class="master-toc__site">
+  <span class="master-toc__site-name">${host}</span>
+  <span class="master-toc__site-links">
+    <a href="#site-${i}">summary</a>
+    <a href="#site-${i}-broken">broken</a>
+    <a href="#site-${i}-pages">pages</a>
+    <a href="#site-${i}-links">links</a>
+  </span>
+</li>`;
+    })
+    .join("");
+  return `<nav class="master-toc" aria-label="Report sections">
+  <div class="master-toc__bar">
+    <strong class="master-toc__label">Jump to</strong>
+    <div class="master-toc__sections">${sectionLinks}</div>
+    <div class="master-toc__controls">
+      <button type="button" class="master-toc__btn" data-action="expand-all">Expand all</button>
+      <button type="button" class="master-toc__btn" data-action="collapse-all">Collapse all</button>
+    </div>
+  </div>
+  ${reports.length > 1
+    ? `<details class="master-toc__sites">
+  <summary>Per-site shortcuts (${reports.length} sites)</summary>
+  <ul class="master-toc__site-list">${siteLinks}</ul>
+</details>`
+    : ""}
+</nav>
+<style>
+.master-toc { position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid #e2e8f0; margin: 0 -32px 18px; padding: 0 32px; }
+.master-toc__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 0; font-size: 13px; }
+.master-toc__label { font-weight: 700; color: #0f172a; margin-right: 6px; }
+.master-toc__sections { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+.master-toc__link { padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 999px; color: #334155; text-decoration: none; font-weight: 500; font-size: 12.5px; }
+.master-toc__link:hover { background: #f1f5f9; color: #0f172a; }
+.master-toc__controls { display: flex; gap: 6px; margin-left: auto; }
+.master-toc__btn { background: transparent; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-size: 12px; color: #334155; cursor: pointer; }
+.master-toc__btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+.master-toc__sites { border-top: 1px dashed #e2e8f0; padding: 8px 0; font-size: 12.5px; }
+.master-toc__sites > summary { cursor: pointer; font-weight: 600; color: #475569; padding: 4px 0; }
+.master-toc__site-list { list-style: none; padding: 8px 0 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
+.master-toc__site { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; background: #f8fafc; border-radius: 6px; }
+.master-toc__site-name { font-weight: 600; color: #0f172a; font-size: 12.5px; word-break: break-all; }
+.master-toc__site-links { display: flex; gap: 8px; font-size: 11.5px; }
+.master-toc__site-links a { color: #2563eb; text-decoration: none; }
+.master-toc__site-links a:hover { text-decoration: underline; }
+@media print { .master-toc { display: none; } }
+</style>
+<script>(function(){
+  var root=document.currentScript&&document.currentScript.previousElementSibling;
+  var toc=document.querySelector('.master-toc'); if(!toc) return;
+  toc.addEventListener('click', function(ev){
+    var t = ev.target; if(!(t instanceof HTMLElement)) return;
+    var action = t.getAttribute('data-action');
+    if (!action) return;
+    var open = action === 'expand-all';
+    document.querySelectorAll('details.report-section__details').forEach(function(d){ d.open = open; });
+  });
+})();</script>`;
+}
+
+function slugifyTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
 function wrapReportSection(title: string, bodyHtml: string): string {
   const t = esc(title);
-  return `<section class="report-section">
+  const id = `section-${slugifyTitle(title)}`;
+  return `<section class="report-section" id="${id}">
   <details class="report-section__details" open>
     <summary class="report-section__summary">
       <span class="report-section__chev" aria-hidden="true"></span>
@@ -2316,6 +2405,8 @@ export function buildMasterHealthHtml(
     </div>
     <p class="meta" style="margin:18px 0 0;"><strong>Generated:</strong> ${esc(meta.generatedAt)} · <strong>URLs file:</strong> ${esc(meta.urlsFile)}</p>
   </header>
+
+  ${buildMasterTocHtml(reports, !!psiBlock)}
 
   ${wrapReportSection(
     "Summary by site",

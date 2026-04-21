@@ -171,12 +171,48 @@ function htmlDocumentFetchHeaders(): Record<string, string> {
     "User-Agent": ua,
     Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
     "Sec-Fetch-Dest": "document",
     "Sec-Fetch-Mode": "navigate",
     "Sec-Fetch-Site": "none",
     "Sec-Fetch-User": "?1",
     "Upgrade-Insecure-Requests": "1",
   };
+}
+
+/** Read a fetch response body up to maxBytes, then cancel the rest of the
+ *  stream so we don't keep the socket open transferring multi-megabyte HTML
+ *  we'll never parse. SEO-relevant markup is almost always <500 KB; set a
+ *  safety cap of 2 MB by default (overridable via QA_AGENT_MAX_BODY_BYTES). */
+const MAX_BODY_BYTES = (() => {
+  const n = Number.parseInt(process.env.QA_AGENT_MAX_BODY_BYTES ?? "2097152", 10);
+  return Number.isFinite(n) && n >= 16_384 ? n : 2_097_152;
+})();
+
+async function readBodyCapped(res: Response, maxBytes: number): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder("utf-8", { fatal: false });
+  const chunks: string[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      chunks.push(decoder.decode(value, { stream: true }));
+      if (total >= maxBytes) {
+        // Got enough HTML to extract every meta + title + body text an SEO
+        // analyzer needs. Cancel the rest so the connection can be reused.
+        try { await reader.cancel(); } catch { /* best effort */ }
+        break;
+      }
+    }
+    chunks.push(decoder.decode());
+  } finally {
+    try { reader.releaseLock(); } catch { /* best effort */ }
+  }
+  return chunks.join("");
 }
 
 async function fetchPage(
@@ -211,7 +247,13 @@ async function fetchPage(
       let mime = primaryMime(ct);
       let body: string | null = null;
       if (contentTypeLooksLikeHtml(ct)) {
-        body = await res.text();
+        body = await readBodyCapped(res, MAX_BODY_BYTES);
+      } else {
+        // Non-HTML (PDF, image, zip, etc.): we don't need the body — cancel
+        // the stream so the server can stop sending and the socket frees for
+        // reuse. Without this, the browser-side fetch would keep reading the
+        // whole asset into memory even though we discard it.
+        try { await res.body?.cancel(); } catch { /* best effort */ }
       }
 
       const statusOk = res.status >= 200 && res.status < 300;
@@ -228,13 +270,15 @@ async function fetchPage(
         });
         const ct2 = res2.headers.get("content-type") ?? "";
         if (contentTypeLooksLikeHtml(ct2)) {
-          const body2 = await res2.text();
+          const body2 = await readBodyCapped(res2, MAX_BODY_BYTES);
           if (body2.length > 0) {
             res = res2;
             ct = ct2;
             mime = primaryMime(ct2);
             body = body2;
           }
+        } else {
+          try { await res2.body?.cancel(); } catch { /* best effort */ }
         }
       }
 
