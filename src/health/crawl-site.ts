@@ -434,20 +434,27 @@ export async function crawlSite(options: {
   const queue: string[] = [base.href];
   queued.add(base.href);
 
-  // Seed BFS queue from sitemap — discovers pages not reachable through internal links
+  // Seed BFS queue from sitemap — discovers pages not reachable through internal links.
+  // Cap the seed count at maxPagesCap so we don't queue tens of thousands of URLs on
+  // large sitemaps; anything over the cap gets dropped here since BFS would ignore it
+  // anyway and leaving it in the queue historically caused tryFinish() to stall.
   try {
     const sitemapUrls = await fetchSitemapUrls(base, options.requestTimeoutMs);
+    let seeded = 0;
     for (const sUrl of sitemapUrls) {
+      if (queued.size >= maxPagesCap) break;
       if (sameOrigin(sUrl, base.href) && !queued.has(sUrl)) {
         const normalized = normalizeHref(sUrl, base.href);
         if (normalized && !queued.has(normalized)) {
           queue.push(normalized);
           queued.add(normalized);
+          seeded++;
         }
       }
     }
     if (sitemapUrls.length > 0) {
-      console.log(`[crawl] ${hostname}: seeded ${queued.size - 1} URLs from sitemap`);
+      const suffix = sitemapUrls.length > seeded ? ` (of ${sitemapUrls.length} sitemap entries; capped at maxPages)` : "";
+      console.log(`[crawl] ${hostname}: seeded ${seeded} URLs from sitemap${suffix}`);
     }
   } catch { /* sitemap fetch failed — continue with BFS only */ }
 
@@ -556,7 +563,11 @@ export async function crawlSite(options: {
 
   await new Promise<void>((resolve) => {
     function tryFinish() {
-      if (outstanding === 0 && queue.length === 0) {
+      // Resolve when every in-flight fetch has returned AND either the queue
+      // is empty or we've hit the cap. Previously this only checked queue.length,
+      // which meant caps never terminated the BFS on sites whose sitemap had
+      // more URLs than maxPages — crawler hung forever.
+      if (outstanding === 0 && (queue.length === 0 || visited.size >= maxPagesCap)) {
         resolve();
       }
     }
