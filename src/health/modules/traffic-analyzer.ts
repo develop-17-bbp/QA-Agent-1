@@ -93,24 +93,36 @@ export async function analyzeTraffic(reports: SiteHealthReport[]): Promise<Traff
       : Promise.resolve(undefined),
   ]);
 
+  // Treat "fulfilled with undefined" (provider worked, your domain just
+  // isn't in their top-domains dataset) as a hit-with-missing-field, not a
+  // failure. Same semantics as competitive-signals.ts — the chip should
+  // stay green and the specific metric shows "—".
   let trancoRank: number | undefined;
   let trancoPercentile: number | undefined;
   let history30d: { date: string; rank: number }[] | undefined;
-  if (trancoRes.status === "fulfilled" && trancoRes.value) {
+  if (trancoRes.status === "fulfilled") {
     providersHit.push("tranco");
-    realDataFields.push("trancoRank", "trancoPercentile");
-    trancoRank = trancoRes.value.currentRank.value;
-    trancoPercentile = trancoRes.value.percentile.value;
-    history30d = trancoRes.value.history30d?.value;
+    if (trancoRes.value) {
+      realDataFields.push("trancoRank", "trancoPercentile");
+      trancoRank = trancoRes.value.currentRank.value;
+      trancoPercentile = trancoRes.value.percentile.value;
+      history30d = trancoRes.value.history30d?.value;
+    }
   } else {
     providersFailed.push("tranco");
   }
 
   let cloudflareRadarRank: number | undefined;
-  if (radarRes.status === "fulfilled" && radarRes.value) {
-    providersHit.push("cloudflare-radar");
-    realDataFields.push("cloudflareRadarRank");
-    cloudflareRadarRank = radarRes.value.rank.value;
+  if (radarRes.status === "fulfilled") {
+    // Only show as a provider hit when it was actually configured (otherwise
+    // we just resolved undefined for the "not configured" branch at line 88).
+    if (isCloudflareRadarConfigured()) {
+      providersHit.push("cloudflare-radar");
+      if (radarRes.value) {
+        realDataFields.push("cloudflareRadarRank");
+        cloudflareRadarRank = radarRes.value.rank.value;
+      }
+    }
   } else if (isCloudflareRadarConfigured()) {
     providersFailed.push("cloudflare-radar");
   }
