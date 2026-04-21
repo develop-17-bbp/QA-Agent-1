@@ -405,6 +405,33 @@ export async function runFormTest(payload: { siteId?: string; headless?: boolean
   return res.json();
 }
 
+export type AdHocFieldReport = {
+  selector: string;
+  name?: string;
+  type?: string;
+  action: "fill" | "check" | "uncheck" | "select" | "click" | "skip";
+  value?: string;
+  skippedReason?: string;
+};
+export type AdHocFormTestResult = {
+  runId: string;
+  url: string;
+  status: "passed" | "failed" | "uncertain" | "skipped";
+  durationMs: number;
+  errorMessage?: string;
+  screenshotPath: string;
+  formsFound: number;
+  filledFields: AdHocFieldReport[];
+  submitted: boolean;
+  successSignal?: string;
+  finalUrl?: string;
+};
+export async function runAdHocFormTest(payload: { url: string; headless?: boolean; dryRun?: boolean }): Promise<AdHocFormTestResult> {
+  const res = await fetch("/api/form-tests/ad-hoc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // AI one-line fix recommendations for a batch of broken links.
 export type BrokenLinkInput = { foundOn: string; target: string; status?: number; error?: string; anchorText?: string; linkContext?: string };
 export type LinkFixRecommendation = { foundOn: string; target: string; recommendation: string };

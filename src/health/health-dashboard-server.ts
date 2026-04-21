@@ -86,6 +86,7 @@ import {
 } from "./position-db.js";
 import { sitesConfigSchema } from "../config/schema.js";
 import { orchestrateRun } from "../orchestrate.js";
+import { runAdHocFormTest } from "../runner/ad-hoc-form-test.js";
 
 function webDistRoot(): string {
   return path.join(process.cwd(), "web", "dist");
@@ -2733,6 +2734,35 @@ export async function runHealthDashboard(options: {
           res.end(JSON.stringify({ configured: true, sites }));
         } catch (e) {
           res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) }));
+        }
+        return;
+      }
+
+      // Ad-hoc form test — paste any URL, auto-detect and fill the form.
+      if (req.method === "POST" && url.pathname === "/api/form-tests/ad-hoc") {
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { url?: string; headless?: boolean; dryRun?: boolean };
+        try { payload = body ? JSON.parse(body) : {}; } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const target = (payload.url ?? "").trim();
+        if (!/^https?:\/\//i.test(target)) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Provide a full http(s) URL" })); return;
+        }
+        try {
+          const runId = new Date().toISOString().replace(/[:.]/g, "-");
+          const artifactsRoot = path.join(process.cwd(), "artifacts", "form-tests", `ad-hoc-${runId}`);
+          const screenshotPath = path.join(artifactsRoot, "screenshot.png");
+          const result = await runAdHocFormTest({
+            url: target,
+            headless: payload.headless !== false,
+            dryRun: payload.dryRun === true,
+            screenshotPath,
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ runId, ...result, screenshotPath: path.relative(process.cwd(), result.screenshotPath).replace(/\\/g, "/") }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
         }
         return;
       }
