@@ -358,9 +358,14 @@ export default function PositionTracking() {
       {/* Live SERP sweep — uses DuckDuckGo and records each sample to history-db. */}
       <div className="qa-panel" style={{ marginTop: 24, padding: 16 }}>
         <div className="qa-panel-title">Live Rank Sweep (DuckDuckGo)</div>
-        <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4, marginBottom: 12 }}>
+        <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4, marginBottom: 8 }}>
           Query real DuckDuckGo search results for any domain + keyword combination. Each sweep is recorded to
           local history so running it daily builds a ranking trend. No API key required.
+        </p>
+        <p style={{ fontSize: 11.5, color: "var(--warn)", marginTop: 0, marginBottom: 12, background: "var(--warn-bg)", border: "1px solid var(--warn-border)", padding: "6px 10px", borderRadius: 6 }}>
+          <strong>Honest framing:</strong> DDG ranks correlate ~0.7 with Google's SERP. Use this for{" "}
+          <strong>trend and delta</strong> tracking, not absolute "rank on Google". For first-party Google
+          data, connect GSC — the columns on the right show real Google impressions + position when available.
         </p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
           <div style={{ flex: 1, minWidth: 220 }}>

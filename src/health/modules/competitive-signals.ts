@@ -102,10 +102,19 @@ export async function fetchCompetitiveSignals(domainInput: string): Promise<Comp
     providersFailed,
   };
 
-  if (trancoR.status === "fulfilled" && trancoR.value) {
-    out.trancoRank = trancoR.value.currentRank;
-    out.trancoPercentile = trancoR.value.percentile;
+  // A provider that FULFILLED with an undefined value did its job — the
+  // domain just isn't in that dataset (e.g. small site not in Cloudflare's
+  // top-1M or Tranco's top-list). Treat that as "hit but no data for this
+  // domain" so the UI's data-source chip stays green; only flag the
+  // missing field. Reserve providersFailed for actual rejections.
+  if (trancoR.status === "fulfilled") {
     providersHit.push("tranco");
+    if (trancoR.value) {
+      out.trancoRank = trancoR.value.currentRank;
+      out.trancoPercentile = trancoR.value.percentile;
+    } else {
+      missingFields.push("trancoRank (domain not in Tranco top list)");
+    }
   } else { missingFields.push("trancoRank"); providersFailed.push("tranco"); }
 
   if (oprR.status === "fulfilled") {
@@ -113,14 +122,22 @@ export async function fetchCompetitiveSignals(domainInput: string): Promise<Comp
     providersHit.push("open-page-rank");
   } else { missingFields.push("domainAuthority"); providersFailed.push("open-page-rank"); }
 
-  if (cfR.status === "fulfilled" && cfR.value) {
-    out.cloudflareRank = cfR.value.rank;
+  if (cfR.status === "fulfilled") {
     providersHit.push("cloudflare-radar");
+    if (cfR.value) {
+      out.cloudflareRank = cfR.value.rank;
+    } else {
+      missingFields.push("cloudflareRank (domain not in Cloudflare Radar top-domains set)");
+    }
   } else { missingFields.push("cloudflareRank"); providersFailed.push("cloudflare-radar"); }
 
-  if (wikiR.status === "fulfilled" && wikiR.value) {
-    out.wikipediaMonthlyViews = wikiR.value;
+  if (wikiR.status === "fulfilled") {
     providersHit.push("wikipedia-pageviews");
+    if (wikiR.value) {
+      out.wikipediaMonthlyViews = wikiR.value;
+    } else {
+      missingFields.push("wikipediaMonthlyViews (no matching Wikipedia article)");
+    }
   } else { missingFields.push("wikipediaMonthlyViews"); providersFailed.push("wikipedia-pageviews"); }
 
   if (trendsR.status === "fulfilled") {
