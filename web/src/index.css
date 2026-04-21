@@ -69,6 +69,52 @@
   --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+/* ─── Dark mode ──────────────────────────────────────────────────
+   Activated by <html data-theme="dark"> (set by <ThemeToggle/>).
+   Overrides only the palette + shadows; layout stays identical. */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --text:           #e2e8f0;
+  --text-secondary: #cbd5e1;
+  --muted:          #94a3b8;
+  --muted-light:    #64748b;
+
+  --border:         #334155;
+  --border-strong:  #475569;
+
+  --bg-app:         #0f172a;
+  --glass:          #1e293b;
+  --glass2:         #1a2231;
+  --glass3:         #0f172a;
+
+  --accent:         #60a5fa;
+  --accent-hover:   #93c5fd;
+  --accent-light:   #1e3a5f;
+  --accent-muted:   #1e40af;
+
+  --ok:             #4ade80;
+  --ok-bg:          #052e16;
+  --ok-border:      #166534;
+  --warn:           #fbbf24;
+  --warn-bg:        #3b2a08;
+  --warn-border:    #78350f;
+  --bad:            #f87171;
+  --bad-bg:         #3b0d0d;
+  --bad-border:     #7f1d1d;
+  --info:           #38bdf8;
+  --info-bg:        #0c2a3d;
+  --info-border:    #075985;
+
+  --shadow-xs:  0 1px 2px rgba(0,0,0,0.25);
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.24);
+  --shadow:     0 4px 6px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.24);
+  --shadow-md:  0 10px 15px rgba(0,0,0,0.35), 0 4px 6px rgba(0,0,0,0.25);
+  --shadow-lg:  0 20px 25px rgba(0,0,0,0.4), 0 8px 10px rgba(0,0,0,0.3);
+
+  --input-bg:       #0f172a;
+}
+
 /* ─── Reset & Base ────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 

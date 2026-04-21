@@ -1749,10 +1749,13 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/topic-research") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { topic?: string; runId?: string };
+        let payload: { topic?: string; runId?: string; region?: string; country?: string };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const topic = typeof payload.topic === "string" ? payload.topic.trim() : "";
         if (!topic) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "topic required" })); return; }
+        const region = typeof payload.region === "string" && payload.region.trim()
+          ? payload.region.trim()
+          : typeof payload.country === "string" ? payload.country.trim() : "";
         try {
           let reports: SiteHealthReport[] | undefined;
           const runIdP = typeof payload.runId === "string" ? payload.runId : "";
@@ -1760,7 +1763,7 @@ export async function runHealthDashboard(options: {
             const raw = await loadRawReportsForRun(outRoot, runIdP);
             if (raw) reports = raw.reports;
           }
-          const result = await researchTopic(topic, reports);
+          const result = await researchTopic(topic, reports, region);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }

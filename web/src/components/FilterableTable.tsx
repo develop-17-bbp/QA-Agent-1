@@ -70,6 +70,10 @@ export interface FilterableTableProps<T> {
   headerExtras?: ReactNode;
   /** Shown when rows is empty after filtering. */
   emptyMessage?: ReactNode;
+  /** When true, shows an "Export CSV" button that downloads the filtered rows. */
+  exportCsv?: boolean;
+  /** Base filename (without extension) for the CSV download. */
+  exportFilename?: string;
 }
 
 export function FilterableTable<T>(props: FilterableTableProps<T>) {
@@ -83,6 +87,8 @@ export function FilterableTable<T>(props: FilterableTableProps<T>) {
     itemLabel = "row",
     headerExtras,
     emptyMessage,
+    exportCsv = true,
+    exportFilename,
   } = props;
 
   const [filters, setFilters] = useState<FilterMap>({});
@@ -298,6 +304,16 @@ export function FilterableTable<T>(props: FilterableTableProps<T>) {
             {itemLabel}
             {sorted.length === 1 ? "" : "s"}
           </span>
+          {exportCsv && sorted.length > 0 && (
+            <button
+              className="qa-btn-ghost"
+              onClick={() => downloadCsv(sorted, columns, exportFilename ?? itemLabel)}
+              title={`Download ${sorted.length} filtered ${itemLabel}(s) as CSV`}
+              style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600 }}
+            >
+              ↓ CSV
+            </button>
+          )}
           {headerExtras}
         </div>
       </div>
@@ -366,6 +382,31 @@ export function FilterableTable<T>(props: FilterableTableProps<T>) {
 function stringify(v: string | number | null | undefined): string {
   if (v === null || v === undefined) return "";
   return String(v);
+}
+
+function csvEscape(v: string | number | null | undefined): string {
+  const s = stringify(v);
+  if (s === "") return "";
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function downloadCsv<T>(rows: T[], columns: FilterableColumn<T>[], baseName: string): void {
+  const header = columns.map((c) => csvEscape(c.label)).join(",");
+  const body = rows
+    .map((r) => columns.map((c) => csvEscape(c.accessor(r))).join(","))
+    .join("\r\n");
+  const csv = "﻿" + header + "\r\n" + body; // BOM so Excel detects UTF-8
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  a.download = `${baseName.replace(/\s+/g, "-")}-${ts}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 interface FilterChipProps {

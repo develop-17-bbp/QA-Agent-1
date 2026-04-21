@@ -75,7 +75,7 @@ export interface TopicResearchResult {
   dataQuality: DataQuality;
 }
 
-export async function researchTopic(topic: string, reports?: SiteHealthReport[]): Promise<TopicResearchResult> {
+export async function researchTopic(topic: string, reports?: SiteHealthReport[], region = ""): Promise<TopicResearchResult> {
   const clean = topic.trim();
   const providersHit: string[] = [];
   const providersFailed: string[] = [];
@@ -101,7 +101,7 @@ export async function researchTopic(topic: string, reports?: SiteHealthReport[])
   // ── Step 2: First-level Google Suggest cascade ─────────────────────────
   let firstLevel: string[] = [];
   try {
-    const res = await fetchSuggestions(clean);
+    const res = await fetchSuggestions(clean, "en", region);
     firstLevel = res.value;
     if (firstLevel.length > 0) {
       providersHit.push("google-suggest");
@@ -117,7 +117,7 @@ export async function researchTopic(topic: string, reports?: SiteHealthReport[])
   const secondLevel: { keyword: string; parentSeed: string }[] = [];
   for (const seed of firstLevel.slice(0, 5)) {
     try {
-      const res = await fetchSuggestions(seed);
+      const res = await fetchSuggestions(seed, "en", region);
       for (const s of res.value) {
         const lc = s.toLowerCase();
         if (!cascadeSeen.has(lc)) {
@@ -173,7 +173,7 @@ export async function researchTopic(topic: string, reports?: SiteHealthReport[])
   // ── Step 6: Real question list via Google Suggest question-prefix expansion ──
   let questions: TopicQuestion[] = [];
   try {
-    const res = await fetchQuestionSuggestions(clean);
+    const res = await fetchQuestionSuggestions(clean, "en", region);
     questions = res.value.slice(0, 15).map((q) => ({ question: q, source: "google-suggest-question" }));
     if (questions.length > 0) realDataFields.push("questions");
   } catch {

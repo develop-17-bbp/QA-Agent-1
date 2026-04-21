@@ -1,20 +1,28 @@
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
 import { fetchOrganicRankings, fetchGscPagesBatch } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
+import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
+import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+
 function getGsc(gscPages: Map<string, any>, url: string) {
   if (gscPages.has(url)) return gscPages.get(url);
   try {
     const path = new URL(url).pathname;
     for (const [k, v] of gscPages) {
-      try { if (new URL(k).pathname === path) return v; } catch {}
+      try { if (new URL(k).pathname === path) return v; } catch { /* skip */ }
     }
-  } catch {}
+  } catch { /* skip */ }
   return null;
+}
+
+interface Ranking {
+  url: string;
+  title?: string;
+  score: number;
 }
 
 export default function OrganicRankings() {
@@ -22,7 +30,6 @@ export default function OrganicRankings() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [sortBy, setSortBy] = useState<"score" | "title" | "gscPosition">("score");
   const [domain, setDomain] = useState("");
   const overlay = useGoogleOverlay(domain);
   const [gscPages, setGscPages] = useState<Map<string, any>>(new Map());
@@ -32,20 +39,19 @@ export default function OrganicRankings() {
     if (!rid) return;
     setLoading(true); setError("");
     setGscPages(new Map());
-    try { setData(await fetchOrganicRankings(rid)); } catch (e: any) { setError(e.message); }
+    try { setData(await fetchOrganicRankings(rid)); }
+    catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   };
 
-  // Extract domain from first ranking URL
   useEffect(() => {
     if (!data) return;
     const firstUrl = data.rankings?.[0]?.url ?? "";
     if (firstUrl) {
-      try { setDomain(new URL(firstUrl).hostname.replace(/^www\./, "")); } catch {}
+      try { setDomain(new URL(firstUrl).hostname.replace(/^www\./, "")); } catch { /* skip */ }
     }
   }, [data]);
 
-  // Fetch GSC page-level data when a matching site is found
   useEffect(() => {
     if (!overlay.matchedGscSite) return;
     fetchGscPagesBatch(overlay.matchedGscSite.siteUrl, 28, 500)
@@ -54,52 +60,120 @@ export default function OrganicRankings() {
         for (const p of pages) m.set(p.page ?? p.url ?? "", p);
         setGscPages(m);
       })
-      .catch(() => {});
+      .catch(() => { /* silent — optional overlay */ });
   }, [overlay.matchedGscSite?.siteUrl]);
 
-  const rankings = data?.rankings ?? [];
-  const sorted = [...rankings].sort((a: any, b: any) => {
-    if (sortBy === "score") return b.score - a.score;
-    if (sortBy === "title") return (a.title ?? "").localeCompare(b.title ?? "");
-    if (sortBy === "gscPosition") {
-      const posA = getGsc(gscPages, a.url)?.position?.value ?? Infinity;
-      const posB = getGsc(gscPages, b.url)?.position?.value ?? Infinity;
-      return posA - posB;
-    }
-    return 0;
-  });
+  const rankings: Ranking[] = data?.rankings ?? [];
   const dist = data?.distribution ?? {};
   const distData = [
-    { name: "Excellent (80+)", value: dist.excellent ?? 0, fill: "#38a169" },
-    { name: "Good (60-79)", value: dist.good ?? 0, fill: "#3182ce" },
-    { name: "Average (40-59)", value: dist.average ?? 0, fill: "#dd6b20" },
-    { name: "Poor (<40)", value: dist.poor ?? 0, fill: "#e53e3e" },
+    { name: "Excellent (80+)", value: dist.excellent ?? 0, fill: "#16a34a" },
+    { name: "Good (60-79)", value: dist.good ?? 0, fill: "#2563eb" },
+    { name: "Average (40-59)", value: dist.average ?? 0, fill: "#d97706" },
+    { name: "Poor (<40)", value: dist.poor ?? 0, fill: "#dc2626" },
   ];
 
+  const hasGsc = gscPages.size > 0;
+
+  const columns: FilterableColumn<Ranking>[] = useMemo(() => {
+    const cols: FilterableColumn<Ranking>[] = [
+      {
+        key: "url",
+        label: "URL",
+        accessor: (r) => r.url,
+        filterType: "text",
+        render: (r) => (
+          <a href={r.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--text)", wordBreak: "break-all" }}>
+            {r.url}
+          </a>
+        ),
+      },
+      {
+        key: "title",
+        label: "Title",
+        accessor: (r) => r.title ?? "",
+        filterType: "text",
+        render: (r) => <span style={{ fontSize: 12 }}>{r.title || "—"}</span>,
+      },
+      {
+        key: "score",
+        label: "Score",
+        accessor: (r) => r.score,
+        filterType: "number",
+        width: 90,
+        render: (r) => (
+          <span style={{ fontWeight: 600, color: r.score >= 80 ? "var(--ok)" : r.score >= 60 ? "var(--accent)" : r.score >= 40 ? "var(--warn)" : "var(--bad)" }}>
+            {r.score}
+          </span>
+        ),
+        headerStyle: { textAlign: "right" },
+        cellStyle: { textAlign: "right" },
+      },
+    ];
+
+    if (hasGsc) {
+      cols.push(
+        {
+          key: "gscPosition",
+          label: "GSC Pos",
+          accessor: (r) => getGsc(gscPages, r.url)?.position?.value ?? null,
+          filterType: "number",
+          width: 100,
+          render: (r) => {
+            const v = getGsc(gscPages, r.url)?.position?.value;
+            return v != null ? (
+              <span style={{ fontSize: 12, fontWeight: 600, color: v <= 3 ? "var(--ok)" : v <= 10 ? "var(--warn)" : "var(--bad)" }}>
+                {v.toFixed(1)}
+              </span>
+            ) : <span style={{ color: "var(--muted)" }}>—</span>;
+          },
+          headerStyle: { textAlign: "right", color: "var(--ok)" },
+          cellStyle: { textAlign: "right" },
+        },
+        {
+          key: "gscClicks",
+          label: "Clicks",
+          accessor: (r) => getGsc(gscPages, r.url)?.clicks?.value ?? null,
+          filterType: "number",
+          width: 100,
+          render: (r) => {
+            const v = getGsc(gscPages, r.url)?.clicks?.value;
+            return v != null ? <span style={{ fontSize: 12 }}>{v}</span> : <span style={{ color: "var(--muted)" }}>—</span>;
+          },
+          headerStyle: { textAlign: "right", color: "var(--ok)" },
+          cellStyle: { textAlign: "right" },
+        },
+      );
+    }
+
+    return cols;
+  }, [hasGsc, gscPages]);
+
   return (
-    <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <h1 className="qa-page-title">Organic Rankings</h1>
-      <p className="qa-page-desc">Pages ranked by organic SEO value score based on on-page signals.</p>
+    <PageShell
+      title="Organic Rankings"
+      desc="Pages ranked by organic SEO value score based on on-page signals."
+      purpose="Which pages are scoring well for organic SEO — and how do they actually rank in Google?"
+      sources={["Crawl", "GSC (optional)"]}
+    >
       <RunSelector value={runId} onChange={load} label="Select run" />
-      {loading && (
-        <LoadingPanel message="Analyzing…" />
-      )}
+
+      {loading && <LoadingPanel message="Analyzing…" />}
       {error && <ErrorBanner error={error} />}
-      {/* Data-source pill — shown when Google is connected and a GSC site matched */}
+
       {overlay.connected && data && !loading && (
         <div className="qa-panel" style={{ marginTop: 14, padding: 10, fontSize: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           {overlay.matchedGscSite ? (
             <>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
-              <span>Real data overlay active for <strong>{domain}</strong> (last 28 days):</span>
-              <span className="qa-lozenge" style={{ background: "#ecfdf5", color: "#047857", fontSize: 11 }}>
-                GSC · {overlay.matchedGscSite.siteUrl} · {gscPages.size} pages
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--ok)", flexShrink: 0 }} />
+              <span>Real GSC overlay for <strong>{domain}</strong> (last 28 days)</span>
+              <span style={{ padding: "2px 9px", borderRadius: 10, background: "var(--ok-bg)", color: "var(--ok)", border: "1px solid var(--ok-border)", fontSize: 11, fontWeight: 600 }}>
+                GSC · {gscPages.size} pages
               </span>
             </>
           ) : (
             <>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fbbf24", flexShrink: 0 }} />
-              <span style={{ color: "#92400e" }}>Google connected — no verified GSC property matches this domain</span>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--warn)", flexShrink: 0 }} />
+              <span style={{ color: "var(--warn)" }}>Google connected — no verified GSC property matches this domain</span>
             </>
           )}
         </div>
@@ -107,51 +181,35 @@ export default function OrganicRankings() {
 
       {data && !loading && (
         <>
-          <div className="qa-panel" style={{ marginTop: 16 }}>
-            <div className="qa-panel-head">
-              <div className="qa-panel-title">Score Distribution</div>
-            </div>
+          <SectionCard title="Score Distribution">
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={distData}><XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} /><Tooltip /><Bar dataKey="value" radius={[4,4,0,0]}>{distData.map((d, i) => <Bar key={i} dataKey="value" fill={d.fill} />)}</Bar></BarChart>
+              <BarChart data={distData}>
+                <XAxis dataKey="name" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {distData.map((d, i) => <Bar key={i} dataKey="value" fill={d.fill} />)}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
-          </div>
-          <div className="qa-panel" style={{ marginTop: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-              <div className="qa-panel-title">Rankings ({sorted.length} pages)</div>
-              <select className="qa-select" value={sortBy} onChange={e => setSortBy(e.target.value as any)} style={{ width: 160 }}>
-                <option value="score">By Score</option>
-                <option value="title">By Title</option>
-                {gscPages.size > 0 && <option value="gscPosition">By GSC Position</option>}
-              </select>
-            </div>
-            <div style={{ maxHeight: 500, overflowY: "auto" }}>
-              <table className="qa-table">
-                <thead><tr>
-                  <th>#</th>
-                  <th>URL</th>
-                  <th>Title</th>
-                  <th style={{ textAlign: "right" }}>Score</th>
-                  {gscPages.size > 0 && <th style={{ textAlign: "right", color: "#047857" }}>GSC Pos</th>}
-                  {gscPages.size > 0 && <th style={{ textAlign: "right", color: "#047857" }}>Clicks</th>}
-                </tr></thead>
-                <tbody>{sorted.slice(0, 100).map((r: any, i: number) => {
-                  const gsc = gscPages.size > 0 ? getGsc(gscPages, r.url) : null;
-                  return (
-                    <tr key={i}>
-                      <td style={{ color: "var(--text-secondary)" }}>{i + 1}</td>
-                      <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.url}</td>
-                      <td style={{ maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title || "—"}</td>
-                      <td style={{ textAlign: "right" }}><span style={{ fontWeight: 600, color: r.score >= 80 ? "#38a169" : r.score >= 60 ? "#3182ce" : r.score >= 40 ? "#dd6b20" : "#e53e3e" }}>{r.score}</span></td>
-                      {gscPages.size > 0 && <td style={{ textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }}>{gsc?.position?.value?.toFixed(1) ?? "—"}</td>}
-                      {gscPages.size > 0 && <td style={{ textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }}>{gsc?.clicks?.value ?? "—"}</td>}
-                    </tr>
-                  );
-                })}</tbody>
-              </table>
-            </div>
-          </div>
+          </SectionCard>
+
+          <SectionCard title={`Rankings (${rankings.length} pages)`}>
+            {rankings.length === 0 ? (
+              <EmptyState title="No rankings in this run" hint="Start a crawl to score pages." />
+            ) : (
+              <FilterableTable<Ranking>
+                rows={rankings}
+                columns={columns}
+                rowKey={(r) => r.url}
+                pageSize={50}
+                itemLabel="page"
+                exportFilename="organic-rankings"
+              />
+            )}
+          </SectionCard>
         </>
       )}
-    </motion.div>
+    </PageShell>
   );
 }

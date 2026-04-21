@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { fetchGoogleAuthStatus, fetchLlmStats } from "../api";
 import { usePageTitle } from "../hooks/usePageTitle";
 import RegionPicker from "./RegionPicker";
+import { ThemeToggle } from "./PageUI";
 
 // ─── Data honesty ────────────────────────────────────────────────────────────
 type SourceClass = "real" | "llm-safe" | "mixed";
@@ -323,9 +324,9 @@ function Topbar() {
       position: "sticky",
       top: 0,
       zIndex: 100,
-      background: "rgba(255,255,255,0.97)",
+      background: "var(--glass)",
       borderBottom: "1px solid var(--border)",
-      boxShadow: "0 1px 3px rgba(15,23,42,0.08)",
+      boxShadow: "var(--shadow-sm)",
       backdropFilter: "blur(8px)",
     }}>
       {/* Brand row */}
@@ -350,6 +351,8 @@ function Topbar() {
           <StatusBar />
           <div style={{ width: 1, height: 20, background: "var(--border)" }} />
           <RegionPicker compact label="Region" />
+          <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+          <ThemeToggle />
           <div style={{ width: 1, height: 20, background: "var(--border)" }} />
           <div style={{ display: "flex", gap: 2 }}>
             {[

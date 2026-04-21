@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
 import {
@@ -10,6 +9,7 @@ import {
   type Ga4Property,
 } from "../api";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
+import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
 const CLASS_COLORS: Record<string, string> = { good: "#38a169", "needs-improvement": "#dd6b20", poor: "#e53e3e" };
@@ -136,14 +136,12 @@ export default function ContentAudit() {
   const issueData = (data?.issueBreakdown ?? []).slice(0, 8);
 
   return (
-    <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
-      <h1 className="qa-page-title">Content Audit</h1>
-      <p className="qa-page-desc">
-        Every quality score comes from <strong>deterministic rules over real crawl fields</strong>
-        (title, meta description length, h1 count, body bytes, canonical, lang, load time, status).
-        The LLM is restricted to a single qualitative comment about why the top issues matter —
-        it never invents pages, counts, or scores.
-      </p>
+    <PageShell
+      title="Content Audit"
+      desc={<>Every quality score comes from <strong>deterministic rules over real crawl fields</strong> (title, meta description length, h1 count, body bytes, canonical, lang, load time, status). The LLM is restricted to a single qualitative comment about why the top issues matter — it never invents pages, counts, or scores.</>}
+      purpose="Which pages need rewriting, thin content, or metadata fixes?"
+      sources={["Crawl", "GA4 (optional)"]}
+    >
       <RunSelector value={runId} onChange={load} label="Select run" />
 
       {ga4Connected && ga4Properties.length > 0 && (
@@ -251,13 +249,19 @@ export default function ContentAudit() {
             </div>
           )}
 
-          <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-            <div className="qa-panel-title" style={{ marginBottom: 10 }}>Pages ({pages.length})</div>
-            <ContentAuditTable pages={pages} ga4Pages={ga4Pages} ga4Active={ga4Active} />
-          </div>
+          <SectionCard title={`Pages (${pages.length})`}>
+            {pages.length === 0 ? (
+              <EmptyState
+                title="No pages scored"
+                hint="Run a crawl to score this site's pages against deterministic rules."
+              />
+            ) : (
+              <ContentAuditTable pages={pages} ga4Pages={ga4Pages} ga4Active={ga4Active} />
+            )}
+          </SectionCard>
         </>
       )}
-    </motion.div>
+    </PageShell>
   );
 }
 

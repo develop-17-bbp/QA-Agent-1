@@ -73,7 +73,7 @@ function priorityFromFrequency(freq: number, maxFreq: number): Priority {
  *      the LLM cannot invent keywords, volumes, priorities, or competitor
  *      insights.
  */
-export async function buildKeywordStrategy(reports: SiteHealthReport[]): Promise<KeywordStrategyResult> {
+export async function buildKeywordStrategy(reports: SiteHealthReport[], region = ""): Promise<KeywordStrategyResult> {
   const allPages = reports.flatMap((r) => r.crawl.pages);
   const hostnames = [...new Set(reports.map((r) => r.hostname))];
   const providersHit: string[] = [];
@@ -98,7 +98,7 @@ export async function buildKeywordStrategy(reports: SiteHealthReport[]): Promise
   let suggestHit = false;
   for (const seed of seedsToExpand) {
     try {
-      const dp = await fetchSuggestions(seed);
+      const dp = await fetchSuggestions(seed, "en", region);
       suggestHit = true;
       for (const s of dp.value) {
         if (!relatedKeywords.find((rk) => rk.keyword === s)) {

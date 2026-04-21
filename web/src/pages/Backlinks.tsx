@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
 import { fetchBacklinks, fetchExternalBacklinks, uploadGscLinksCsv } from "../api";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
+import { PageShell } from "../components/PageUI";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
 
@@ -187,9 +187,12 @@ export default function Backlinks() {
   ].filter(d => d.value > 0) : [];
 
   return (
-    <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
-      <h1 className="qa-page-title">Backlinks</h1>
-      <p className="qa-page-desc">Analyze your internal and external link structure from crawl data.</p>
+    <PageShell
+      title="Backlinks"
+      desc="Analyze your internal and external link structure from crawl data."
+      purpose="What links to my site — real backlink data without paying for Ahrefs?"
+      sources={["Crawl", "Bing WMT", "Common Crawl", "URLScan", "Wayback"]}
+    >
       <RunSelector value={runId} onChange={load} label="Select run" />
 
       {loading && <LoadingPanel message="Analyzing backlinks…" />}
@@ -422,6 +425,6 @@ export default function Backlinks() {
           </div>
         )}
       </div>
-    </motion.div>
+    </PageShell>
   );
 }

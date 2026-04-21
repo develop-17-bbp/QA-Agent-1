@@ -10,6 +10,7 @@ import {
 } from "../api";
 import { ErrorBanner } from "../components/UI";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
+import { PageShell, EmptyState } from "../components/PageUI";
 
 function keyFor(l: BrokenLinkRow): string {
   return `${l.siteHostname}|${l.foundOn}|${l.target}|${l.status ?? 0}`;
@@ -252,16 +253,12 @@ export default function LinkFixAdvisor() {
   }, []);
 
   return (
-    <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
-      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="qa-page-title">Link Fix Advisor</h1>
-        <p className="qa-page-desc" style={{ marginBottom: 18 }}>
-          Every broken link the crawler found, with the exact page where it appeared. Click <strong>Get AI fix suggestions</strong> and
-          the local LLM writes one actionable sentence per link — redirect, remove, fix typo, contact owner, etc. Stack filters by
-          column to zero in on specific sites, status codes, or anchor text patterns.
-        </p>
-      </motion.div>
-
+    <PageShell
+      title="Link Fix Advisor"
+      desc={<>Every broken link the crawler found, with the exact page where it appeared. Click <strong>Get AI fix suggestions</strong> and the local LLM writes one actionable sentence per link — redirect, remove, fix typo, contact owner, etc.</>}
+      purpose="Every broken link on your site + one-line AI recommendations for what to do."
+      sources={["Crawl", "Ollama"]}
+    >
       <div
         className="qa-panel"
         style={{
@@ -323,9 +320,12 @@ export default function LinkFixAdvisor() {
         )}
 
         {!loadingLinks && links && links.length === 0 && (
-          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="qa-panel" style={{ padding: 30, textAlign: "center" }}>
-            <div style={{ fontSize: 14, color: "var(--ok)", fontWeight: 600 }}>No broken links in this run</div>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>Every internal link resolved successfully.</div>
+          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <EmptyState
+              icon="✓"
+              title="No broken links in this run"
+              hint="Every internal link resolved successfully."
+            />
           </motion.div>
         )}
 
@@ -337,12 +337,13 @@ export default function LinkFixAdvisor() {
               rowKey={keyFor}
               pageSize={100}
               itemLabel="broken link"
+              exportFilename="broken-links"
               onVisibleRowsChange={handleVisibleRowsChange}
               emptyMessage="No broken links match the current filters."
             />
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </PageShell>
   );
 }
