@@ -27,8 +27,19 @@ const npmCmd = isWindows ? "npm.cmd" : "npm";
 function log(msg) { console.log(`==> ${msg}`); }
 function warn(msg) { console.warn(`Warning: ${msg}`); }
 
+/**
+ * Spawn wrapper that works for `.cmd`/`.bat` on Windows without triggering
+ * the DEP0190 warning (which fires when you combine `shell: true` with
+ * separate args). We route through `cmd.exe /c` directly instead.
+ */
+function toPlatform(cmd, args) {
+  if (!isWindows) return { cmd, args };
+  return { cmd: "cmd.exe", args: ["/c", cmd, ...args] };
+}
+
 function run(cmd, args, { optional = false, cwd = ROOT } = {}) {
-  const r = spawnSync(cmd, args, { stdio: "inherit", cwd, shell: false });
+  const p = toPlatform(cmd, args);
+  const r = spawnSync(p.cmd, p.args, { stdio: "inherit", cwd });
   if (r.status !== 0 && !optional) {
     console.error(`\nError: \`${cmd} ${args.join(" ")}\` exited with code ${r.status}.`);
     process.exit(r.status ?? 1);
@@ -83,7 +94,8 @@ log("Extra args are passed to: health --serve …");
 const userArgs = process.argv.slice(2).filter((a, i, arr) => !(i === 0 && a === "--"));
 const args = ["run", "health", "--", "--serve", ...userArgs];
 
-const child = spawn(npmCmd, args, { stdio: "inherit", shell: false });
+const launch = toPlatform(npmCmd, args);
+const child = spawn(launch.cmd, launch.args, { stdio: "inherit" });
 child.on("exit", (code) => process.exit(code ?? 0));
 // Forward Ctrl+C to the child so it shuts down cleanly
 for (const sig of ["SIGINT", "SIGTERM"]) {
