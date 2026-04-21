@@ -8,7 +8,8 @@
     "qa-agent": "./dist/index.js"
   },
   "scripts": {
-    "start": "bash scripts/start.sh",
+    "start": "node scripts/start.mjs",
+    "start:bash": "bash scripts/start.sh",
     "build": "tsc",
     "build:web": "npm run build --prefix web",
     "build:all": "npm run build && npm run build:web",
