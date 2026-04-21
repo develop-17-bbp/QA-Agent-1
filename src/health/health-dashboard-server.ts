@@ -69,6 +69,9 @@ import { recommendLinkFixes, type BrokenLinkInput } from "./modules/link-fix-adv
 import { predictKeywordImpact } from "./modules/keyword-impact-predictor.js";
 import { estimateCompetitive } from "./modules/competitive-estimator.js";
 import { ingestGscLinksCsv, fetchGscLinksBundle } from "./providers/gsc-links-csv.js";
+import { ingestAwtBacklinksCsv, fetchAwtBundle } from "./providers/ahrefs-webmaster-csv.js";
+import { fetchBrandMentions } from "./providers/rss-aggregator.js";
+import { searchStartpage } from "./providers/startpage-serp.js";
 import {
   addCompetitorPair,
   removeCompetitorPair,
@@ -2586,6 +2589,70 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ bundle: bundle ? bundle.value : null }));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
+        return;
+      }
+
+      // ── Ahrefs Webmaster Tools CSV import (free — 95% paid Ahrefs parity for your own site) ──
+      if (req.method === "POST" && url.pathname === "/api/awt/upload") {
+        let body: string;
+        try { body = await readBody(req, 20_000_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Body too large (20 MB cap) or unreadable" })); return; }
+        let payload: { domain?: string; csv?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        const csv = typeof payload.csv === "string" ? payload.csv : "";
+        if (!domain || !csv) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain and csv required" })); return; }
+        try {
+          const result = await ingestAwtBacklinksCsv(domain, csv);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: true, rowCount: result.rowCount, summary: result.bundle.summary }));
+        } catch (e) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
+        return;
+      }
+      if (req.method === "GET" && url.pathname.startsWith("/api/awt/")) {
+        const domain = decodeURIComponent(url.pathname.slice("/api/awt/".length));
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const bundle = await fetchAwtBundle(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ bundle: bundle ? bundle.value : null }));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
+        return;
+      }
+
+      // ── Free brand/topic monitor via 6-source RSS + API aggregation ──
+      if (req.method === "POST" && url.pathname === "/api/brand-mentions") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { query?: string; sources?: string[]; googleNewsLocale?: string };
+        try { payload = body ? JSON.parse(body) : {}; } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const q = typeof payload.query === "string" ? payload.query.trim() : "";
+        if (!q) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "query required" })); return; }
+        try {
+          const bundle = await fetchBrandMentions({
+            query: q,
+            sources: Array.isArray(payload.sources) ? (payload.sources as never[]) : undefined,
+            googleNewsLocale: typeof payload.googleNewsLocale === "string" ? payload.googleNewsLocale : undefined,
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(bundle));
+        } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
+        return;
+      }
+
+      // ── Startpage SERP (~0.9 correlation with Google, free, Playwright-backed) ──
+      if (req.method === "POST" && url.pathname === "/api/serp-startpage") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { query?: string; region?: string };
+        try { payload = body ? JSON.parse(body) : {}; } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const q = typeof payload.query === "string" ? payload.query.trim() : "";
+        const region = typeof payload.region === "string" ? payload.region : "US";
+        if (!q) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "query required" })); return; }
+        try {
+          const result = await searchStartpage(q, region);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(result.value));
+        } catch (e) { res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
         return;
       }
 

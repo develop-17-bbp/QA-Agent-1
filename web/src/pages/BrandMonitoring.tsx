@@ -1,9 +1,18 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
-import { fetchBrandMonitoring } from "../api";
+import { fetchBrandMonitoring, fetchBrandMentionsAggregated, type BrandMentionRow, type BrandMentionsBundle } from "../api";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+
+const RSS_SOURCE_COLORS: Record<string, string> = {
+  "google-news": "#4285f4",
+  "reddit": "#ff4500",
+  "hackernews": "#ff6600",
+  "gdelt": "#0284c7",
+  "stackexchange": "#f48024",
+  "wayback-cdx": "#6b7280",
+};
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
 const CONFIDENCE_LABELS: Record<string, string> = { high: "real", medium: "derived", low: "estimated" };
 
@@ -46,6 +55,21 @@ export default function BrandMonitoring() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // RSS-aggregator "brand radar" — no runId needed, pulls from 6 free sources.
+  const [radarQuery, setRadarQuery] = useState("");
+  const [radar, setRadar] = useState<BrandMentionsBundle | null>(null);
+  const [radarLoading, setRadarLoading] = useState(false);
+  const [radarError, setRadarError] = useState("");
+
+  const runRadar = async () => {
+    const q = radarQuery.trim();
+    if (!q) return;
+    setRadarLoading(true); setRadarError(""); setRadar(null);
+    try { setRadar(await fetchBrandMentionsAggregated(q)); }
+    catch (e: any) { setRadarError(e.message); }
+    finally { setRadarLoading(false); }
+  };
+
   const analyze = async () => {
     if (!runId || !brandName.trim()) return;
     setLoading(true); setError("");
@@ -73,6 +97,97 @@ export default function BrandMonitoring() {
         strength" metrics — those were LLM fabrications. The LLM is restricted to a 2-sentence qualitative
         summary of the real findings.
       </p>
+
+      {/* ── Brand radar — free RSS / API aggregator (no runId needed) ─────────── */}
+      <div className="qa-panel" style={{ padding: 16, marginBottom: 16, border: "1px solid var(--accent-muted)", background: "var(--accent-light, #eff6ff)" }}>
+        <div className="qa-panel-title" style={{ color: "var(--accent-hover, #1d4ed8)" }}>
+          🛰 Brand Radar — Google News + Reddit + HN + GDELT + StackExchange + Wayback
+        </div>
+        <div style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 10px" }}>
+          Aggregates mentions across 6 free feeds in parallel. No API keys. Comparable to paid brand-monitoring tools like Brand24 / Mention — run it as often as you want.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            className="qa-input"
+            value={radarQuery}
+            onChange={(e) => setRadarQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !radarLoading && runRadar()}
+            placeholder='Brand, keyword, or domain — e.g. "Ahrefs" or "example.com"'
+            style={{ flex: 1, minWidth: 260, padding: "8px 12px" }}
+          />
+          <button
+            className="qa-btn-primary"
+            onClick={runRadar}
+            disabled={radarLoading || !radarQuery.trim()}
+            style={{ padding: "8px 18px", whiteSpace: "nowrap" }}
+          >
+            {radarLoading ? "Scanning…" : "Run radar"}
+          </button>
+        </div>
+        {radarError && <ErrorBanner error={radarError} />}
+        {radar && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+              <span className="qa-kicker" style={{ fontSize: 11 }}>Coverage:</span>
+              {(radar.providersHit ?? []).map((p) => (
+                <span key={`hit-${p}`} style={{ fontSize: 11, padding: "2px 9px", borderRadius: 10, background: "#fff", color: RSS_SOURCE_COLORS[p] ?? "#16a34a", border: `1px solid ${RSS_SOURCE_COLORS[p] ?? "#16a34a"}` }}>
+                  ● {p} ({radar.bySource[p] ?? 0})
+                </span>
+              ))}
+              {(radar.providersFailed ?? []).map((p) => (
+                <span key={`fail-${p}`} style={{ fontSize: 11, padding: "2px 9px", borderRadius: 10, background: "#fff", color: "#94a3b8", border: "1px solid #cbd5e1" }}>
+                  {p} (0)
+                </span>
+              ))}
+              <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>
+                Tone from titles:&nbsp;
+                <span style={{ color: "#16a34a", fontWeight: 600 }}>● {radar.titleTone.positive}</span>
+                &nbsp;/&nbsp;
+                <span style={{ color: "#6b7280", fontWeight: 600 }}>● {radar.titleTone.neutral}</span>
+                &nbsp;/&nbsp;
+                <span style={{ color: "#dc2626", fontWeight: 600 }}>● {radar.titleTone.negative}</span>
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+              <strong>{radar.mentions.length}</strong> mentions, newest first (capped at 200).
+            </div>
+            <div style={{ maxHeight: 480, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 6 }}>
+              <table className="qa-table" style={{ margin: 0 }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 110 }}>Source</th>
+                    <th>Title</th>
+                    <th style={{ width: 120 }}>When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {radar.mentions.map((m: BrandMentionRow, i: number) => (
+                    <tr key={`${m.source}-${i}-${m.url}`}>
+                      <td>
+                        <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, color: "#fff", background: RSS_SOURCE_COLORS[m.source] ?? "#64748b", fontWeight: 600, whiteSpace: "nowrap" }}>{m.source}</span>
+                      </td>
+                      <td>
+                        <a href={m.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text)", textDecoration: "none" }}>
+                          {m.title}
+                        </a>
+                        {m.publisher && <div style={{ fontSize: 11, color: "var(--muted)" }}>{m.publisher}{typeof m.score === "number" && ` · ${m.score} pts`}</div>}
+                        {m.snippet && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, lineHeight: 1.4 }}>{m.snippet.slice(0, 180)}{m.snippet.length > 180 ? "…" : ""}</div>}
+                      </td>
+                      <td style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>
+                        {m.publishedAt ? new Date(m.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 10px" }}>
+        Prefer crawl-scoped mentions (your own site's pages + DDG + Common Crawl + URLScan)? Pick a run below.
+      </div>
 
       <RunSelector value={runId} onChange={setRunId} label="Select run" />
       <div className="qa-panel" style={{ padding: 16, marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>

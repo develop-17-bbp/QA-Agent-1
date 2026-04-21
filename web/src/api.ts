@@ -569,6 +569,57 @@ export async function uploadGscLinksCsv(domain: string, csv: string): Promise<{ 
   return res.json();
 }
 
+// Ahrefs Webmaster Tools CSV import — 95% paid-Ahrefs parity for your verified site, free.
+export type AwtSummary = {
+  totalBacklinks: number;
+  totalReferringDomains: number;
+  dofollow: number;
+  nofollow: number;
+  avgDr: number;
+  topReferringDomains: { domain: string; links: number }[];
+  anchorTextFrequency: { anchor: string; count: number }[];
+};
+export async function uploadAwtCsv(domain: string, csv: string): Promise<{ ok: boolean; rowCount: number; summary: AwtSummary }> {
+  const res = await fetch("/api/awt/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, csv }) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export async function fetchAwtBundle(domain: string): Promise<{ bundle: (AwtSummary & { domain: string; importedAt: string; backlinks: unknown[] }) | null }> {
+  const res = await fetch(`/api/awt/${encodeURIComponent(domain)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Brand + topic monitor via RSS / JSON-feed aggregation (Google News, Reddit, HN, GDELT, Stack Exchange, Wayback).
+export type BrandMentionRow = {
+  source: "google-news" | "reddit" | "hackernews" | "gdelt" | "stackexchange" | "wayback-cdx";
+  url: string;
+  title: string;
+  publisher?: string;
+  snippet?: string;
+  publishedAt?: string;
+  score?: number;
+};
+export type BrandMentionsBundle = {
+  query: string;
+  fetchedAt: string;
+  mentions: BrandMentionRow[];
+  bySource: Record<string, number>;
+  providersHit: string[];
+  providersFailed: string[];
+  titleTone: { positive: number; neutral: number; negative: number };
+};
+export function fetchBrandMentionsAggregated(query: string, sources?: string[]): Promise<BrandMentionsBundle> {
+  return postApi<BrandMentionsBundle>("/api/brand-mentions", { query, sources });
+}
+
+// Startpage SERP — ~0.9 correlation with Google, free, Playwright-backed.
+export type StartpageSerpResult = { position: number; title: string; url: string; displayUrl?: string; snippet?: string };
+export type StartpageSerpResponse = { query: string; region: string; fetchedAt: string; results: StartpageSerpResult[]; selectorVariant: string; durationMs: number };
+export function fetchStartpageSerp(query: string, region = "US"): Promise<StartpageSerpResponse> {
+  return postApi<StartpageSerpResponse>("/api/serp-startpage", { query, region });
+}
+
 // LLM Router Stats
 export function fetchLlmStats(): Promise<any> {
   return dedupFetch("/api/llm-stats", async () => {

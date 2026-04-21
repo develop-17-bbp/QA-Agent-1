@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
-import { fetchBacklinks, fetchExternalBacklinks, uploadGscLinksCsv } from "../api";
+import { fetchBacklinks, fetchExternalBacklinks, uploadGscLinksCsv, uploadAwtCsv, type AwtSummary } from "../api";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 import { PageShell } from "../components/PageUI";
 
@@ -180,6 +180,22 @@ export default function Backlinks() {
     }
   };
 
+  // Ahrefs Webmaster Tools CSV — free for verified sites, ~95% of paid Ahrefs for own-site analysis.
+  const [awtSummary, setAwtSummary] = useState<AwtSummary | null>(null);
+  const handleAwtCsvUpload = async (file: File) => {
+    const dom = extDomain.trim();
+    if (!dom) { setExtError("Enter a domain above first, then upload the AWT CSV."); return; }
+    setExtError("");
+    try {
+      const csv = await file.text();
+      const result = await uploadAwtCsv(dom, csv);
+      setAwtSummary(result.summary);
+      alert(`Imported ${result.rowCount} Ahrefs Webmaster Tools backlinks for ${dom}.\n\n${result.summary.totalReferringDomains} referring domains · avg DR ${result.summary.avgDr} · ${result.summary.dofollow} dofollow / ${result.summary.nofollow} nofollow`);
+    } catch (e: any) {
+      setExtError(e.message);
+    }
+  };
+
   const healthData = data?.healthDistribution ? [
     { name: "Healthy", value: data.healthDistribution.healthy, color: "#38a169" },
     { name: "Broken", value: data.healthDistribution.broken, color: "#e53e3e" },
@@ -272,23 +288,84 @@ export default function Backlinks() {
           </button>
         </div>
 
-        <div style={{ marginTop: 10, padding: 10, border: "1px dashed var(--border)", borderRadius: 6, fontSize: 12 }}>
-          <strong>Import Google Search Console Links (CSV)</strong>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
-            Google deprecated the Links API. Download the CSV from Search Console → Links → "Top linking sites" / "Top linked pages" / "Top linking text" (one file per report).
-            Enter the domain above, then upload — the parsed bundle is persisted and enriches this report below.
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 10, marginTop: 10 }}>
+          <div style={{ padding: 10, border: "1px dashed var(--border)", borderRadius: 6, fontSize: 12 }}>
+            <strong>Import Google Search Console Links (CSV)</strong>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
+              Google deprecated the Links API. Download the CSV from Search Console → Links → "Top linking sites" / "Top linked pages" / "Top linking text" (one file per report).
+              Enter the domain above, then upload — the parsed bundle is persisted and enriches this report below.
+            </div>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleGscCsvUpload(f);
+                if (e.target) e.target.value = "";
+              }}
+              style={{ fontSize: 12 }}
+            />
           </div>
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleGscCsvUpload(f);
-              if (e.target) e.target.value = "";
-            }}
-            style={{ fontSize: 12 }}
-          />
+
+          <div style={{ padding: 10, border: "1px dashed var(--ok-border, #16a34a)", background: "var(--ok-bg, #f0fdf4)", borderRadius: 6, fontSize: 12 }}>
+            <strong style={{ color: "var(--ok, #16a34a)" }}>Import Ahrefs Webmaster Tools Backlinks (CSV) — 95% Ahrefs parity, free</strong>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
+              Sign up at <a href="https://ahrefs.com/webmaster-tools" target="_blank" rel="noreferrer">ahrefs.com/webmaster-tools</a> (free), verify your site, then open <em>Backlink profile → Backlinks → Export</em>. Upload the CSV here and we'll surface referring domains, DR, anchor text distribution, and dofollow/nofollow ratios — the same data paid Ahrefs customers see for their own verified properties.
+            </div>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleAwtCsvUpload(f);
+                if (e.target) e.target.value = "";
+              }}
+              style={{ fontSize: 12 }}
+            />
+          </div>
         </div>
+
+        {awtSummary && (
+          <div className="qa-panel" style={{ marginTop: 12, padding: 14 }}>
+            <div className="qa-panel-title" style={{ color: "var(--ok, #16a34a)" }}>
+              Ahrefs Webmaster Tools snapshot
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: 8 }}>
+              <div><div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase" }}>Total backlinks</div><div style={{ fontSize: 20, fontWeight: 700 }}>{awtSummary.totalBacklinks.toLocaleString()}</div></div>
+              <div><div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase" }}>Referring domains</div><div style={{ fontSize: 20, fontWeight: 700 }}>{awtSummary.totalReferringDomains.toLocaleString()}</div></div>
+              <div><div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase" }}>Avg DR</div><div style={{ fontSize: 20, fontWeight: 700 }}>{awtSummary.avgDr}</div></div>
+              <div><div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase" }}>Dofollow / Nofollow</div><div style={{ fontSize: 14 }}>{awtSummary.dofollow} / {awtSummary.nofollow}</div></div>
+            </div>
+            {awtSummary.topReferringDomains.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Top 20 referring domains</div>
+                <table className="qa-table">
+                  <thead><tr><th>Domain</th><th style={{ textAlign: "right" }}>Links</th></tr></thead>
+                  <tbody>
+                    {awtSummary.topReferringDomains.slice(0, 20).map((r) => (
+                      <tr key={r.domain}>
+                        <td style={{ fontSize: 12 }}>{r.domain}</td>
+                        <td style={{ textAlign: "right", fontSize: 12, fontWeight: 600 }}>{r.links}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {awtSummary.anchorTextFrequency.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Top 20 anchor texts</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {awtSummary.anchorTextFrequency.slice(0, 20).map((a) => (
+                    <span key={a.anchor} style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 12, background: "#f1f5f9", border: "1px solid var(--border)" }}>
+                      {a.anchor} <strong style={{ color: "var(--ok)" }}>×{a.count}</strong>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {extLoading && <LoadingPanel message="Querying OpenPageRank, Common Crawl, URLScan, Wayback, Bing Webmaster Tools…" />}
         {extError && <ErrorBanner error={extError} />}
