@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
 import { fetchReferringDomains, fetchDomainAuthority } from "../api";
+import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
 const AUTH_COLORS = { high: "#38a169", medium: "#dd6b20", low: "#e53e3e" };
@@ -101,23 +102,90 @@ export default function ReferringDomains() {
             )}
           </div>
 
-          <div className="qa-panel" style={{ marginTop: 16, padding: 16, overflowX: "auto" }}>
-            <div className="qa-panel-title">Referring Domains ({(data.sections ?? []).length})</div>
-            <table className="qa-table">
-              <thead><tr>{["Domain", "Total Links", "Healthy", "Broken", "Trust Score"].map(h => <th key={h} style={{ textAlign: h === "Domain" ? "left" : "center" }}>{h}</th>)}</tr></thead>
-              <tbody>{(data.sections ?? []).map((s: any) => (
-                <tr key={s.domain} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: "6px 10px", fontSize: 13, fontWeight: 500 }}>{s.domain}</td>
-                  <td style={{ padding: "6px 10px", textAlign: "center", fontSize: 13 }}>{s.totalLinks}</td>
-                  <td style={{ padding: "6px 10px", textAlign: "center", fontSize: 13, color: "#38a169" }}>{s.healthyLinks}</td>
-                  <td style={{ padding: "6px 10px", textAlign: "center", fontSize: 13, color: "#e53e3e" }}>{s.brokenLinks}</td>
-                  <td style={{ padding: "6px 10px", textAlign: "center", fontSize: 13, fontWeight: 700, color: s.trustScore >= 80 ? "#38a169" : s.trustScore >= 50 ? "#dd6b20" : "#e53e3e" }}>{s.trustScore}%</td>
-                </tr>
-              ))}</tbody>
-            </table>
+          <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
+            <div className="qa-panel-title" style={{ marginBottom: 10 }}>Referring Domains ({(data.sections ?? []).length})</div>
+            <ReferringDomainsTable sections={data.sections ?? []} />
           </div>
         </>
       )}
     </motion.div>
+  );
+}
+
+interface Section {
+  domain: string;
+  totalLinks: number;
+  healthyLinks: number;
+  brokenLinks: number;
+  trustScore: number;
+}
+
+function ReferringDomainsTable({ sections }: { sections: Section[] }) {
+  const columns: FilterableColumn<Section>[] = useMemo(() => [
+    {
+      key: "domain",
+      label: "Domain",
+      accessor: (s) => s.domain,
+      filterType: "text",
+      render: (s) => <span style={{ fontWeight: 500 }}>{s.domain}</span>,
+    },
+    {
+      key: "totalLinks",
+      label: "Total Links",
+      accessor: (s) => s.totalLinks,
+      filterType: "number",
+      width: 110,
+      headerStyle: { textAlign: "center" },
+      cellStyle: { textAlign: "center", fontSize: 13 },
+    },
+    {
+      key: "healthyLinks",
+      label: "Healthy",
+      accessor: (s) => s.healthyLinks,
+      filterType: "number",
+      width: 90,
+      headerStyle: { textAlign: "center" },
+      cellStyle: { textAlign: "center", fontSize: 13, color: "#38a169" },
+    },
+    {
+      key: "brokenLinks",
+      label: "Broken",
+      accessor: (s) => s.brokenLinks,
+      filterType: "number",
+      width: 90,
+      headerStyle: { textAlign: "center" },
+      cellStyle: { textAlign: "center", fontSize: 13, color: "#e53e3e" },
+    },
+    {
+      key: "trustScore",
+      label: "Trust Score",
+      accessor: (s) => s.trustScore,
+      filterType: "number",
+      width: 110,
+      headerStyle: { textAlign: "center" },
+      render: (s) => (
+        <span
+          style={{
+            display: "inline-block",
+            fontWeight: 700,
+            color: s.trustScore >= 80 ? "#38a169" : s.trustScore >= 50 ? "#dd6b20" : "#e53e3e",
+          }}
+        >
+          {s.trustScore}%
+        </span>
+      ),
+      cellStyle: { textAlign: "center" },
+    },
+  ], []);
+
+  return (
+    <FilterableTable<Section>
+      rows={sections}
+      columns={columns}
+      rowKey={(s) => s.domain}
+      pageSize={50}
+      itemLabel="domain"
+      emptyMessage="No referring domains match the current filters."
+    />
   );
 }

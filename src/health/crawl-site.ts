@@ -688,6 +688,25 @@ export async function crawlSite(options: {
     }
   }
 
+  // Dedupe + relabel synthetic "(crawl)" placeholders. The main fetch loop
+  // emits a "(crawl)" record the moment a page 404/410s, before we know which
+  // other pages link to it. The second pass above then adds one record per
+  // origin page. If those origin records exist, the "(crawl)" row is
+  // redundant; if they don't, the target is sitemap/seed-only with no
+  // internal <a> pointing at it — relabel so SEO teams can tell the two apart.
+  const targetsWithBetterLabel = new Set<string>();
+  for (const bl of brokenLinks) {
+    if (bl.foundOn !== "(crawl)") targetsWithBetterLabel.add(bl.target);
+  }
+  const cleanedBrokenLinks: BrokenLinkRecord[] = [];
+  for (const bl of brokenLinks) {
+    if (bl.foundOn !== "(crawl)") {
+      cleanedBrokenLinks.push(bl);
+    } else if (!targetsWithBetterLabel.has(bl.target)) {
+      cleanedBrokenLinks.push({ ...bl, foundOn: "(sitemap/seed — no internal link)" });
+    }
+  }
+
   const durationMs = Date.now() - started;
   return {
     startUrl: options.startUrl,
@@ -696,7 +715,7 @@ export async function crawlSite(options: {
     pagesVisited: visited.size,
     uniqueUrlsChecked: visited.size + toVerify.length,
     pages,
-    brokenLinks,
+    brokenLinks: cleanedBrokenLinks,
     linkChecks,
     durationMs,
   };

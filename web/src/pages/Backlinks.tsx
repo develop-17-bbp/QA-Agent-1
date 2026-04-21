@@ -1,10 +1,148 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
 import { fetchBacklinks, fetchExternalBacklinks, uploadGscLinksCsv } from "../api";
+import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+
+interface BrokenLink { source: string; target: string; status: number | null; error?: string }
+interface BingLink { sourceUrl: string; anchorText?: string; targetUrl: string }
+
+function brokenStatusCategory(bl: BrokenLink): string {
+  if (bl.status && bl.status >= 500) return "5xx server";
+  if (bl.status === 404) return "404 not found";
+  if (bl.status === 410) return "410 gone";
+  if (bl.status && bl.status >= 400) return "4xx client";
+  if (bl.status && bl.status >= 300) return "3xx redirect";
+  if (bl.error && /timeout|aborted/i.test(bl.error)) return "Timeout";
+  if (bl.error) return "Network";
+  return "Other";
+}
+
+function BrokenLinksTable({ rows }: { rows: BrokenLink[] }) {
+  const columns: FilterableColumn<BrokenLink>[] = useMemo(() => [
+    {
+      key: "source",
+      label: "Source",
+      accessor: (bl) => bl.source,
+      filterType: "text",
+      render: (bl) => (
+        <a href={bl.source} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--text)", wordBreak: "break-all" }} title={bl.source}>
+          {bl.source}
+        </a>
+      ),
+    },
+    {
+      key: "target",
+      label: "Target",
+      accessor: (bl) => bl.target,
+      filterType: "text",
+      render: (bl) => (
+        <a href={bl.target} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#dc2626", textDecoration: "underline", wordBreak: "break-all" }} title={bl.target}>
+          {bl.target}
+        </a>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      accessor: (bl) => bl.status,
+      filterType: "number",
+      width: 80,
+      headerStyle: { textAlign: "center" },
+      cellStyle: { textAlign: "center", fontSize: 12, fontWeight: 600, color: "#e53e3e" },
+    },
+    {
+      key: "category",
+      label: "Type",
+      accessor: (bl) => brokenStatusCategory(bl),
+      filterType: "select",
+      width: 120,
+      cellStyle: { fontSize: 11, color: "var(--text-secondary)" },
+    },
+    {
+      key: "error",
+      label: "Error",
+      accessor: (bl) => bl.error ?? "",
+      filterType: "text",
+      cellStyle: { fontSize: 11, color: "var(--text-secondary)" },
+    },
+  ], []);
+  return (
+    <FilterableTable<BrokenLink>
+      rows={rows}
+      columns={columns}
+      rowKey={(bl, i = 0) => `${bl.source}|${bl.target}|${bl.status ?? 0}|${i}`}
+      pageSize={50}
+      itemLabel="broken link"
+      emptyMessage="No broken links match the current filters."
+    />
+  );
+}
+
+function BingInboundLinksTable({ rows, totalLinks }: { rows: BingLink[]; totalLinks?: number }) {
+  const columns: FilterableColumn<BingLink>[] = useMemo(() => [
+    {
+      key: "sourceUrl",
+      label: "Source URL",
+      accessor: (b) => b.sourceUrl,
+      filterType: "text",
+      render: (b) => (
+        <a href={b.sourceUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--text)", wordBreak: "break-all" }} title={b.sourceUrl}>
+          {b.sourceUrl}
+        </a>
+      ),
+    },
+    {
+      key: "anchorText",
+      label: "Anchor Text",
+      accessor: (b) => b.anchorText ?? "",
+      filterType: "text",
+      render: (b) =>
+        b.anchorText ? (
+          <span style={{ fontSize: 12, fontWeight: 600 }}>"{b.anchorText}"</span>
+        ) : (
+          <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: 11 }}>—</span>
+        ),
+    },
+    {
+      key: "targetUrl",
+      label: "Target on your site",
+      accessor: (b) => b.targetUrl,
+      filterType: "text",
+      render: (b) => (
+        <span style={{ fontSize: 11, wordBreak: "break-all" }} title={b.targetUrl}>
+          {b.targetUrl}
+        </span>
+      ),
+    },
+    {
+      key: "hasAnchor",
+      label: "Has anchor?",
+      accessor: (b) => (b.anchorText && b.anchorText.trim() ? "Yes" : "No"),
+      filterType: "select",
+      width: 110,
+      cellStyle: { fontSize: 11 },
+    },
+  ], []);
+  return (
+    <>
+      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>
+        Total Bing-indexed inbound links: <strong>{totalLinks ?? rows.length}</strong>
+      </div>
+      <FilterableTable<BingLink>
+        rows={rows}
+        columns={columns}
+        rowKey={(b, i = 0) => `${b.sourceUrl}|${b.targetUrl}|${i}`}
+        pageSize={50}
+        itemLabel="inbound link"
+        emptyMessage="No inbound links match the current filters."
+      />
+    </>
+  );
+}
 export default function Backlinks() {
   const [runId, setRunId] = useState("");
   const [data, setData] = useState<any>(null);
@@ -98,18 +236,8 @@ export default function Backlinks() {
 
           {(data.brokenLinks ?? []).length > 0 && (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-              <div className="qa-panel-title" style={{ color: "#e53e3e" }}>Broken Links ({data.brokenLinks.length})</div>
-              <table className="qa-table">
-                <thead><tr>{["Source", "Target", "Status", "Error"].map(h => <th key={h}>{h}</th>)}</tr></thead>
-                <tbody>{(data.brokenLinks ?? []).slice(0, 20).map((bl: any, i: number) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={bl.source}>{bl.source}</td>
-                    <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={bl.target}>{bl.target}</td>
-                    <td style={{ padding: "4px 10px", fontSize: 12, fontWeight: 600, color: "#e53e3e" }}>{bl.status}</td>
-                    <td style={{ padding: "4px 10px", fontSize: 11, color: "var(--text-secondary)" }}>{bl.error}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
+              <div className="qa-panel-title" style={{ color: "#e53e3e", marginBottom: 10 }}>Broken Links ({data.brokenLinks.length})</div>
+              <BrokenLinksTable rows={data.brokenLinks as BrokenLink[]} />
             </div>
           )}
         </>
@@ -215,24 +343,11 @@ export default function Backlinks() {
 
             {(extData.bingBacklinks ?? []).length > 0 && (
               <div className="qa-panel" style={{ marginTop: 12, padding: 14 }}>
-                <div className="qa-panel-title">
-                  Bing Webmaster Tools — Inbound Links ({extData.bingTotalLinks ?? extData.bingBacklinks.length})
-                </div>
-                <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
+                <div className="qa-panel-title">Bing Webmaster Tools — Inbound Links</div>
+                <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 10 }}>
                   Real inbound links from Bing's live link graph. Only returns data when the site is verified in Bing Webmaster Tools under <code>BING_WEBMASTER_API_KEY</code>.
                 </p>
-                <table className="qa-table">
-                  <thead><tr>{["Source URL", "Anchor Text", "Target on your site"].map(h => <th key={h} style={{ textAlign: "left" }}>{h}</th>)}</tr></thead>
-                  <tbody>{extData.bingBacklinks.slice(0, 30).map((b: any, i: number) => (
-                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.sourceUrl}>
-                        <a href={b.sourceUrl} target="_blank" rel="noreferrer" style={{ color: "var(--text)" }}>{b.sourceUrl}</a>
-                      </td>
-                      <td style={{ padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>{b.anchorText ? `"${b.anchorText}"` : <span style={{ color: "var(--muted)", fontWeight: 400 }}>—</span>}</td>
-                      <td style={{ padding: "4px 10px", fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.targetUrl}>{b.targetUrl}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
+                <BingInboundLinksTable rows={extData.bingBacklinks as BingLink[]} totalLinks={extData.bingTotalLinks} />
               </div>
             )}
 

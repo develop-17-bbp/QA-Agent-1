@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
@@ -9,6 +9,7 @@ import {
   fetchGoogleAuthStatus,
   type Ga4Property,
 } from "../api";
+import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
 const CLASS_COLORS: Record<string, string> = { good: "#38a169", "needs-improvement": "#dd6b20", poor: "#e53e3e" };
@@ -65,8 +66,6 @@ export default function ContentAudit() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState("all");
-
   // GA4 overlay state — real sessions/users/views from the user's property
   // layered on top of the deterministic quality score.
   const [ga4Connected, setGa4Connected] = useState(false);
@@ -117,8 +116,8 @@ export default function ContentAudit() {
   const load = async (rid: string) => { setRunId(rid); if (!rid) return; setLoading(true); setError(""); try { setData(await fetchContentAudit(rid)); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
 
   const pages = data?.pages ?? [];
-  const filtered = filter === "all" ? pages : pages.filter((p: any) => p.classification === filter);
   const dq = data?.dataQuality ?? { realDataFields: [], providersHit: [], providersFailed: [], missingFields: [] };
+  const ga4Active = !!(ga4PropertyId && ga4Pages.size > 0);
 
   const summary = data?.summary;
   const totalPages = unwrap(summary?.totalPages) ?? 0;
@@ -252,67 +251,178 @@ export default function ContentAudit() {
             </div>
           )}
 
-          <div className="qa-panel" style={{ marginTop: 16, padding: 16, overflowX: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div className="qa-panel-title">Pages ({filtered.length})</div>
-              <select className="qa-select" value={filter} onChange={e => setFilter(e.target.value)} style={{ width: 160 }}>
-                <option value="all">All</option>
-                <option value="good">Good</option>
-                <option value="needs-improvement">Needs Work</option>
-                <option value="poor">Poor</option>
-              </select>
-            </div>
-            <table className="qa-table">
-              <thead><tr>
-                {["URL", "Quality", "Score", "Est. words", "Issues"].map(h => <th key={h} style={{ textAlign: h === "URL" || h === "Issues" ? "left" : "center" }}>{h}</th>)}
-                {ga4PropertyId && ga4Pages.size > 0 && (
-                  ["Sessions", "Users", "Views"].map((h) => (
-                    <th key={h} style={{ textAlign: "right", color: "#38a169" }} title="Real first-party data from Google Analytics 4, last 28 days">{h}</th>
-                  ))
-                )}
-              </tr></thead>
-              <tbody>{filtered.slice(0, 30).map((p: any, i: number) => {
-                const scoreMeta = p.qualityScore;
-                const scoreVal = unwrap(scoreMeta);
-                const wordMeta = p.estimatedWordCount;
-                const wordVal = unwrap(wordMeta);
-                const srcTitle = `Scored from crawl fields: ${(p.sourcedFields ?? []).join(", ") || "none"}`;
-                const ga4 = ga4PropertyId && ga4Pages.size > 0 ? ga4Pages.get(toPathname(p.url)) : undefined;
-                return (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td style={{ padding: "6px 10px", fontSize: 12, maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${p.url}\n${srcTitle}`}>{p.title || p.url}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "center" }}>
-                      <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (CLASS_COLORS[p.classification] ?? "#888") + "20", color: CLASS_COLORS[p.classification] ?? "#888", fontWeight: 600 }}>{p.classification}</span>
-                    </td>
-                    <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 700, color: scoreVal >= 70 ? "#38a169" : scoreVal >= 50 ? "#dd6b20" : "#e53e3e" }} title={srcTitle}>
-                      {scoreVal}
-                      <ConfidenceDot confidence={scoreMeta?.confidence} source={scoreMeta?.source} note={scoreMeta?.note} />
-                    </td>
-                    <td style={{ padding: "6px 10px", textAlign: "center", fontSize: 12, color: "var(--text-secondary)" }}>
-                      ~{wordVal}
-                      <ConfidenceDot confidence={wordMeta?.confidence} source={wordMeta?.source} note={wordMeta?.note} />
-                    </td>
-                    <td style={{ padding: "6px 10px", fontSize: 11, color: "var(--text-secondary)" }}>{(p.issues ?? []).join(", ")}</td>
-                    {ga4PropertyId && ga4Pages.size > 0 && (
-                      <>
-                        <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }} title={ga4?.sessions?.note ?? ""}>
-                          {ga4?.sessions ? ga4.sessions.value.toLocaleString() : "—"}
-                        </td>
-                        <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }} title={ga4?.activeUsers?.note ?? ""}>
-                          {ga4?.activeUsers ? ga4.activeUsers.value.toLocaleString() : "—"}
-                        </td>
-                        <td style={{ padding: "6px 10px", textAlign: "right", fontSize: 12, color: "var(--text-secondary)" }} title={ga4?.screenPageViews?.note ?? ""}>
-                          {ga4?.screenPageViews ? ga4.screenPageViews.value.toLocaleString() : "—"}
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                );
-              })}</tbody>
-            </table>
+          <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
+            <div className="qa-panel-title" style={{ marginBottom: 10 }}>Pages ({pages.length})</div>
+            <ContentAuditTable pages={pages} ga4Pages={ga4Pages} ga4Active={ga4Active} />
           </div>
         </>
       )}
     </motion.div>
+  );
+}
+
+interface AuditPage {
+  url: string;
+  title?: string;
+  classification: string;
+  qualityScore?: { value: number; confidence?: string; source?: string; note?: string };
+  estimatedWordCount?: { value: number; confidence?: string; source?: string; note?: string };
+  issues?: string[];
+  sourcedFields?: string[];
+}
+
+interface ContentAuditTableProps {
+  pages: AuditPage[];
+  ga4Pages: Map<string, Ga4PageEntry>;
+  ga4Active: boolean;
+}
+
+function ContentAuditTable({ pages, ga4Pages, ga4Active }: ContentAuditTableProps) {
+  const columns: FilterableColumn<AuditPage>[] = useMemo(() => {
+    const cols: FilterableColumn<AuditPage>[] = [
+      {
+        key: "url",
+        label: "URL / Title",
+        accessor: (p) => p.title || p.url,
+        filterType: "text",
+        render: (p) => (
+          <a
+            href={p.url}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 12, color: "var(--text)", textDecoration: "none", wordBreak: "break-all" }}
+            title={`${p.url}\nScored from crawl fields: ${(p.sourcedFields ?? []).join(", ") || "none"}`}
+          >
+            {p.title || p.url}
+          </a>
+        ),
+      },
+      {
+        key: "classification",
+        label: "Quality",
+        accessor: (p) => p.classification,
+        filterType: "select",
+        width: 130,
+        render: (p) => (
+          <span
+            style={{
+              fontSize: 11,
+              padding: "2px 8px",
+              borderRadius: 4,
+              background: (CLASS_COLORS[p.classification] ?? "#888") + "20",
+              color: CLASS_COLORS[p.classification] ?? "#888",
+              fontWeight: 600,
+            }}
+          >
+            {p.classification}
+          </span>
+        ),
+        headerStyle: { textAlign: "center" },
+        cellStyle: { textAlign: "center" },
+      },
+      {
+        key: "score",
+        label: "Score",
+        accessor: (p) => unwrap(p.qualityScore) ?? 0,
+        filterType: "number",
+        width: 90,
+        render: (p) => {
+          const v = unwrap(p.qualityScore);
+          return (
+            <span
+              style={{
+                fontWeight: 700,
+                color: v >= 70 ? "#38a169" : v >= 50 ? "#dd6b20" : "#e53e3e",
+              }}
+              title={`Scored from crawl fields: ${(p.sourcedFields ?? []).join(", ") || "none"}`}
+            >
+              {v}
+              <ConfidenceDot confidence={p.qualityScore?.confidence} source={p.qualityScore?.source} note={p.qualityScore?.note} />
+            </span>
+          );
+        },
+        headerStyle: { textAlign: "center" },
+        cellStyle: { textAlign: "center" },
+      },
+      {
+        key: "words",
+        label: "Est. words",
+        accessor: (p) => unwrap(p.estimatedWordCount) ?? 0,
+        filterType: "number",
+        width: 110,
+        render: (p) => (
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            ~{unwrap(p.estimatedWordCount)}
+            <ConfidenceDot confidence={p.estimatedWordCount?.confidence} source={p.estimatedWordCount?.source} note={p.estimatedWordCount?.note} />
+          </span>
+        ),
+        headerStyle: { textAlign: "center" },
+        cellStyle: { textAlign: "center" },
+      },
+      {
+        key: "issues",
+        label: "Issues",
+        accessor: (p) => (p.issues ?? []).join(", "),
+        filterType: "text",
+        cellStyle: { fontSize: 11, color: "var(--text-secondary)" },
+      },
+    ];
+
+    if (ga4Active) {
+      cols.push(
+        {
+          key: "ga4Sessions",
+          label: "Sessions",
+          accessor: (p) => ga4Pages.get(toPathname(p.url))?.sessions?.value ?? null,
+          filterType: "number",
+          width: 100,
+          render: (p) => {
+            const v = ga4Pages.get(toPathname(p.url))?.sessions;
+            return v ? <span style={{ fontSize: 12 }}>{v.value.toLocaleString()}</span> : <span style={{ color: "var(--muted)" }}>—</span>;
+          },
+          headerStyle: { textAlign: "right", color: "#38a169" },
+          cellStyle: { textAlign: "right" },
+        },
+        {
+          key: "ga4Users",
+          label: "Users",
+          accessor: (p) => ga4Pages.get(toPathname(p.url))?.activeUsers?.value ?? null,
+          filterType: "number",
+          width: 90,
+          render: (p) => {
+            const v = ga4Pages.get(toPathname(p.url))?.activeUsers;
+            return v ? <span style={{ fontSize: 12 }}>{v.value.toLocaleString()}</span> : <span style={{ color: "var(--muted)" }}>—</span>;
+          },
+          headerStyle: { textAlign: "right", color: "#38a169" },
+          cellStyle: { textAlign: "right" },
+        },
+        {
+          key: "ga4Views",
+          label: "Views",
+          accessor: (p) => ga4Pages.get(toPathname(p.url))?.screenPageViews?.value ?? null,
+          filterType: "number",
+          width: 90,
+          render: (p) => {
+            const v = ga4Pages.get(toPathname(p.url))?.screenPageViews;
+            return v ? <span style={{ fontSize: 12 }}>{v.value.toLocaleString()}</span> : <span style={{ color: "var(--muted)" }}>—</span>;
+          },
+          headerStyle: { textAlign: "right", color: "#38a169" },
+          cellStyle: { textAlign: "right" },
+        },
+      );
+    }
+
+    return cols;
+  }, [ga4Active, ga4Pages]);
+
+  return (
+    <FilterableTable<AuditPage>
+      rows={pages}
+      columns={columns}
+      rowKey={(p) => p.url}
+      pageSize={50}
+      itemLabel="page"
+      emptyMessage="No pages match the current filters."
+    />
   );
 }

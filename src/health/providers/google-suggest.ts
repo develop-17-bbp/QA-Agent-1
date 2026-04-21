@@ -5,9 +5,14 @@
  * These are real queries people type, not LLM guesses. No API key required.
  *
  * Endpoint (public, unauthenticated):
- *   https://suggestqueries.google.com/complete/search?client=firefox&q=...
+ *   https://www.google.com/complete/search?client=chrome&gl=&hl=&q=...
  *
- * Response format: ["query", ["suggestion1", "suggestion2", ...]]
+ * We deliberately use www.google.com (not suggestqueries.google.com): the
+ * latter ignores the `gl` param and geolocates by IP, which on an Indian-IP
+ * server returns Noida/CP/Indiranagar suggestions even when the caller asked
+ * for US. www.google.com with client=chrome respects `gl` correctly.
+ *
+ * Response format: ["query", ["suggestion1", "suggestion2", ...], ...]
  */
 
 import { dp, ProviderError, type DataPoint } from "./types.js";
@@ -33,9 +38,11 @@ export async function fetchSuggestions(keyword: string, locale = "en", country =
 
   // gl = country hint (two-letter ISO). Without it Google geolocates by IP,
   // which on an Indian dev machine leaks Noida/India-biased suggestions even
-  // when the user explicitly picked another region.
+  // when the user explicitly picked another region. NOTE: we intentionally
+  // hit www.google.com rather than suggestqueries.google.com — the latter
+  // ignores `gl` and always uses IP geolocation.
   const glParam = gl ? `&gl=${encodeURIComponent(gl)}` : "";
-  const url = `https://suggestqueries.google.com/complete/search?client=firefox&hl=${encodeURIComponent(locale)}${glParam}&q=${encodeURIComponent(clean)}`;
+  const url = `https://www.google.com/complete/search?client=chrome&hl=${encodeURIComponent(locale)}${glParam}&q=${encodeURIComponent(clean)}`;
   const data = await httpGetJson<[string, string[]]>(url);
   if (!data || !Array.isArray(data) || !Array.isArray(data[1])) {
     throw new ProviderError(PROVIDER, "Unexpected response shape");
