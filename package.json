@@ -21,6 +21,8 @@
     "fixture:kill": "node scripts/kill-port.mjs 3333",
     "dashboard:kill": "node scripts/kill-port.mjs 3847",
     "diagnose": "tsx scripts/diag-providers.ts",
+    "prune-runs": "tsx scripts/prune-old-runs.ts",
+    "eval:link-fix": "tsx scripts/eval-link-fix.ts",
     "setup-browsers": "playwright install chromium"
   },
   "engines": {

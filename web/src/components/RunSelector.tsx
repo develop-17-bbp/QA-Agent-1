@@ -29,8 +29,8 @@ export default function RunSelector({ value, onChange, disabled, label }: {
         {loading && <option>Loading...</option>}
         {!loading && runs.length === 0 && <option value="">No runs found</option>}
         {runs.map(r => (
-          <option key={r.runId} value={r.runId}>
-            {r.runId} — {r.totalSites} site{r.totalSites !== 1 ? "s" : ""} — {new Date(r.generatedAt).toLocaleDateString()}
+          <option key={r.runId} value={r.runId} title={r.runId}>
+            {r.label ?? `${r.runId} — ${r.totalSites} site${r.totalSites !== 1 ? "s" : ""} — ${new Date(r.generatedAt).toLocaleDateString()}`}
           </option>
         ))}
       </select>

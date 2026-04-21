@@ -12,7 +12,7 @@ import {
   buildRunSummaryPayload,
   generateRunAnswer,
 } from "./run-summary-ai.js";
-import { orchestrateHealthCheck } from "./orchestrate-health.js";
+import { orchestrateHealthCheck, computeRunLabel } from "./orchestrate-health.js";
 import { routeQuery, loadRawReportsForRun, type NlpQueryRequest } from "./nlp-query-engine.js";
 import { analyzeSiteAudit } from "./modules/site-audit-analyzer.js";
 import { analyzePositions } from "./modules/position-tracker.js";
@@ -289,10 +289,16 @@ async function listHealthHistory(outRoot: string): Promise<{ days: HealthHistory
     const metaPath = path.join(runDir, "run-meta.json");
     try {
       const raw = await readFile(metaPath, "utf8");
-      metas.push(JSON.parse(raw) as HealthRunMeta);
+      const m = JSON.parse(raw) as HealthRunMeta;
+      // Back-fill label for runs written before this feature landed.
+      if (!m.label) m.label = computeRunLabel(m.startedAt ?? m.generatedAt, m.sites ?? []);
+      metas.push(m);
     } catch {
       const legacy = await loadLegacyRunMeta(runDir, ent.name);
-      if (legacy) metas.push(legacy);
+      if (legacy) {
+        if (!legacy.label) legacy.label = computeRunLabel(legacy.startedAt ?? legacy.generatedAt, legacy.sites ?? []);
+        metas.push(legacy);
+      }
     }
   }
 

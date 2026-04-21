@@ -28,8 +28,34 @@ function runId(): string {
   return `${stamp}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Human-readable run label so SEO users don't have to parse ISO timestamps
+ * out of a dropdown. Examples:
+ *   "realdrseattle.com · Apr 21, 7:14 PM · 21 pages"
+ *   "realdrseattle.com + 2 more · Apr 21, 7:14 PM · 58 pages"
+ */
+export function computeRunLabel(
+  startedAtIso: string | undefined,
+  sites: { hostname: string; pagesVisited?: number }[],
+): string {
+  const d = startedAtIso ? new Date(startedAtIso) : new Date();
+  const when = d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const host = sites[0]?.hostname ?? "unknown";
+  const extra = sites.length > 1 ? ` + ${sites.length - 1} more` : "";
+  const pageCount = sites.reduce((a, s) => a + (s.pagesVisited ?? 0), 0);
+  const pageSuffix = pageCount > 0 ? ` · ${pageCount} page${pageCount === 1 ? "" : "s"}` : "";
+  return `${host}${extra} · ${when}${pageSuffix}`;
+}
+
 export interface HealthRunMeta {
   runId: string;
+  /** Human-readable run label, e.g. "realdrseattle.com · Apr 21, 7:14 PM · 21 pages". */
+  label?: string;
   /** When the run started (ISO 8601). Omitted in older run-meta.json files. */
   startedAt?: string;
   /** Wall-clock duration for the full run (ms). Omitted in older files. */
@@ -392,8 +418,18 @@ export async function orchestrateHealthCheck(options: {
 
   await Promise.allSettled(endTasks);
 
+  const runMetaSites = results.map((r, i) => ({
+    hostname: r.hostname,
+    startUrl: r.startUrl,
+    failed: r.failed,
+    pagesVisited: r.crawl.pagesVisited,
+    brokenLinks: r.crawl.brokenLinks.length,
+    durationMs: r.crawl.durationMs,
+    reportHtmlHref: `${healthSiteOutputDirName(i, r.startUrl)}/report.html`,
+  }));
   const runMeta: HealthRunMeta = {
     runId: rid,
+    label: computeRunLabel(runStartedAt, runMetaSites),
     startedAt: runStartedAt,
     durationMsTotal: runWallDurationMs,
     generatedAt: runFinishedAt,
@@ -401,15 +437,7 @@ export async function orchestrateHealthCheck(options: {
     urlsFile: resolvedUrlsFile,
     totalSites: urls.length,
     siteFailures,
-    sites: results.map((r, i) => ({
-      hostname: r.hostname,
-      startUrl: r.startUrl,
-      failed: r.failed,
-      pagesVisited: r.crawl.pagesVisited,
-      brokenLinks: r.crawl.brokenLinks.length,
-      durationMs: r.crawl.durationMs,
-      reportHtmlHref: `${healthSiteOutputDirName(i, r.startUrl)}/report.html`,
-    })),
+    sites: runMetaSites,
     masterHtmlHref: `./${masterBase}.html`,
     runSummaryHtmlHref: "./run-summary.html",
     indexHtmlHref: "./index.html",

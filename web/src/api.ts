@@ -51,6 +51,8 @@ async function dedupFetch<T>(key: string, fetcher: () => Promise<T>, ttlMs: numb
 
 export type HealthRunMeta = {
   runId: string;
+  /** Human-readable label: "realdrseattle.com · Apr 21, 7:14 PM · 21 pages". */
+  label?: string;
   startedAt?: string;
   durationMsTotal?: number;
   generatedAt: string;

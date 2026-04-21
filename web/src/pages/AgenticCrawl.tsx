@@ -67,10 +67,16 @@ export default function AgenticCrawl() {
 
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
-      <h1 className="qa-page-title">Agentic Crawl Intelligence</h1>
+      <h1 className="qa-page-title">Agentic Crawl Intelligence <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 6, background: "var(--warn-bg)", color: "var(--warn)", border: "1px solid var(--warn-border)", fontWeight: 700, verticalAlign: "middle", marginLeft: 8, letterSpacing: 0.3 }}>EXPERIMENTAL</span></h1>
       <p className="qa-page-desc">
-        Multi-agent AI pipeline: SERP collection, smart crawl planning, and automated SEO analysis. Powered by your local Ollama model.
+        Multi-agent AI pipeline: SERP collection, smart crawl planning, and LLM-driven SEO analysis.
       </p>
+      <div className="qa-panel" style={{ padding: 12, marginBottom: 16, background: "var(--warn-bg)", border: "1px solid var(--warn-border)", fontSize: 12.5, color: "var(--text)" }}>
+        <strong style={{ color: "var(--warn)" }}>Heads up:</strong> this page runs LLM planning on a simulated
+        page set derived from the URL's structure — it does <strong>not</strong> perform a real HTTP crawl.
+        For actionable crawl data, use the <a href="/" style={{ color: "var(--accent-hover)" }}>Dashboard</a> to
+        start a real run.
+      </div>
 
       {/* LLM Status Bar */}
       {llmStats && (() => {

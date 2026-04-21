@@ -275,8 +275,8 @@ export default function LinkFixAdvisor() {
           <select className="qa-input" value={selectedRunId} onChange={(e) => setSelectedRunId(e.target.value)} style={{ padding: "8px 12px" }}>
             {runs.length === 0 && <option value="">No runs yet</option>}
             {runs.map((r) => (
-              <option key={r.runId} value={r.runId}>
-                {r.runId} · {r.totalSites ?? 0} site{r.totalSites === 1 ? "" : "s"}
+              <option key={r.runId} value={r.runId} title={r.runId}>
+                {r.label ?? `${r.runId} · ${r.totalSites ?? 0} site${r.totalSites === 1 ? "" : "s"}`}
               </option>
             ))}
           </select>

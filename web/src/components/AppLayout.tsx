@@ -161,7 +161,7 @@ const NAV_GROUPS: NavGroup[] = [
     tools: [
       { label: "Query Lab", path: "/query-lab" },
       { label: "SERP Analyzer", path: "/serp-analyzer" },
-      { label: "Agentic Crawl", path: "/agentic-crawl" },
+      { label: "Agentic Crawl (experimental)", path: "/agentic-crawl" },
       { label: "Brand Monitoring", path: "/brand-monitoring" },
       { label: "Log File Analyzer", path: "/log-file-analyzer" },
       { label: "Local SEO", path: "/local-seo" },
