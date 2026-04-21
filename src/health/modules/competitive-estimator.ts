@@ -16,6 +16,7 @@
  */
 
 import { routeLlmJson, checkOllamaAvailable } from "../agentic/llm-router.js";
+import { withLlmTelemetry } from "../agentic/llm-telemetry.js";
 import { fetchCompetitiveSignals, type CompetitiveSignals } from "./competitive-signals.js";
 
 export type Confidence = "high" | "medium" | "low";
@@ -264,7 +265,13 @@ ${baselineBlock}
 Respond with ONLY the JSON object.`;
 
   try {
-    const { data } = await routeLlmJson<LlmOutput>(prompt);
+    const { data } = await withLlmTelemetry(
+      "competitive-estimator",
+      process.env.OLLAMA_MODEL?.trim() || "llama3.2",
+      prompt,
+      () => routeLlmJson<LlmOutput>(prompt),
+      (r) => JSON.stringify(r.data),
+    );
     const backRange = clampRange(baselineBack, data.backlinks?.min, data.backlinks?.max);
     const trafRange = clampRange(baselineTraf, data.monthlyOrganicTraffic?.min, data.monthlyOrganicTraffic?.max);
     const kwEst = Math.max(1, Math.min(Math.round(Number(data.keywordUniverse?.estimate ?? baselineKw)), baselineKw * 10));

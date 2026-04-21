@@ -1,9 +1,10 @@
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { BarChart, Bar, ResponsiveContainer } from "recharts";
 import { fetchKeywordResearch, fetchKeywordSuggestions, fetchKeywordTrends, fetchGscKeywordStats, type GscSite } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 import { useRegion } from "../components/RegionPicker";
+import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 
 import { ErrorBanner } from "../components/UI";
 /**
@@ -470,35 +471,68 @@ export default function KeywordOverview() {
 
           {/* ── Full Variations Table ────────────────────────────── */}
           {(data.variations ?? []).length > 5 && (
-            <div className="qa-panel" style={{ padding: 16, overflowX: "auto" }}>
-              <h3 className="qa-panel-title" style={{ marginBottom: 12 }}>All Keyword Variations</h3>
-              <table className="qa-table">
-                <thead>
-                  <tr>
-                    <th>Keyword</th>
-                    <th style={{ textAlign: "right" }}>Volume</th>
-                    <th style={{ textAlign: "right" }}>KD %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data.variations ?? []).map((v: any, i: number) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: 600, color: "var(--accent)" }}>{v.keyword}</td>
-                      <td style={{ textAlign: "right" }}>{formatVolume(v.volume)}</td>
-                      <td style={{ textAlign: "right" }}>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          {v.difficulty}
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: DIFF_COLORS(v.difficulty) }} />
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="qa-panel" style={{ padding: 16 }}>
+              <h3 className="qa-panel-title" style={{ marginBottom: 10 }}>All Keyword Variations</h3>
+              <VariationsTable rows={data.variations ?? []} filename={`variations-${data.keyword}`} />
+            </div>
+          )}
+          {(data.questions ?? []).length > 5 && (
+            <div className="qa-panel" style={{ padding: 16, marginTop: 16 }}>
+              <h3 className="qa-panel-title" style={{ marginBottom: 10 }}>All Questions</h3>
+              <VariationsTable rows={data.questions ?? []} filename={`questions-${data.keyword}`} />
             </div>
           )}
         </motion.div>
       )}
     </div>
+  );
+}
+
+interface VarRow { keyword: string; volume: number; difficulty: number }
+
+function VariationsTable({ rows, filename }: { rows: VarRow[]; filename: string }) {
+  const columns: FilterableColumn<VarRow>[] = useMemo(() => [
+    {
+      key: "keyword",
+      label: "Keyword",
+      accessor: (r) => r.keyword,
+      filterType: "text",
+      render: (r) => <span style={{ fontWeight: 600, color: "var(--accent)" }}>{r.keyword}</span>,
+    },
+    {
+      key: "volume",
+      label: "Volume",
+      accessor: (r) => r.volume ?? 0,
+      filterType: "number",
+      width: 130,
+      render: (r) => <span>{formatVolume(r.volume ?? 0)}</span>,
+      headerStyle: { textAlign: "right" },
+      cellStyle: { textAlign: "right" },
+    },
+    {
+      key: "difficulty",
+      label: "KD %",
+      accessor: (r) => r.difficulty ?? 0,
+      filterType: "number",
+      width: 110,
+      render: (r) => (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {r.difficulty}
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: DIFF_COLORS(r.difficulty ?? 0) }} />
+        </span>
+      ),
+      headerStyle: { textAlign: "right" },
+      cellStyle: { textAlign: "right" },
+    },
+  ], []);
+  return (
+    <FilterableTable<VarRow>
+      rows={rows}
+      columns={columns}
+      rowKey={(r) => r.keyword}
+      pageSize={50}
+      itemLabel="keyword"
+      exportFilename={filename}
+    />
   );
 }

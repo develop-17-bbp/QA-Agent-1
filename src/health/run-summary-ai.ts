@@ -9,6 +9,9 @@
 import { flattenInsights, hasPageSpeedInsights } from "./insight-utils.js";
 import { generateText } from "./llm.js";
 import type { PageFetchRecord, SiteHealthReport } from "./types.js";
+import { withLlmTelemetry } from "./agentic/llm-telemetry.js";
+
+const MODEL = () => process.env.OLLAMA_MODEL?.trim() || "llama3.2";
 
 // ── Payload builder ─────────────────────────────────────────────────────────
 
@@ -114,7 +117,7 @@ Format (strict):
 JSON:
 ${JSON.stringify(payload, null, 2)}`;
 
-  return generateText(prompt);
+  return withLlmTelemetry("run-summary", MODEL(), prompt, () => generateText(prompt));
 }
 
 /**
@@ -141,5 +144,5 @@ ${q}
 Run data:
 ${JSON.stringify(payload, null, 2)}`;
 
-  return generateText(prompt);
+  return withLlmTelemetry("run-qa", MODEL(), prompt, () => generateText(prompt));
 }

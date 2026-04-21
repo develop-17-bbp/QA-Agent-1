@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 import {
   BarChart,
   Bar,
@@ -347,29 +348,9 @@ export default function PositionTracking() {
             )}
           </div>
 
-          <div className="qa-panel" style={{ marginTop: 16, padding: 16, overflowX: "auto" }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Keyword Positions ({(data.keywords ?? []).length})</div>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr>
-                {["Keyword", "URL", "SEO Score", "Title", "Meta", "H1", "Canonical", "Load Time"].map((h) => (
-                  <th key={h} style={{ padding: "8px 10px", textAlign: h === "Keyword" || h === "URL" ? "left" : "center", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>{h}</th>
-                ))}
-              </tr></thead>
-              <tbody>
-                {(data.keywords ?? []).map((kw: any, i: number) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td style={{ padding: "6px 10px", fontSize: 13, fontWeight: 500 }}>{kw.keyword}</td>
-                    <td style={{ padding: "6px 10px", fontSize: 12, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }} title={kw.url}>{kw.url}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "center", fontSize: 13, fontWeight: 700, color: kw.seoScore >= 80 ? "#38a169" : kw.seoScore >= 60 ? "#dd6b20" : "#e53e3e" }}>{kw.seoScore}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "center" }}>{kw.titlePresent ? "Y" : "N"}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "center" }}>{kw.metaPresent ? "Y" : "N"}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "center" }}>{kw.h1Present ? "Y" : "N"}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "center" }}>{kw.canonicalSet ? "Y" : "N"}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "center", fontSize: 12, color: "var(--text-secondary)" }}>{kw.loadTimeMs}ms</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Keyword Positions ({(data.keywords ?? []).length})</div>
+            <PositionKeywordsTable rows={data.keywords ?? []} />
           </div>
         </>
       )}
@@ -528,5 +509,73 @@ export default function PositionTracking() {
         )}
       </div>
     </motion.div>
+  );
+}
+
+interface PositionKw {
+  keyword: string;
+  url: string;
+  seoScore: number;
+  titlePresent: boolean;
+  metaPresent: boolean;
+  h1Present: boolean;
+  canonicalSet: boolean;
+  loadTimeMs: number;
+}
+
+function PositionKeywordsTable({ rows }: { rows: PositionKw[] }) {
+  const columns: FilterableColumn<PositionKw>[] = useMemo(() => [
+    {
+      key: "keyword",
+      label: "Keyword",
+      accessor: (k) => k.keyword,
+      filterType: "text",
+      render: (k) => <span style={{ fontWeight: 500 }}>{k.keyword}</span>,
+    },
+    {
+      key: "url",
+      label: "URL",
+      accessor: (k) => k.url,
+      filterType: "text",
+      render: (k) => <span style={{ fontSize: 12, color: "var(--text-secondary)", wordBreak: "break-all" }} title={k.url}>{k.url}</span>,
+    },
+    {
+      key: "seoScore",
+      label: "SEO Score",
+      accessor: (k) => k.seoScore,
+      filterType: "number",
+      width: 110,
+      render: (k) => (
+        <span style={{ fontWeight: 700, color: k.seoScore >= 80 ? "var(--ok)" : k.seoScore >= 60 ? "var(--warn)" : "var(--bad)" }}>
+          {k.seoScore}
+        </span>
+      ),
+      headerStyle: { textAlign: "center" },
+      cellStyle: { textAlign: "center" },
+    },
+    { key: "titlePresent", label: "Title", accessor: (k) => (k.titlePresent ? "Y" : "N"), filterType: "select", width: 70, headerStyle: { textAlign: "center" }, cellStyle: { textAlign: "center" } },
+    { key: "metaPresent", label: "Meta", accessor: (k) => (k.metaPresent ? "Y" : "N"), filterType: "select", width: 70, headerStyle: { textAlign: "center" }, cellStyle: { textAlign: "center" } },
+    { key: "h1Present", label: "H1", accessor: (k) => (k.h1Present ? "Y" : "N"), filterType: "select", width: 60, headerStyle: { textAlign: "center" }, cellStyle: { textAlign: "center" } },
+    { key: "canonicalSet", label: "Canonical", accessor: (k) => (k.canonicalSet ? "Y" : "N"), filterType: "select", width: 100, headerStyle: { textAlign: "center" }, cellStyle: { textAlign: "center" } },
+    {
+      key: "loadTimeMs",
+      label: "Load (ms)",
+      accessor: (k) => k.loadTimeMs,
+      filterType: "number",
+      width: 110,
+      render: (k) => <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{k.loadTimeMs}</span>,
+      headerStyle: { textAlign: "right" },
+      cellStyle: { textAlign: "right" },
+    },
+  ], []);
+  return (
+    <FilterableTable<PositionKw>
+      rows={rows}
+      columns={columns}
+      rowKey={(k) => `${k.keyword}|${k.url}`}
+      pageSize={50}
+      itemLabel="keyword"
+      exportFilename="keyword-positions"
+    />
   );
 }

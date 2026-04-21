@@ -17,7 +17,7 @@
  * tanking fix quality.
  */
 
-import { recommendFixesForLinks } from "../src/health/modules/link-fix-advisor.js";
+import { recommendLinkFixes } from "../src/health/modules/link-fix-advisor.js";
 import { withLlmTelemetry } from "../src/health/agentic/llm-telemetry.js";
 
 type GoldenCase = {
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
         "eval-link-fix",
         model,
         JSON.stringify(c),
-        () => recommendFixesForLinks([c]),
+        () => recommendLinkFixes([c]),
       );
       got = out?.[0]?.recommendation ?? "";
       schemaOk = got.length > 0 && got.length <= 300;

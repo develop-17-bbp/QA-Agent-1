@@ -12,6 +12,7 @@
 
 import { generateText } from "../llm.js";
 import { LlmCache } from "../cache.js";
+import { withLlmTelemetry } from "../agentic/llm-telemetry.js";
 
 export interface BrokenLinkInput {
   foundOn: string;
@@ -59,7 +60,12 @@ ${rows}
 
 Respond with ONLY a JSON array, e.g. ["...", "...", "..."].`;
 
-  const raw = await generateText(prompt);
+  const raw = await withLlmTelemetry(
+    "link-fix-advisor",
+    process.env.OLLAMA_MODEL?.trim() || "llama3.2",
+    prompt,
+    () => generateText(prompt),
+  );
   const cleaned = raw.trim();
   const match = cleaned.match(/\[[\s\S]*\]/);
   if (!match) return batch.map(() => "Review the link target and either fix, redirect, or remove it from the origin page.");

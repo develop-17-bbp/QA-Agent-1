@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { fetchKeywordMagic, fetchKeywordSuggestions, fetchKeywordTrends, fetchKeywordVolume, queryGscAnalytics } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 import RegionPicker, { useRegion } from "../components/RegionPicker";
+import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 
 import { ErrorBanner } from "../components/UI";
 const INTENT_COLORS: Record<string, string> = { Informational: "#3182ce", Commercial: "#dd6b20", Transactional: "#38a169", Navigational: "#111111" };
@@ -36,7 +37,6 @@ export default function KeywordMagicTool() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState("all");
   const [gscDomain, setGscDomain] = useState("");
   const [gscKwStats, setGscKwStats] = useState<Map<string, any>>(new Map());
   const [gscLoading, setGscLoading] = useState(false);
@@ -94,11 +94,147 @@ export default function KeywordMagicTool() {
     }).catch(() => {}).finally(() => setGscLoading(false));
   }, [data, overlay.matchedGscSite?.siteUrl]);
 
-  const keywords = data?.keywords ?? [];
-  const filtered = filter === "all" ? keywords : keywords.filter((k: any) => k.intent === filter);
+  const keywords: any[] = data?.keywords ?? [];
   const clusters = data?.clusters ?? [];
   const dq = data?.dataQuality ?? { realDataFields: [], estimatedFields: [], missingFields: [], providersHit: [], providersFailed: [] };
   const hideCpc = (dq.missingFields ?? []).includes("cpc");
+
+  const kwColumns: FilterableColumn<any>[] = useMemo(() => {
+    const cols: FilterableColumn<any>[] = [
+      {
+        key: "keyword",
+        label: "Keyword",
+        accessor: (k) => k.keyword,
+        filterType: "text",
+        render: (k) => <span style={{ fontWeight: 500 }}>{k.keyword}</span>,
+      },
+      {
+        key: "source",
+        label: "Source",
+        accessor: (k) => k.source ?? "",
+        filterType: "select",
+        width: 140,
+        cellStyle: { fontSize: 11, color: "var(--text-secondary)" },
+      },
+      {
+        key: "volume",
+        label: "Volume",
+        accessor: (k) => {
+          const real = volumeMap.get(k.keyword.toLowerCase())?.avgMonthlySearches?.value;
+          return typeof real === "number" ? real : typeof k.volume === "number" ? k.volume : 0;
+        },
+        filterType: "number",
+        width: 110,
+        render: (k) => {
+          const adsRow = volumeMap.get(k.keyword.toLowerCase());
+          const realVolume = adsRow?.avgMonthlySearches?.value ?? null;
+          return realVolume !== null ? (
+            <span title="Real from Google Ads" style={{ fontWeight: 600 }}>
+              {realVolume.toLocaleString()}
+              <ConfidenceDot confidence="high" source="google-ads" value={realVolume} />
+            </span>
+          ) : (
+            <span>
+              {k.volume}
+              <ConfidenceDot confidence={k.volumeData?.confidence} source={k.volumeData?.source} value={k.volumeData?.value} />
+            </span>
+          );
+        },
+        headerStyle: { textAlign: "right" },
+        cellStyle: { textAlign: "right" },
+      },
+      {
+        key: "difficulty",
+        label: "Difficulty",
+        accessor: (k) => k.difficulty ?? "",
+        filterType: "select",
+        width: 110,
+        render: (k) => (
+          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (DIFF_COLORS[k.difficulty] ?? "#888") + "20", color: DIFF_COLORS[k.difficulty] ?? "#888", fontWeight: 600 }}>
+            {k.difficulty}
+          </span>
+        ),
+      },
+      {
+        key: "intent",
+        label: "Intent",
+        accessor: (k) => k.intent ?? "",
+        filterType: "select",
+        width: 130,
+        render: (k) => (
+          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (INTENT_COLORS[k.intent] ?? "#888") + "20", color: INTENT_COLORS[k.intent] ?? "#888", fontWeight: 600 }}>
+            {k.intent}
+          </span>
+        ),
+      },
+    ];
+    if (!hideCpc) {
+      cols.push({
+        key: "cpc",
+        label: "CPC",
+        accessor: (k) => {
+          const n = typeof k.cpc === "number" ? k.cpc : parseFloat(String(k.cpc ?? "").replace(/[^0-9.]/g, ""));
+          return Number.isNaN(n) ? 0 : n;
+        },
+        filterType: "number",
+        width: 90,
+        render: (k) => <span style={{ color: "var(--text-secondary)" }}>{k.cpc || "—"}</span>,
+        headerStyle: { textAlign: "right" },
+        cellStyle: { textAlign: "right" },
+      });
+    }
+    cols.push({
+      key: "trend",
+      label: "Trend",
+      accessor: (k) => k.trend ?? "",
+      filterType: "select",
+      width: 100,
+      render: (k) => (
+        <span style={{ color: k.trend === "Rising" ? "var(--ok)" : k.trend === "Declining" ? "var(--bad)" : "var(--text-secondary)" }}>
+          {k.trend}
+        </span>
+      ),
+    });
+    if (gscKwStats.size > 0) {
+      cols.push(
+        {
+          key: "gscPos",
+          label: "GSC Pos",
+          accessor: (k) => {
+            const g = gscKwStats.get(k.keyword.toLowerCase());
+            return g?.position?.value ?? g?.position ?? null;
+          },
+          filterType: "number",
+          width: 100,
+          render: (k) => {
+            const g = gscKwStats.get(k.keyword.toLowerCase());
+            const v = g?.position?.value ?? g?.position;
+            return v != null ? <span style={{ fontSize: 12 }}>{typeof v === "number" ? v.toFixed(1) : v}</span> : <span style={{ color: "var(--muted)" }}>—</span>;
+          },
+          headerStyle: { textAlign: "right", color: "var(--ok)" },
+          cellStyle: { textAlign: "right" },
+        },
+        {
+          key: "gscClicks",
+          label: "GSC Clicks",
+          accessor: (k) => {
+            const g = gscKwStats.get(k.keyword.toLowerCase());
+            return g?.clicks?.value ?? g?.clicks ?? null;
+          },
+          filterType: "number",
+          width: 110,
+          render: (k) => {
+            const g = gscKwStats.get(k.keyword.toLowerCase());
+            const v = g?.clicks?.value ?? g?.clicks;
+            return v != null ? <span style={{ fontSize: 12 }}>{v}</span> : <span style={{ color: "var(--muted)" }}>—</span>;
+          },
+          headerStyle: { textAlign: "right", color: "var(--ok)" },
+          cellStyle: { textAlign: "right" },
+        },
+      );
+    }
+    return cols;
+  }, [volumeMap, hideCpc, gscKwStats]);
 
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
@@ -210,79 +346,23 @@ export default function KeywordMagicTool() {
           )}
 
           <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <div className="qa-panel-title">
-                Keywords ({filtered.length})
-                {gscLoading && <span style={{ fontSize: 11, color: "var(--text-secondary)", marginLeft: 8, fontWeight: 400 }}>Loading GSC data...</span>}
+                Keywords ({keywords.length})
+                {gscLoading && <span style={{ fontSize: 11, color: "var(--text-secondary)", marginLeft: 8, fontWeight: 400 }}>Loading GSC data…</span>}
               </div>
-              <select className="qa-select" value={filter} onChange={e => setFilter(e.target.value)} style={{ width: 160 }}>
-                <option value="all">All Intents</option>
-                <option value="Informational">Informational</option>
-                <option value="Commercial">Commercial</option>
-                <option value="Transactional">Transactional</option>
-                <option value="Navigational">Navigational</option>
-              </select>
+              <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                Dots: <span style={{ color: "var(--ok)" }}>● real</span> · <span style={{ color: "var(--warn)" }}>● derived</span> · <span style={{ color: "var(--muted-light)" }}>● estimated</span>
+              </span>
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 8 }}>
-              Confidence dots: <span style={{ color: "#38a169" }}>● real</span> · <span style={{ color: "#dd6b20" }}>● derived</span> · <span style={{ color: "#9ca3af" }}>● estimated</span>. Hover for source.
-            </div>
-            <div style={{ overflowX: "auto" }}>
-              <table className="qa-table">
-                <thead><tr>
-                  {["Keyword", "Source", "Volume", "Difficulty", "Intent", ...(hideCpc ? [] : ["CPC"]), "Trend"].map(h => (
-                    <th key={h}>{h}</th>
-                  ))}
-                  {gscKwStats.size > 0 && <th>GSC Pos</th>}
-                  {gscKwStats.size > 0 && <th>GSC Clicks</th>}
-                </tr></thead>
-                <tbody>
-                  {filtered.map((kw: any, i: number) => {
-                    const gscRow = gscKwStats.get(kw.keyword.toLowerCase());
-                    const adsRow = volumeMap.get(kw.keyword.toLowerCase());
-                    const realVolume = adsRow?.avgMonthlySearches?.value ?? null;
-                    return (
-                      <tr key={i}>
-                        <td style={{ fontWeight: 500 }}>{kw.keyword}</td>
-                        <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{kw.source ?? "—"}</td>
-                        <td style={{ color: "var(--text-secondary)" }}>
-                          {realVolume !== null ? (
-                            <span title="Real monthly searches from Google Ads Keyword Planner" style={{ fontWeight: 600, color: "var(--text)" }}>
-                              {realVolume.toLocaleString()}
-                              <ConfidenceDot confidence="high" source="google-ads" value={realVolume} />
-                            </span>
-                          ) : (
-                            <>
-                              {kw.volume}
-                              <ConfidenceDot confidence={kw.volumeData?.confidence} source={kw.volumeData?.source} value={kw.volumeData?.value} />
-                            </>
-                          )}
-                        </td>
-                        <td>
-                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (DIFF_COLORS[kw.difficulty] ?? "#888") + "20", color: DIFF_COLORS[kw.difficulty] ?? "#888", fontWeight: 600 }}>{kw.difficulty}</span>
-                          <ConfidenceDot confidence={kw.difficultyData?.confidence} source={kw.difficultyData?.source} value={kw.difficultyData?.value} />
-                        </td>
-                        <td>
-                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: (INTENT_COLORS[kw.intent] ?? "#888") + "20", color: INTENT_COLORS[kw.intent] ?? "#888", fontWeight: 600 }}>{kw.intent}</span>
-                          <ConfidenceDot confidence={kw.intentData?.confidence} source={kw.intentData?.source} />
-                        </td>
-                        {!hideCpc && <td style={{ color: "var(--text-secondary)" }}>{kw.cpc || "—"}</td>}
-                        <td style={{ color: kw.trend === "Rising" ? "#38a169" : kw.trend === "Declining" ? "#e53e3e" : "var(--text-secondary)" }}>{kw.trend}</td>
-                        {gscKwStats.size > 0 && (
-                          <td style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                            {gscRow ? (gscRow.position?.value?.toFixed(1) ?? gscRow.position?.toFixed?.(1) ?? "—") : "—"}
-                          </td>
-                        )}
-                        {gscKwStats.size > 0 && (
-                          <td style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                            {gscRow ? (gscRow.clicks?.value ?? gscRow.clicks ?? "—") : "—"}
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <FilterableTable
+              rows={keywords}
+              columns={kwColumns}
+              rowKey={(k) => k.keyword}
+              pageSize={50}
+              itemLabel="keyword"
+              exportFilename="keywords"
+            />
           </div>
         </>
       )}
