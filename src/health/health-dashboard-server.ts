@@ -73,6 +73,7 @@ import { ingestAwtBacklinksCsv, fetchAwtBundle } from "./providers/ahrefs-webmas
 import { fetchBrandMentions } from "./providers/rss-aggregator.js";
 import { searchStartpage } from "./providers/startpage-serp.js";
 import { composeDailyReport, type DailyReport, type DailyReportFormTest } from "./modules/daily-report.js";
+import { recordUsage, deriveClientKey, getUsageSnapshot } from "./modules/usage-meter.js";
 import {
   isBingOAuthClientConfigured,
   buildBingOAuthAuthorizeUrl,
@@ -2419,6 +2420,8 @@ export async function runHealthDashboard(options: {
 
       // ── Keyword Research (real free providers, no run needed) ─────
       if (req.method === "POST" && url.pathname === "/api/keyword-research") {
+        const meterStart = Date.now();
+        let meterOk = true;
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
         let payload: { keyword?: string; region?: string };
@@ -2432,15 +2435,28 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) {
+          meterOk = false;
           const msg = e instanceof Error ? e.message : String(e);
           res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ error: msg }));
+        } finally {
+          recordUsage({
+            ts: new Date().toISOString(),
+            clientKey: deriveClientKey(req),
+            endpoint: "/api/keyword-research",
+            category: "keyword-lookup",
+            bytes: 0,
+            durationMs: Date.now() - meterStart,
+            ok: meterOk,
+          });
         }
         return;
       }
 
       // ── External Backlinks (free provider mix: OPR + Common Crawl + URLScan + Wayback) ──
       if (req.method === "POST" && url.pathname === "/api/external-backlinks") {
+        const meterStart = Date.now();
+        let meterOk = true;
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
         let payload: { domain?: string };
@@ -2453,10 +2469,29 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=3600" });
           res.end(JSON.stringify(result));
         } catch (e) {
+          meterOk = false;
           const msg = e instanceof Error ? e.message : String(e);
           res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ error: msg }));
+        } finally {
+          recordUsage({
+            ts: new Date().toISOString(),
+            clientKey: deriveClientKey(req),
+            endpoint: "/api/external-backlinks",
+            category: "backlink-query",
+            bytes: 0,
+            durationMs: Date.now() - meterStart,
+            ok: meterOk,
+          });
         }
+        return;
+      }
+
+      // ── Usage snapshot (for dashboard tile + debugging) ──
+      if (req.method === "GET" && url.pathname === "/api/usage/snapshot") {
+        const snap = getUsageSnapshot();
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify(snap));
         return;
       }
 
@@ -3405,15 +3440,36 @@ export async function runHealthDashboard(options: {
         }
 
         runInFlight = true;
+        const runMeterStart = Date.now();
+        const runMeterClient = deriveClientKey(req);
+        const runMeterUrls = urls.length;
         res.writeHead(202, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ accepted: true, urlCount: urls.length }));
         void runOrchestrate(runExtra)
           .then((r) => {
             lastResult = r;
+            recordUsage({
+              ts: new Date().toISOString(),
+              clientKey: runMeterClient,
+              endpoint: "/api/run",
+              category: "site-audit",
+              bytes: runMeterUrls, // piggy-back the url count — not bytes, but useful debug signal
+              durationMs: Date.now() - runMeterStart,
+              ok: true,
+            });
           })
           .catch((err) => {
             const message = err instanceof Error ? err.message : String(err);
             broadcast({ type: "run_error", message });
+            recordUsage({
+              ts: new Date().toISOString(),
+              clientKey: runMeterClient,
+              endpoint: "/api/run",
+              category: "site-audit",
+              bytes: runMeterUrls,
+              durationMs: Date.now() - runMeterStart,
+              ok: false,
+            });
           })
           .finally(() => {
             runInFlight = false;
