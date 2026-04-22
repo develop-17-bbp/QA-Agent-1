@@ -30,6 +30,7 @@
 import { dp, ProviderError, type DataPoint } from "./types.js";
 import { httpGet } from "./http.js";
 import { cacheGet, cacheSet, registerLimit, tryConsume } from "./rate-limit.js";
+import { resolveKey } from "../modules/runtime-keys.js";
 
 const PROVIDER = "naver-webmaster";
 registerLimit(PROVIDER, 60, 60_000);
@@ -38,11 +39,11 @@ const TTL_MS = 6 * 60 * 60 * 1000; // 6h
 const API_BASE = "https://openapi.naver.com/v1/search-advisor";
 
 function resolveClientId(): string | undefined {
-  return process.env.NAVER_CLIENT_ID?.trim();
+  return resolveKey("NAVER_CLIENT_ID");
 }
 
 function resolveClientSecret(): string | undefined {
-  return process.env.NAVER_CLIENT_SECRET?.trim();
+  return resolveKey("NAVER_CLIENT_SECRET");
 }
 
 export function isNaverWebmasterConfigured(): boolean {

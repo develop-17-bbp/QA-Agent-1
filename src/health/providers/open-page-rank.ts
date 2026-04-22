@@ -10,6 +10,7 @@
 import { dp, ProviderError, type DataPoint } from "./types.js";
 import { httpGet } from "./http.js";
 import { cacheGet, cacheSet, registerLimit, tryConsume } from "./rate-limit.js";
+import { resolveKey } from "../modules/runtime-keys.js";
 
 const PROVIDER = "open-page-rank";
 registerLimit(PROVIDER, 1000, 24 * 60 * 60 * 1000);
@@ -27,16 +28,12 @@ interface OprResponse {
   }[];
 }
 
-function resolveKey(): string | undefined {
-  return (
-    process.env.OPR_API_KEY?.trim() ||
-    process.env.OPEN_PAGERANK_API_KEY?.trim() ||
-    process.env.OPEN_PAGE_RANK_API_KEY?.trim()
-  );
+function resolveOprKey(): string | undefined {
+  return resolveKey("OPR_API_KEY") || resolveKey("OPEN_PAGERANK_API_KEY") || resolveKey("OPEN_PAGE_RANK_API_KEY");
 }
 
 export function isOpenPageRankConfigured(): boolean {
-  return !!resolveKey();
+  return !!resolveOprKey();
 }
 
 export interface DomainAuthority {
@@ -53,7 +50,7 @@ export async function fetchDomainAuthority(domain: string): Promise<DomainAuthor
   const clean = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
   if (!clean) throw new ProviderError(PROVIDER, "Empty domain");
 
-  const key = resolveKey();
+  const key = resolveOprKey();
   if (!key) {
     throw new ProviderError(
       PROVIDER,

@@ -12,6 +12,7 @@
 import { dp, ProviderError, type DataPoint } from "./types.js";
 import { httpGetJson } from "./http.js";
 import { cacheGet, cacheSet, registerLimit, tryConsume } from "./rate-limit.js";
+import { resolveKey } from "../modules/runtime-keys.js";
 
 const PROVIDER = "urlscan";
 registerLimit(PROVIDER, 100, 60_000);
@@ -25,12 +26,12 @@ interface UrlscanSearchResult {
   total: number;
 }
 
-function resolveKey(): string | undefined {
-  return process.env.URLSCAN_API_KEY?.trim();
+function resolveUrlscanKey(): string | undefined {
+  return resolveKey("URLSCAN_API_KEY");
 }
 
 export function isUrlscanConfigured(): boolean {
-  return !!resolveKey();
+  return !!resolveUrlscanKey();
 }
 
 export interface UrlscanHit {
@@ -56,7 +57,7 @@ export async function searchDomainReferences(domain: string, limit = 50): Promis
     throw new ProviderError(PROVIDER, "Rate limit exhausted");
   }
 
-  const apiKey = resolveKey();
+  const apiKey = resolveUrlscanKey();
   const headers: Record<string, string> = {};
   if (apiKey) headers["API-Key"] = apiKey;
 

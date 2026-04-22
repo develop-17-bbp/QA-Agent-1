@@ -606,11 +606,31 @@ export type IntegrationsStatus = {
   cloudflareRadar: IntegrationCard;
   ollama: IntegrationCard;
   byok: ByokProviderStatus[];
+  /** Env-var names that were saved via the dashboard UI (runtime-keys store)
+   *  rather than .env — lets the UI show a "saved from browser" badge. */
+  runtimeKeys?: string[];
 };
 export async function fetchIntegrationsStatus(): Promise<IntegrationsStatus> {
   const res = await fetch("/api/integrations/status");
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+/** Paste keys from the UI — server persists them to data/runtime-keys.json
+ *  and every provider reads runtime-keys first, then .env. No restart. */
+export async function saveRuntimeKeys(updates: Record<string, string>): Promise<{ saved: string[]; rejected: string[]; active: string[] }> {
+  const res = await fetch("/api/integrations/keys", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function clearRuntimeKey(name: string): Promise<void> {
+  const res = await fetch(`/api/integrations/keys/${encodeURIComponent(name)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
 }
 
 // Ahrefs Webmaster Tools CSV import — 95% paid-Ahrefs parity for your verified site, free.

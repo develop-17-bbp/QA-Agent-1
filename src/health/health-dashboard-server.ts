@@ -74,6 +74,7 @@ import { fetchBrandMentions } from "./providers/rss-aggregator.js";
 import { searchStartpage } from "./providers/startpage-serp.js";
 import { composeDailyReport, type DailyReport, type DailyReportFormTest } from "./modules/daily-report.js";
 import { recordUsage, deriveClientKey, getUsageSnapshot } from "./modules/usage-meter.js";
+import { primeRuntimeKeys, setRuntimeKeys, clearRuntimeKey, listRuntimeKeyNames } from "./modules/runtime-keys.js";
 import {
   isBingOAuthClientConfigured,
   buildBingOAuthAuthorizeUrl,
@@ -2725,9 +2726,59 @@ export async function runHealthDashboard(options: {
             price: "Free (local)",
           },
           byok: byok,
+          runtimeKeys: listRuntimeKeyNames(),
         };
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
         res.end(JSON.stringify(status));
+        return;
+      }
+
+      // ── Runtime-keys (paste from UI instead of .env editing) ──────────────
+      // Whitelist of accepted env-var names so a compromised client can't
+      // stuff arbitrary keys into our runtime store.
+      const RUNTIME_KEY_WHITELIST = new Set([
+        "DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD",
+        "AHREFS_API_TOKEN",
+        "SEMRUSH_API_KEY",
+        "SERPAPI_KEY",
+        "MOZ_ACCESS_ID", "MOZ_SECRET_KEY",
+        "BING_WEBMASTER_API_KEY",
+        "YANDEX_WEBMASTER_API_KEY", "YANDEX_WEBMASTER_USER_ID",
+        "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET",
+        "OPR_API_KEY", "OPEN_PAGERANK_API_KEY", "OPEN_PAGE_RANK_API_KEY",
+        "URLSCAN_API_KEY",
+        "CLOUDFLARE_API_TOKEN", "CF_API_TOKEN",
+        "PAGESPEED_API_KEY", "GOOGLE_PAGESPEED_API_KEY",
+        "CRUX_API_KEY",
+      ]);
+      if (req.method === "POST" && url.pathname === "/api/integrations/keys") {
+        let body: string;
+        try { body = await readBody(req, 20_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "body too large" })); return; }
+        let payload: Record<string, unknown>;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const rejected: string[] = [];
+        const updates: Record<string, string> = {};
+        for (const [k, v] of Object.entries(payload)) {
+          if (!RUNTIME_KEY_WHITELIST.has(k)) { rejected.push(k); continue; }
+          if (typeof v !== "string") { rejected.push(k); continue; }
+          updates[k] = v;
+        }
+        try {
+          await setRuntimeKeys(updates);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: true, saved: Object.keys(updates), rejected, active: listRuntimeKeyNames() }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+      if (req.method === "DELETE" && url.pathname.startsWith("/api/integrations/keys/")) {
+        const name = decodeURIComponent(url.pathname.slice("/api/integrations/keys/".length));
+        if (!RUNTIME_KEY_WHITELIST.has(name)) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "name not in whitelist" })); return; }
+        await clearRuntimeKey(name);
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: true, cleared: name, active: listRuntimeKeyNames() }));
         return;
       }
 
@@ -3562,9 +3613,13 @@ export async function runHealthDashboard(options: {
       reject(err instanceof Error ? err : new Error(String(err)));
     };
     server.once("error", onError);
-    server.listen(options.port, "127.0.0.1", () => {
-      server.off("error", onError);
-      resolve();
+    // Prime the runtime-keys cache BEFORE we start accepting connections so
+    // the very first request already sees any UI-saved keys.
+    void primeRuntimeKeys().finally(() => {
+      server.listen(options.port, "127.0.0.1", () => {
+        server.off("error", onError);
+        resolve();
+      });
     });
   });
 

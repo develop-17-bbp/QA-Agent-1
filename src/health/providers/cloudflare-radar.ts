@@ -13,6 +13,7 @@
 import { dp, ProviderError, type DataPoint } from "./types.js";
 import { httpGet } from "./http.js";
 import { cacheGet, cacheSet, registerLimit, tryConsume } from "./rate-limit.js";
+import { resolveKey } from "../modules/runtime-keys.js";
 
 const PROVIDER = "cloudflare-radar";
 registerLimit(PROVIDER, 300, 24 * 60 * 60 * 1000);
@@ -28,7 +29,7 @@ interface RankResponse {
 }
 
 function resolveToken(): string | undefined {
-  return process.env.CLOUDFLARE_API_TOKEN?.trim() || process.env.CF_API_TOKEN?.trim();
+  return resolveKey("CLOUDFLARE_API_TOKEN") || resolveKey("CF_API_TOKEN");
 }
 
 export function isCloudflareRadarConfigured(): boolean {

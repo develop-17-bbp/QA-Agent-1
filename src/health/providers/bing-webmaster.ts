@@ -21,17 +21,18 @@
 import { dp, ProviderError, type DataPoint } from "./types.js";
 import { httpGet } from "./http.js";
 import { cacheGet, cacheSet, registerLimit, tryConsume } from "./rate-limit.js";
+import { resolveKey } from "../modules/runtime-keys.js";
 
 const PROVIDER = "bing-webmaster";
 registerLimit(PROVIDER, 10, 1_000);
 const TTL_MS = 12 * 60 * 60 * 1000; // 12h — Bing refreshes its link graph daily
 
-function resolveKey(): string | undefined {
-  return process.env.BING_WEBMASTER_API_KEY?.trim();
+function resolveBingKey(): string | undefined {
+  return resolveKey("BING_WEBMASTER_API_KEY");
 }
 
 export function isBingWmtConfigured(): boolean {
-  return !!resolveKey();
+  return !!resolveBingKey();
 }
 
 export interface BingLinkRow {
@@ -76,7 +77,7 @@ export async function fetchBingLinkCounts(siteUrl: string): Promise<DataPoint<{
 }> | undefined> {
   const site = normalizeSiteUrl(siteUrl);
   if (!site) throw new ProviderError(PROVIDER, "Empty siteUrl");
-  const key = resolveKey();
+  const key = resolveBingKey();
   if (!key) throw new ProviderError(PROVIDER, "BING_WEBMASTER_API_KEY not set");
 
   const cacheKey = `${PROVIDER}:counts:${site}`;
@@ -120,7 +121,7 @@ export async function fetchBingLinkCounts(siteUrl: string): Promise<DataPoint<{
 export async function fetchBingBacklinks(siteUrl: string, cap = 500): Promise<DataPoint<BingLinkRow[]>> {
   const site = normalizeSiteUrl(siteUrl);
   if (!site) throw new ProviderError(PROVIDER, "Empty siteUrl");
-  const key = resolveKey();
+  const key = resolveBingKey();
   if (!key) throw new ProviderError(PROVIDER, "BING_WEBMASTER_API_KEY not set");
 
   const cacheKey = `${PROVIDER}:links:${site}:${cap}`;

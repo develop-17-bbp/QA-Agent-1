@@ -19,6 +19,7 @@
 
 import { dp, ProviderError, type DataPoint } from "./types.js";
 import { cacheGet, cacheSet, registerLimit, tryConsume } from "./rate-limit.js";
+import { resolveKey } from "../modules/runtime-keys.js";
 
 const PROVIDER = "crux";
 registerLimit(PROVIDER, 25_000, 24 * 60 * 60 * 1000);
@@ -52,22 +53,22 @@ export interface CruxRecord {
   ttfb: DataPoint<CruxMetric | null>;
 }
 
-function resolveKey(): string | undefined {
+function resolveCruxKey(): string | undefined {
   // Primary: CRUX_API_KEY, then GOOGLE_API_KEY (shared Google key). Third
   // fallback: reuse PAGESPEED_API_KEY when REUSE_PAGESPEED_KEY_FOR_CRUX=true.
   // This avoids forcing users to generate a second GCP key if they've already
   // enabled "Chrome UX Report API" on the same project as PageSpeed Insights.
-  const direct = process.env.CRUX_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
+  const direct = resolveKey("CRUX_API_KEY") || resolveKey("GOOGLE_API_KEY");
   if (direct) return direct;
-  if (process.env.REUSE_PAGESPEED_KEY_FOR_CRUX?.trim().toLowerCase() === "true") {
-    const shared = process.env.PAGESPEED_API_KEY?.trim();
+  if ((resolveKey("REUSE_PAGESPEED_KEY_FOR_CRUX") ?? "").toLowerCase() === "true") {
+    const shared = resolveKey("PAGESPEED_API_KEY");
     if (shared) return shared;
   }
   return undefined;
 }
 
 export function isCruxConfigured(): boolean {
-  return !!resolveKey();
+  return !!resolveCruxKey();
 }
 
 type ApiMetric = {
@@ -103,7 +104,7 @@ export async function fetchCruxRecord(
   url: string,
   formFactor: CruxFormFactor = "PHONE",
 ): Promise<CruxRecord | null> {
-  const key = resolveKey();
+  const key = resolveCruxKey();
   if (!key) {
     throw new ProviderError(
       PROVIDER,

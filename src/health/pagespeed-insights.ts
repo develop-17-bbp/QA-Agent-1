@@ -1,6 +1,7 @@
 import pLimit from "p-limit";
 import { isCrawlPageEligibleForLighthouseLab } from "./lab-eligible-crawl-page.js";
 import type { CrawlSiteResult, PageFetchRecord, PageSpeedInsightRecord, PageSpeedInsightsBundle } from "./types.js";
+import { resolveKey } from "./modules/runtime-keys.js";
 
 const PSI_BASE = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 
@@ -201,11 +202,7 @@ export async function fetchPageSpeedInsights(
  * Do not confuse with `GEMINI_API_KEY` — different Google product.
  */
 export function resolvePageSpeedApiKey(): string | undefined {
-  return (
-    process.env.PAGESPEED_API_KEY?.trim() ||
-    process.env.GOOGLE_PAGESPEED_API_KEY?.trim() ||
-    process.env.GOOGLE_API_KEY?.trim()
-  );
+  return resolveKey("PAGESPEED_API_KEY") || resolveKey("GOOGLE_PAGESPEED_API_KEY") || resolveKey("GOOGLE_API_KEY");
 }
 
 const PSI_MAX_URLS_CAP = 500;

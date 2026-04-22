@@ -15,6 +15,8 @@
  * so later per-provider commits have a typed reader to plug into.
  */
 
+import { resolveKey } from "../modules/runtime-keys.js";
+
 export interface ByokConfig {
   dataforseo?: { login: string; password: string };
   ahrefs?: { token: string };
@@ -25,33 +27,29 @@ export interface ByokConfig {
 
 export type ByokProvider = keyof ByokConfig;
 
-function trim(s: string | undefined): string {
-  return (s ?? "").trim();
-}
-
-/** Read every BYOK key currently populated in process.env. Values not set
- *  or blank are omitted — callers should `?.` their way through so "not
- *  configured" degrades gracefully. */
+/** Read every BYOK key from either the runtime-keys store or process.env.
+ *  Values not set or blank are omitted — callers should `?.` their way
+ *  through so "not configured" degrades gracefully. */
 export function getByokConfig(): ByokConfig {
   const out: ByokConfig = {};
 
-  const dfsLogin = trim(process.env.DATAFORSEO_LOGIN);
-  const dfsPassword = trim(process.env.DATAFORSEO_PASSWORD);
+  const dfsLogin = resolveKey("DATAFORSEO_LOGIN");
+  const dfsPassword = resolveKey("DATAFORSEO_PASSWORD");
   if (dfsLogin && dfsPassword) {
     out.dataforseo = { login: dfsLogin, password: dfsPassword };
   }
 
-  const ahrefsToken = trim(process.env.AHREFS_API_TOKEN);
+  const ahrefsToken = resolveKey("AHREFS_API_TOKEN");
   if (ahrefsToken) out.ahrefs = { token: ahrefsToken };
 
-  const semrushKey = trim(process.env.SEMRUSH_API_KEY);
+  const semrushKey = resolveKey("SEMRUSH_API_KEY");
   if (semrushKey) out.semrush = { apiKey: semrushKey };
 
-  const serpapiKey = trim(process.env.SERPAPI_KEY);
+  const serpapiKey = resolveKey("SERPAPI_KEY");
   if (serpapiKey) out.serpapi = { apiKey: serpapiKey };
 
-  const mozAccessId = trim(process.env.MOZ_ACCESS_ID);
-  const mozSecret = trim(process.env.MOZ_SECRET_KEY);
+  const mozAccessId = resolveKey("MOZ_ACCESS_ID");
+  const mozSecret = resolveKey("MOZ_SECRET_KEY");
   if (mozAccessId && mozSecret) {
     out.moz = { accessId: mozAccessId, secretKey: mozSecret };
   }

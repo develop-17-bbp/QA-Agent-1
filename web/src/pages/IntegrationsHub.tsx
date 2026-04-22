@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchIntegrationsStatus, type IntegrationsStatus, type IntegrationCard as CardData, type ByokProviderStatus } from "../api";
+import { fetchIntegrationsStatus, saveRuntimeKeys, clearRuntimeKey, type IntegrationsStatus, type IntegrationCard as CardData, type ByokProviderStatus } from "../api";
 import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 import { ErrorBanner, LoadingPanel } from "../components/UI";
 
@@ -342,8 +342,50 @@ export default function IntegrationsHub() {
 function KeyInstructionModal({ state, onClose }: { state: KeyModalState; onClose: () => void }) {
   const { visual, card, byok } = state;
   const envVar = card?.apiKeyVar ?? byok?.envVars[0] ?? "";
-  const envVars = byok?.envVars ?? (envVar ? [envVar] : []);
+  const envVars = useMemo(() => byok?.envVars ?? (envVar ? [envVar] : []), [byok, envVar]);
   const helpUrl = card?.helpUrl ?? byok?.signUpUrl;
+  const alreadyConfigured = !!(card?.connected || byok?.configured);
+
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const v of envVars) init[v] = "";
+    return init;
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  const hasAllValues = envVars.every((v) => values[v] && values[v]!.trim().length > 0);
+
+  const onSave = async () => {
+    setSaveError("");
+    setSaving(true);
+    try {
+      await saveRuntimeKeys(values);
+      setSaved(true);
+      // Small grace window so user sees the success state before the modal closes + list refreshes
+      setTimeout(onClose, 700);
+    } catch (e: any) {
+      setSaveError(e?.message ?? String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDisconnect = async () => {
+    setSaveError("");
+    setSaving(true);
+    try {
+      for (const v of envVars) await clearRuntimeKey(v);
+      setSaved(true);
+      setTimeout(onClose, 500);
+    } catch (e: any) {
+      setSaveError(e?.message ?? String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div
       onClick={onClose}
@@ -376,52 +418,83 @@ function KeyInstructionModal({ state, onClose }: { state: KeyModalState; onClose
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: visual.logoChar.length > 1 ? 14 : 22, fontWeight: 700,
           }}>{visual.logoChar}</div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>Connect {visual.name}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>
+              {alreadyConfigured ? "Reconfigure " : "Connect "}{visual.name}
+            </div>
             {byok && <div style={{ fontSize: 12, color: "var(--muted)" }}>{byok.pricingHint}</div>}
           </div>
         </div>
 
         <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 14 }}>
           {byok
-            ? <>This is a <strong>paid API</strong>. You need your own subscription.  Once you have the key, paste it into your server's <code>.env</code> and restart.</>
-            : <>{visual.tagline}. Get your key from the provider, then paste it into your server's <code>.env</code> and restart.</>}
+            ? <>This is a <strong>paid API</strong>. Paste the credential you already own — it's saved server-side to <code>data/runtime-keys.json</code> (mode 0600) and used on the next request. No restart.</>
+            : <>{visual.tagline}. Get the key from the provider, paste it here — we save it server-side and use it immediately.</>}
         </div>
+
+        {helpUrl && (
+          <div style={{ marginBottom: 12 }}>
+            <a href={helpUrl} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: visual.accentColor, fontWeight: 600, textDecoration: "none" }}>
+              Open {visual.name} setup page ↗
+            </a>
+          </div>
+        )}
 
         <div style={{ padding: 14, background: "#f8fafc", borderRadius: 8, border: "1px solid var(--border)", marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", marginBottom: 6 }}>Step 1 — Get the key</div>
-          {helpUrl && <a href={helpUrl} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: visual.accentColor, fontWeight: 600, textDecoration: "none" }}>Open {visual.name} setup page ↗</a>}
-
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", marginTop: 14, marginBottom: 6 }}>Step 2 — Add to .env</div>
-          <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12, background: "#0f172a", color: "#e2e8f0", padding: 10, borderRadius: 6, marginBottom: 6 }}>
-            {envVars.map((v) => (
-              <div key={v}>{v}=&lt;paste-your-key&gt;</div>
-            ))}
-          </div>
-          <button
-            onClick={() => {
-              void navigator.clipboard.writeText(envVars.map((v) => `${v}=`).join("\n"));
-            }}
-            style={{ padding: "4px 10px", fontSize: 11, border: "1px solid var(--border)", borderRadius: 4, background: "#fff", cursor: "pointer" }}
-          >
-            Copy env var name{envVars.length > 1 ? "s" : ""}
-          </button>
-
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", marginTop: 14, marginBottom: 6 }}>Step 3 — Restart the server</div>
-          <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, background: "#0f172a", color: "#e2e8f0", padding: 10, borderRadius: 6 }}>
-            npm run dashboard:kill ; npm run health -- --serve
+          {envVars.map((v) => (
+            <div key={v} style={{ marginBottom: 10 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", marginBottom: 4 }}>
+                {v}
+              </label>
+              <input
+                type={/(?:KEY|TOKEN|SECRET|PASSWORD)$/.test(v) ? "password" : "text"}
+                value={values[v] ?? ""}
+                onChange={(e) => setValues((cur) => ({ ...cur, [v]: e.target.value }))}
+                placeholder={alreadyConfigured ? "(already set — paste to replace)" : "Paste value…"}
+                autoComplete="off"
+                spellCheck={false}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                disabled={saving}
+              />
+            </div>
+          ))}
+          <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 4 }}>
+            Saved locally on this server only. Never sent to Anthropic, QA-Agent Cloud, or any other third party.
           </div>
         </div>
 
-        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14, fontStyle: "italic" }}>
-          UI-based key entry (no .env edit) is on our roadmap. For now: edit the file, restart, refresh this page.
-        </div>
+        {saveError && <div style={{ background: "#fef2f2", color: "#991b1b", padding: "8px 12px", borderRadius: 6, fontSize: 12, marginBottom: 10 }}>{saveError}</div>}
+        {saved && <div style={{ background: "#dcfce7", color: "#166534", padding: "8px 12px", borderRadius: 6, fontSize: 12, marginBottom: 10 }}>✓ Saved — active on next request</div>}
 
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button
-            onClick={onClose}
-            style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--border)", background: "#fff", fontWeight: 600, cursor: "pointer" }}
-          >Close</button>
+        <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+          {alreadyConfigured ? (
+            <button
+              onClick={onDisconnect}
+              disabled={saving}
+              style={{ padding: "8px 14px", borderRadius: 6, border: "1px solid #fca5a5", background: "#fff", color: "#b91c1c", fontWeight: 600, cursor: saving ? "default" : "pointer", fontSize: 12 }}
+            >
+              Disconnect
+            </button>
+          ) : <span />}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={onClose}
+              disabled={saving}
+              style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--border)", background: "#fff", fontWeight: 600, cursor: saving ? "default" : "pointer" }}
+            >Cancel</button>
+            <button
+              onClick={onSave}
+              disabled={saving || !hasAllValues}
+              style={{
+                padding: "8px 18px", borderRadius: 6, border: "none",
+                background: hasAllValues ? visual.accentColor : "#cbd5e1",
+                color: "#fff", fontWeight: 700, fontSize: 13,
+                cursor: saving || !hasAllValues ? "default" : "pointer",
+              }}
+            >
+              {saving ? "Saving…" : (alreadyConfigured ? "Update" : "Save & connect")}
+            </button>
+          </div>
         </div>
       </div>
     </div>
