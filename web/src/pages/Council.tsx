@@ -10,10 +10,20 @@ import {
   type CouncilAdvisor,
 } from "../api";
 
-const FEATURES: { id: CouncilFeature; label: string; blurb: string; needsKeywords?: boolean }[] = [
+type FeatureDef = {
+  id: CouncilFeature;
+  label: string;
+  blurb: string;
+  extraInput?: "keywords" | "competitors" | "urls";
+  extraLabel?: string;
+  extraPlaceholder?: string;
+};
+const FEATURES: FeatureDef[] = [
   { id: "keywords", label: "Keywords", blurb: "Terms that appear across GSC + Bing/Yandex/Ahrefs anchors + news/RSS — cross-source = strong editorial signal." },
   { id: "backlinks", label: "Backlinks", blurb: "Referring domains confirmed by multiple link indexes (Bing + Yandex + Ahrefs + GSC). 3+ sources = credible link." },
-  { id: "serp", label: "SERP Ranks", blurb: "Your domain's ranking consensus across DDG + Startpage + GSC + Brave for a given keyword set.", needsKeywords: true },
+  { id: "serp", label: "SERP Ranks", blurb: "Your domain's ranking consensus across DDG + Startpage + GSC + Brave for a given keyword set.", extraInput: "keywords", extraLabel: "Keywords to probe (comma or newline separated)", extraPlaceholder: "best seo tools\nkeyword research\nbacklink audit" },
+  { id: "authority", label: "Domain Authority", blurb: "OpenPageRank + Tranco + Cloudflare Radar agreement per domain. 3/3 sources = genuine top-tier site; 1/3 may be SEO-juiced.", extraInput: "competitors", extraLabel: "Competitor domains (optional — comma or newline separated)", extraPlaceholder: "wikipedia.org\nahrefs.com\nsemrush.com" },
+  { id: "vitals", label: "Web Vitals", blurb: "Lab (PageSpeed mobile + desktop) vs. field (CrUX phone + desktop) per URL. Big lab-vs-field gaps are where real regressions hide.", extraInput: "urls", extraLabel: "URLs to probe (optional — defaults to homepage; 1 per line)", extraPlaceholder: "/\n/pricing\n/blog" },
 ];
 
 const TIER_META = {
@@ -35,6 +45,15 @@ const SOURCE_COLOR: Record<string, string> = {
   ddg: "#de5833",
   startpage: "#4b5563",
   brave: "#fb542b",
+  // Domain Authority
+  opr: "#8b5cf6",
+  tranco: "#0ea5e9",
+  "cloudflare-radar": "#f38020",
+  // Vitals
+  "psi-mobile": "#34a853",
+  "psi-desktop": "#1a73e8",
+  "crux-phone": "#ea4335",
+  "crux-desktop": "#fbbc04",
 };
 
 function sourceChip(src: string): { bg: string; color: string; label: string } {
@@ -139,7 +158,7 @@ function TierRow({
 export default function Council() {
   const [feature, setFeature] = useState<CouncilFeature>("keywords");
   const [domain, setDomain] = useState("");
-  const [keywordsText, setKeywordsText] = useState("");
+  const [extrasText, setExtrasText] = useState("");
   const [includeLlm, setIncludeLlm] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -150,13 +169,17 @@ export default function Council() {
   const run = async () => {
     const d = domain.trim();
     if (!d) { setError("domain required"); return; }
-    if (feature === "serp" && !keywordsText.trim()) { setError("at least one keyword required for SERP council"); return; }
+    if (feature === "serp" && !extrasText.trim()) { setError("at least one keyword required for SERP council"); return; }
     setError("");
     setLoading(true);
     setData(null);
     try {
-      const keywords = feature === "serp" ? keywordsText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean) : undefined;
-      const resp = await runCouncilApi(feature, d, { keywords, includeLlm });
+      const lines = extrasText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+      const extras: { keywords?: string[]; competitors?: string[]; urls?: string[]; includeLlm: boolean } = { includeLlm };
+      if (feature === "serp") extras.keywords = lines;
+      else if (feature === "authority") extras.competitors = lines;
+      else if (feature === "vitals") extras.urls = lines;
+      const resp = await runCouncilApi(feature, d, extras);
       setData(resp);
     } catch (e: any) {
       setError(e?.message ?? String(e));
@@ -173,7 +196,7 @@ export default function Council() {
       title="Council"
       desc="Cross-source consensus analysis — each feature pulls from multiple SEO data sources, tiers what they agree on, and has the LLM role-play a panel of advisors giving per-item verdicts."
       purpose="When 3+ of our 13 integrated data sources agree on a keyword, referring domain, or SERP rank, that's a far stronger signal than any single source alone. The Council layer surfaces this overlap AND has the LLM tell you what to do about it."
-      sources={["GSC", "Bing", "Yandex", "Ahrefs WMT", "RSS", "DDG", "Startpage", "Brave"]}
+      sources={["GSC", "Bing", "Yandex", "Ahrefs WMT", "RSS", "DDG", "Startpage", "Brave", "OPR", "Tranco", "Cloudflare", "PageSpeed", "CrUX"]}
     >
       {/* Feature tabs */}
       <SectionCard title="Choose feature area">
@@ -181,7 +204,7 @@ export default function Council() {
           {FEATURES.map((f) => (
             <button
               key={f.id}
-              onClick={() => setFeature(f.id)}
+              onClick={() => { setFeature(f.id); setExtrasText(""); }}
               style={{
                 padding: "8px 16px",
                 borderRadius: 8,
@@ -213,14 +236,14 @@ export default function Council() {
             />
           </div>
 
-          {featureMeta.needsKeywords && (
+          {featureMeta.extraInput && (
             <div style={{ flex: 2, minWidth: 280 }}>
-              <label className="qa-kicker" style={{ display: "block", marginBottom: 4 }}>Keywords to probe (comma or newline separated)</label>
+              <label className="qa-kicker" style={{ display: "block", marginBottom: 4 }}>{featureMeta.extraLabel}</label>
               <textarea
-                value={keywordsText}
-                onChange={(e) => setKeywordsText(e.target.value)}
+                value={extrasText}
+                onChange={(e) => setExtrasText(e.target.value)}
                 rows={3}
-                placeholder={"best seo tools\nkeyword research\nbacklink audit"}
+                placeholder={featureMeta.extraPlaceholder}
                 style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, resize: "vertical" }}
                 disabled={loading}
               />

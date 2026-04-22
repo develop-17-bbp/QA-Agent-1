@@ -3193,22 +3193,26 @@ export async function runHealthDashboard(options: {
       // ── Daily report (for n8n cron / direct email / manual preview) ─────
       // ── Council — cross-source consensus + LLM advisor panel ─────────────
       // POST /api/council
-      // Body: { feature: "keywords" | "backlinks" | "serp", domain: string,
-      //         keywords?: string[] /* serp only */, includeLlm?: boolean }
+      // Body: { feature: "keywords" | "backlinks" | "serp" | "authority" | "vitals",
+      //         domain: string,
+      //         keywords?: string[] /* serp only */,
+      //         competitors?: string[] /* authority only */,
+      //         urls?: string[] /* vitals only */,
+      //         includeLlm?: boolean }
       // Returns: { context: CouncilContext, council: CouncilResult | null,
       //            elapsed: { aggregateMs, llmMs } }
       if (req.method === "POST" && url.pathname === "/api/council") {
         let body: string;
         try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { feature?: string; domain?: string; keywords?: string[]; includeLlm?: boolean };
+        let payload: { feature?: string; domain?: string; keywords?: string[]; competitors?: string[]; urls?: string[]; includeLlm?: boolean };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const feature = typeof payload.feature === "string" ? payload.feature : "";
         const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
         const includeLlm = payload.includeLlm !== false;
         if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
-        if (!["keywords", "backlinks", "serp"].includes(feature)) {
+        if (!["keywords", "backlinks", "serp", "authority", "vitals"].includes(feature)) {
           res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ error: "feature must be one of: keywords, backlinks, serp" }));
+          res.end(JSON.stringify({ error: "feature must be one of: keywords, backlinks, serp, authority, vitals" }));
           return;
         }
         try {
@@ -3220,10 +3224,18 @@ export async function runHealthDashboard(options: {
           } else if (feature === "backlinks") {
             const { buildBacklinksCouncilContext } = await import("./modules/backlinks-consensus.js");
             context = await buildBacklinksCouncilContext(domain);
-          } else {
+          } else if (feature === "serp") {
             const { buildSerpCouncilContext } = await import("./modules/serp-consensus.js");
             const keywords = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string") : [];
             context = await buildSerpCouncilContext({ domain, keywords });
+          } else if (feature === "authority") {
+            const { buildAuthorityCouncilContext } = await import("./modules/authority-consensus.js");
+            const competitors = Array.isArray(payload.competitors) ? payload.competitors.filter((c): c is string => typeof c === "string") : [];
+            context = await buildAuthorityCouncilContext({ domain, competitors });
+          } else {
+            const { buildVitalsCouncilContext } = await import("./modules/vitals-consensus.js");
+            const urls = Array.isArray(payload.urls) ? payload.urls.filter((u): u is string => typeof u === "string") : [];
+            context = await buildVitalsCouncilContext({ domain, urls });
           }
           const aggregateMs = Date.now() - aggregateStart;
 
