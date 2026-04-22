@@ -27,6 +27,7 @@ import {
   fetchHistoryStats,
   addTrackedPairApi,
   removeTrackedPairApi,
+  fetchStartpageSerp,
   type GscSite,
 } from "../api";
 
@@ -90,6 +91,8 @@ export default function PositionTracking() {
   const [liveDomain, setLiveDomain] = useState("");
   const [liveKeywords, setLiveKeywords] = useState("");
   const [strictHost, setStrictHost] = useState(false);
+  const [serpSource, setSerpSource] = useState<"ddg" | "startpage">("ddg");
+  const [startpageRegion, setStartpageRegion] = useState("US");
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState("");
   const [liveResults, setLiveResults] = useState<LiveResult[] | null>(null);
@@ -164,33 +167,69 @@ export default function PositionTracking() {
     setGscStats(new Map());
     setGscMatchedSite(null);
     try {
-      const pairs = kws.map((kw) => ({ domain: dom, keyword: kw }));
-      const resp = await trackPositions(pairs, { strictHost });
-      setLiveResults(resp.results ?? []);
-      setSampledAt(resp.sampledAt ?? "");
+      if (serpSource === "startpage") {
+        // Startpage path — per-keyword Playwright sweep. No history write,
+        // no tracked-pair registration (backend doesn't record Startpage
+        // samples into the DB — this is a one-off rank check).
+        const cleanDomain = dom.toLowerCase().replace(/^www\./, "");
+        const startpageResults: LiveResult[] = await Promise.all(
+          kws.map(async (kw) => {
+            try {
+              const bundle = await fetchStartpageSerp(kw, startpageRegion);
+              const match = bundle.results.find((r) => {
+                try {
+                  const h = new URL(r.url).hostname.toLowerCase().replace(/^www\./, "");
+                  return strictHost ? h === cleanDomain : (h === cleanDomain || h.endsWith("." + cleanDomain));
+                } catch {
+                  return false;
+                }
+              });
+              const top = bundle.results[0];
+              return {
+                domain: dom,
+                keyword: kw,
+                position: match?.position ?? null,
+                url: match?.url ?? null,
+                topUrl: top?.url ?? null,
+              };
+            } catch (e: any) {
+              return { domain: dom, keyword: kw, position: null, url: null, topUrl: null, error: e?.message ?? "startpage error" };
+            }
+          }),
+        );
+        setLiveResults(startpageResults);
+        setSampledAt(new Date().toISOString());
+        // Intentionally skip addTrackedPairApi and history fetch — Startpage
+        // is a one-off check, not a daily tracker.
+      } else {
+        const pairs = kws.map((kw) => ({ domain: dom, keyword: kw }));
+        const resp = await trackPositions(pairs, { strictHost });
+        setLiveResults(resp.results ?? []);
+        setSampledAt(resp.sampledAt ?? "");
 
-      // Auto-register each pair for daily GSC cron tracking
-      await Promise.allSettled(kws.map(kw => addTrackedPairApi(dom, kw)));
-      refreshTrackedStats();
+        // Auto-register each pair for daily GSC cron tracking
+        await Promise.allSettled(kws.map(kw => addTrackedPairApi(dom, kw)));
+        refreshTrackedStats();
 
-      // Fetch history series for each keyword so the chart reflects
-      // previously-recorded samples plus the one we just appended.
-      const series: HistorySeries[] = [];
-      for (const kw of kws) {
-        try {
-          const hist = await fetchKeywordHistory(dom, kw);
-          // New endpoint returns { points: [...] }; legacy returns { series: [...] }
-          const rawPoints = hist?.points ?? hist?.series ?? [];
-          const points: HistoryPoint[] = rawPoints.map((s: any) => ({
-            at: typeof s.at === "string" ? s.at.slice(0, 10) : "",
-            position: typeof s.position === "number" ? s.position : null,
-          }));
-          series.push({ key: kw, label: kw, points });
-        } catch {
-          // history read failure is non-fatal — skip this series
+        // Fetch history series for each keyword so the chart reflects
+        // previously-recorded samples plus the one we just appended.
+        const series: HistorySeries[] = [];
+        for (const kw of kws) {
+          try {
+            const hist = await fetchKeywordHistory(dom, kw);
+            // New endpoint returns { points: [...] }; legacy returns { series: [...] }
+            const rawPoints = hist?.points ?? hist?.series ?? [];
+            const points: HistoryPoint[] = rawPoints.map((s: any) => ({
+              at: typeof s.at === "string" ? s.at.slice(0, 10) : "",
+              position: typeof s.position === "number" ? s.position : null,
+            }));
+            series.push({ key: kw, label: kw, points });
+          } catch {
+            // history read failure is non-fatal — skip this series
+          }
         }
+        setHistorySeries(series);
       }
-      setHistorySeries(series);
 
       // GSC overlay — if the user has connected Google and has a verified
       // site for this domain, look up the real impressions / clicks / CTR /
@@ -355,18 +394,55 @@ export default function PositionTracking() {
         </>
       )}
 
-      {/* Live SERP sweep — uses DuckDuckGo and records each sample to history-db. */}
+      {/* Live SERP sweep — DuckDuckGo (with history) or Startpage (one-off, Google proxy). */}
       <div className="qa-panel" style={{ marginTop: 24, padding: 16 }}>
-        <div className="qa-panel-title">Live Rank Sweep (DuckDuckGo)</div>
+        <div className="qa-panel-title">Live Rank Sweep ({serpSource === "startpage" ? "Startpage" : "DuckDuckGo"})</div>
         <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4, marginBottom: 8 }}>
-          Query real DuckDuckGo search results for any domain + keyword combination. Each sweep is recorded to
-          local history so running it daily builds a ranking trend. No API key required.
+          {serpSource === "startpage"
+            ? "Query Startpage (Google proxy, ~0.9 SERP correlation). One-off check — not written to history. Good for spot-checks when you need a Google-accurate rank."
+            : "Query real DuckDuckGo search results for any domain + keyword combination. Each sweep is recorded to local history so running it daily builds a ranking trend. No API key required."}
         </p>
         <p style={{ fontSize: 11.5, color: "var(--warn)", marginTop: 0, marginBottom: 12, background: "var(--warn-bg)", border: "1px solid var(--warn-border)", padding: "6px 10px", borderRadius: 6 }}>
-          <strong>Honest framing:</strong> DDG ranks correlate ~0.7 with Google's SERP. Use this for{" "}
-          <strong>trend and delta</strong> tracking, not absolute "rank on Google". For first-party Google
-          data, connect GSC — the columns on the right show real Google impressions + position when available.
+          {serpSource === "startpage" ? (
+            <>
+              <strong>Startpage mode:</strong> ~0.9 correlation with Google. Rate-limited (~60/hr). Not written
+              to daily history. For automated trend tracking, switch back to DDG or connect GSC.
+            </>
+          ) : (
+            <>
+              <strong>Honest framing:</strong> DDG ranks correlate ~0.7 with Google's SERP. Use this for{" "}
+              <strong>trend and delta</strong> tracking, not absolute "rank on Google". For first-party Google
+              data, connect GSC — the columns on the right show real Google impressions + position when available.
+            </>
+          )}
         </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--panel-bg)" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>SERP source</span>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
+            <input type="radio" name="serp-source" value="ddg" checked={serpSource === "ddg"} onChange={() => setSerpSource("ddg")} />
+            <span>DuckDuckGo <span style={{ color: "var(--muted)", fontSize: 11 }}>(~0.7 corr · unlimited · history)</span></span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
+            <input type="radio" name="serp-source" value="startpage" checked={serpSource === "startpage"} onChange={() => setSerpSource("startpage")} />
+            <span>Startpage <span style={{ color: "var(--muted)", fontSize: 11 }}>(~0.9 corr · 60/hr · one-off)</span></span>
+          </label>
+          {serpSource === "startpage" && (
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginLeft: 12 }}>
+              <span style={{ color: "var(--text-secondary)" }}>Region</span>
+              <select value={startpageRegion} onChange={(e) => setStartpageRegion(e.target.value)} style={{ fontSize: 12, padding: "2px 6px", border: "1px solid var(--border)", borderRadius: 4, background: "var(--panel-bg)", color: "var(--text-primary)" }}>
+                <option value="US">US</option>
+                <option value="UK">UK</option>
+                <option value="IN">IN</option>
+                <option value="CA">CA</option>
+                <option value="AU">AU</option>
+                <option value="DE">DE</option>
+                <option value="FR">FR</option>
+                <option value="JP">JP</option>
+                <option value="BR">BR</option>
+              </select>
+            </label>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
           <div style={{ flex: 1, minWidth: 220 }}>
             <label className="qa-kicker" style={{ display: "block", marginBottom: 4 }}>Domain</label>
@@ -434,7 +510,7 @@ export default function PositionTracking() {
               <table className="qa-table" style={{ marginTop: 8 }}>
                 <thead>
                   <tr>
-                    {["Keyword", "DDG position", "Matched URL", "Top result"].map((h) => (
+                    {["Keyword", serpSource === "startpage" ? "Startpage position" : "DDG position", "Matched URL", "Top result"].map((h) => (
                       <th key={h} style={{ textAlign: "left", padding: "6px 10px", fontSize: 12, color: "var(--text-secondary)", borderBottom: "2px solid var(--border)" }}>{h}</th>
                     ))}
                     {gscMatchedSite && (

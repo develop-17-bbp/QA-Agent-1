@@ -6,6 +6,7 @@ import {
   addCompetitorRank,
   removeCompetitorRank,
   fetchCompetitorRankHistory,
+  fetchStartpageSerp,
   type CompetitorRankPair,
   type CompetitorRankStats,
   type CompetitorRankSnapshot,
@@ -36,6 +37,30 @@ export default function CompetitorRankTracker() {
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<{ domain: string; keyword: string } | null>(null);
   const [history, setHistory] = useState<CompetitorRankSnapshot[] | null>(null);
+  const [spotResults, setSpotResults] = useState<Map<string, { loading: boolean; position: number | null; error?: string }>>(new Map());
+
+  const spotKey = (d: string, k: string) => `${d}::${k}`;
+
+  const handleStartpageSpotCheck = async (d: string, k: string) => {
+    const key = spotKey(d, k);
+    setSpotResults((m) => new Map(m).set(key, { loading: true, position: null }));
+    try {
+      const bundle = await fetchStartpageSerp(k, region);
+      const clean = d.toLowerCase().replace(/^www\./, "");
+      const match = bundle.results.find((r) => {
+        try {
+          const host = new URL(r.url).hostname.toLowerCase().replace(/^www\./, "");
+          return host === clean || host.endsWith("." + clean);
+        } catch {
+          return false;
+        }
+      });
+      setSpotResults((m) => new Map(m).set(key, { loading: false, position: match?.position ?? null }));
+    } catch (ex) {
+      const msg = ex instanceof Error ? ex.message : String(ex);
+      setSpotResults((m) => new Map(m).set(key, { loading: false, position: null, error: msg.slice(0, 80) }));
+    }
+  };
 
   const refresh = async () => {
     setLoading(true);
@@ -166,6 +191,7 @@ export default function CompetitorRankTracker() {
                 <th>Region</th>
                 <th>DDG rank</th>
                 <th>Brave rank</th>
+                <th title="One-off Startpage lookup (~0.9 Google correlation). Not written to history.">Startpage</th>
                 <th>7d Δ</th>
                 <th>30d Δ</th>
                 <th>Best</th>
@@ -188,6 +214,16 @@ export default function CompetitorRankTracker() {
                       {discrep && <span title="DDG and Brave disagree by >10 positions" style={{ marginLeft: 4, color: "#d97706" }}>⚠</span>}
                     </td>
                     <td>{rankLabel(s.latest?.braveRank)}</td>
+                    <td>
+                      {(() => {
+                        const spot = spotResults.get(spotKey(s.domain, s.keyword));
+                        if (spot?.loading) return <span style={{ fontSize: 11, color: "var(--muted)" }}>checking…</span>;
+                        if (spot?.error) return <span style={{ fontSize: 11, color: "#dc2626" }} title={spot.error}>err</span>;
+                        if (spot && spot.position != null) return <span style={{ fontWeight: 600 }}>{rankLabel(spot.position)}</span>;
+                        if (spot && spot.position === null) return <span style={{ fontSize: 11, color: "var(--muted)" }}>not in top 20</span>;
+                        return <button className="qa-btn-ghost" onClick={() => handleStartpageSpotCheck(s.domain, s.keyword)} style={{ fontSize: 11, padding: "2px 8px" }}>Spot check</button>;
+                      })()}
+                    </td>
                     <td style={{ color: d7.color, fontWeight: 600 }}>{d7.text}</td>
                     <td style={{ color: d30.color, fontWeight: 600 }}>{d30.text}</td>
                     <td>{rankLabel(s.best)}</td>
