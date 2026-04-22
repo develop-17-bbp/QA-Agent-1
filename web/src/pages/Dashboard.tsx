@@ -6,6 +6,7 @@ import type { HealthSsePayload } from "../types/healthSse";
 import OptionWithTooltip from "../components/OptionWithTooltip";
 import RunProgressBanner, { type RunBannerState } from "../components/RunProgressBanner";
 import { DataSourceLegend } from "../components/AppLayout";
+import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
 
 export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
   const [urlsText, setUrlsText] = useState(initialUrls ?? "");
@@ -408,7 +409,8 @@ function SystemHealth() {
     totalRequests?: number;
     fallbackCount?: number;
   } | null>(null);
-  const [recentRuns, setRecentRuns] = useState<number>(0);
+  const [recentRuns, setRecentRuns] = useState<number | null>(null);
+  const [runsTrend, setRunsTrend] = useState<number[]>([]);
 
   useEffect(() => {
     fetchLlmStats()
@@ -422,47 +424,78 @@ function SystemHealth() {
       .then((h) => {
         const allRuns = h.days.flatMap((d) => d.runs);
         setRecentRuns(allRuns.length);
+        // Build a per-day count sparkline for the last 14 days (oldest → newest).
+        const byDay = new Map<string, number>();
+        for (const d of h.days) byDay.set(d.date, d.runs.length);
+        const today = new Date();
+        const series: number[] = [];
+        for (let i = 13; i >= 0; i--) {
+          const dt = new Date(today);
+          dt.setUTCDate(today.getUTCDate() - i);
+          const key = dt.toISOString().slice(0, 10);
+          series.push(byDay.get(key) ?? 0);
+        }
+        setRunsTrend(series);
       })
       .catch(() => {});
   }, []);
+
+  const loaded = stats != null && recentRuns != null;
+  const fallbackRate = stats && stats.totalRequests
+    ? +((stats.fallbackCount ?? 0) / Math.max(1, stats.totalRequests) * 100).toFixed(1)
+    : 0;
 
   return (
     <motion.section
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: 0.2 }}
-      style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap" }}
+      style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}
     >
-      {[
-        {
-          icon: stats?.ollamaAvailable ? "🟢" : "⚪",
-          label: "Ollama",
-          value: stats?.ollamaAvailable ? "Online" : "Offline",
-          color: stats?.ollamaAvailable ? "var(--ok)" : "var(--muted)",
-        },
-        {
-          icon: "📋",
-          label: "Past Runs",
-          value: String(recentRuns),
-          color: "var(--text)",
-        },
-        {
-          icon: "🧠",
-          label: "LLM Requests",
-          value: stats?.totalRequests ? String(stats.totalRequests) : "—",
-          color: "var(--text)",
-        },
-      ].map((item) => (
-        <div key={item.label} style={{
-          background: "var(--glass)", border: "1px solid var(--border)",
-          borderRadius: "var(--radius-sm)", padding: "10px 16px",
-          display: "flex", alignItems: "center", gap: 10, fontSize: 13,
-        }}>
-          <span style={{ fontSize: 16 }}>{item.icon}</span>
-          <span style={{ color: "var(--muted)" }}>{item.label}</span>
-          <span style={{ fontWeight: 700, color: item.color }}>{item.value}</span>
-        </div>
-      ))}
+      {!loaded ? (
+        <>
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+        </>
+      ) : (
+        <>
+          <MetricCard
+            label="Local LLM"
+            value={stats?.ollamaAvailable ? "Online" : "Offline"}
+            tone={stats?.ollamaAvailable ? "ok" : "bad"}
+            caption={stats?.ollamaAvailable ? "Ollama ready for inference" : "Start Ollama to enable AI features"}
+            source="ollama"
+          />
+          <MetricCard
+            label="Past Runs"
+            value={recentRuns ?? 0}
+            format="compact"
+            sparkline={runsTrend.length ? runsTrend : undefined}
+            tone="accent"
+            caption="Last 14 days"
+            source="history-db"
+          />
+          <MetricCard
+            label="LLM Requests"
+            value={stats?.totalRequests ?? 0}
+            format="compact"
+            delta={fallbackRate > 0 ? -fallbackRate : undefined}
+            deltaLabel="fallback rate"
+            tone={fallbackRate > 20 ? "warn" : "default"}
+            caption={fallbackRate > 0 ? `${fallbackRate}% fell back to cloud` : "All served by local Ollama"}
+            source="llm-router"
+          />
+          <MetricCard
+            label="Integrations"
+            value="Connect →"
+            tone="accent"
+            caption="Google, Bing, Yandex, Ahrefs + 9 more"
+            onClick={() => { window.location.href = "/integrations"; }}
+          />
+        </>
+      )}
     </motion.section>
   );
 }

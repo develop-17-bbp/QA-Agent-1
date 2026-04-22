@@ -75,6 +75,7 @@ import { searchStartpage } from "./providers/startpage-serp.js";
 import { composeDailyReport, type DailyReport, type DailyReportFormTest } from "./modules/daily-report.js";
 import { recordUsage, deriveClientKey, getUsageSnapshot } from "./modules/usage-meter.js";
 import { primeRuntimeKeys, setRuntimeKeys, clearRuntimeKey, listRuntimeKeyNames } from "./modules/runtime-keys.js";
+import { buildCacheKey, cachedResponse, getCacheStats, invalidateByPrefix } from "./modules/response-cache.js";
 import {
   isBingOAuthClientConfigured,
   buildBingOAuthAuthorizeUrl,
@@ -1217,6 +1218,12 @@ export async function runHealthDashboard(options: {
           res.end(dashboardHtml());
           return;
         }
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/cache-stats") {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify(getCacheStats()));
+        return;
       }
 
       if (req.method === "GET" && url.pathname === "/api/history") {
@@ -2439,8 +2446,9 @@ export async function runHealthDashboard(options: {
         if (!kw) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keyword required" })); return; }
         try {
           const { researchKeyword } = await import("./modules/keyword-research.js");
-          const result = await researchKeyword(kw, region);
-          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          const ck = buildCacheKey("/api/keyword-research", { kw, region });
+          const { value: result, hit } = await cachedResponse(ck, 10 * 60_000, () => researchKeyword(kw, region));
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
           res.end(JSON.stringify(result));
         } catch (e) {
           meterOk = false;
@@ -2781,6 +2789,9 @@ export async function runHealthDashboard(options: {
         }
         try {
           await setRuntimeKeys(updates);
+          // Bust any cached responses that depended on now-changed keys
+          invalidateByPrefix("/api/integrations/status");
+          invalidateByPrefix("/api/council");
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ ok: true, saved: Object.keys(updates), rejected, active: listRuntimeKeyNames() }));
         } catch (e) {
@@ -2949,12 +2960,13 @@ export async function runHealthDashboard(options: {
         const q = typeof payload.query === "string" ? payload.query.trim() : "";
         if (!q) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "query required" })); return; }
         try {
-          const bundle = await fetchBrandMentions({
+          const ck = buildCacheKey("/api/brand-mentions", { q, sources: payload.sources, loc: payload.googleNewsLocale });
+          const { value: bundle, hit } = await cachedResponse(ck, 15 * 60_000, () => fetchBrandMentions({
             query: q,
             sources: Array.isArray(payload.sources) ? (payload.sources as never[]) : undefined,
             googleNewsLocale: typeof payload.googleNewsLocale === "string" ? payload.googleNewsLocale : undefined,
-          });
-          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          }));
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
           res.end(JSON.stringify(bundle));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
         return;
@@ -2970,9 +2982,10 @@ export async function runHealthDashboard(options: {
         const region = typeof payload.region === "string" ? payload.region : "US";
         if (!q) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "query required" })); return; }
         try {
-          const result = await searchStartpage(q, region);
-          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
-          res.end(JSON.stringify(result.value));
+          const ck = buildCacheKey("/api/serp-startpage", { q, region });
+          const { value, hit } = await cachedResponse(ck, 5 * 60_000, () => searchStartpage(q, region).then((dp) => dp.value));
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(value));
         } catch (e) { res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
         return;
       }
@@ -3217,26 +3230,33 @@ export async function runHealthDashboard(options: {
         }
         try {
           const aggregateStart = Date.now();
-          let context;
-          if (feature === "keywords") {
-            const { buildKeywordCouncilContext } = await import("./modules/keyword-consensus.js");
-            context = await buildKeywordCouncilContext(domain);
-          } else if (feature === "backlinks") {
-            const { buildBacklinksCouncilContext } = await import("./modules/backlinks-consensus.js");
-            context = await buildBacklinksCouncilContext(domain);
-          } else if (feature === "serp") {
-            const { buildSerpCouncilContext } = await import("./modules/serp-consensus.js");
-            const keywords = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string") : [];
-            context = await buildSerpCouncilContext({ domain, keywords });
-          } else if (feature === "authority") {
-            const { buildAuthorityCouncilContext } = await import("./modules/authority-consensus.js");
-            const competitors = Array.isArray(payload.competitors) ? payload.competitors.filter((c): c is string => typeof c === "string") : [];
-            context = await buildAuthorityCouncilContext({ domain, competitors });
-          } else {
-            const { buildVitalsCouncilContext } = await import("./modules/vitals-consensus.js");
-            const urls = Array.isArray(payload.urls) ? payload.urls.filter((u): u is string => typeof u === "string") : [];
-            context = await buildVitalsCouncilContext({ domain, urls });
-          }
+          // Cache the consensus aggregate only. LLM council runs outside the
+          // cache because its cost (10-45s Ollama) justifies a hit even on
+          // warm consensus, and users re-running the council typically want
+          // fresh advisor commentary.
+          const cacheKey = buildCacheKey(`/api/council:${feature}`, { domain, keywords: payload.keywords, competitors: payload.competitors, urls: payload.urls });
+          const { value: context, hit: consensusCacheHit } = await cachedResponse(cacheKey, 5 * 60_000, async () => {
+            if (feature === "keywords") {
+              const { buildKeywordCouncilContext } = await import("./modules/keyword-consensus.js");
+              return await buildKeywordCouncilContext(domain);
+            } else if (feature === "backlinks") {
+              const { buildBacklinksCouncilContext } = await import("./modules/backlinks-consensus.js");
+              return await buildBacklinksCouncilContext(domain);
+            } else if (feature === "serp") {
+              const { buildSerpCouncilContext } = await import("./modules/serp-consensus.js");
+              const keywords = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string") : [];
+              return await buildSerpCouncilContext({ domain, keywords });
+            } else if (feature === "authority") {
+              const { buildAuthorityCouncilContext } = await import("./modules/authority-consensus.js");
+              const competitors = Array.isArray(payload.competitors) ? payload.competitors.filter((c): c is string => typeof c === "string") : [];
+              return await buildAuthorityCouncilContext({ domain, competitors });
+            } else {
+              const { buildVitalsCouncilContext } = await import("./modules/vitals-consensus.js");
+              const urls = Array.isArray(payload.urls) ? payload.urls.filter((u): u is string => typeof u === "string") : [];
+              return await buildVitalsCouncilContext({ domain, urls });
+            }
+          });
+          void consensusCacheHit;
           const aggregateMs = Date.now() - aggregateStart;
 
           let council: unknown = null;

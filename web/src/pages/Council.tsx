@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
-import { ErrorBanner, LoadingPanel } from "../components/UI";
+import { ErrorBanner } from "../components/UI";
+import { SkeletonCard, MetricCard, MetricCardSkeleton } from "../components/MetricCard";
 import {
   runCouncilApi,
   type CouncilFeature,
@@ -474,7 +475,21 @@ export default function Council() {
       </SectionCard>
 
       {error && <ErrorBanner error={error} />}
-      {loading && <LoadingPanel message={`Gathering ${featureMeta.label.toLowerCase()} data from every configured source…`} />}
+      {loading && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid var(--border)", fontSize: 12.5, color: "var(--muted)" }}>
+            Gathering {featureMeta.label.toLowerCase()} data from every configured source… the LLM council runs last (~10-45s on CPU).
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            <MetricCardSkeleton tone="ok" />
+            <MetricCardSkeleton tone="warn" />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </div>
+          <SkeletonCard rows={6} />
+          <SkeletonCard rows={4} />
+        </div>
+      )}
 
       {data && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -488,6 +503,37 @@ export default function Council() {
           >
             <div style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.55 }}>
               {data.context.featureTagline}
+            </div>
+
+            {/* Tier-count KPI strip */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 14 }}>
+              <MetricCard
+                label="Strong consensus"
+                value={data.context.tierTop.length}
+                tone="ok"
+                caption="3+ sources agree"
+                format="compact"
+              />
+              <MetricCard
+                label="Partial agreement"
+                value={data.context.tierMid.length}
+                tone="warn"
+                caption="exactly 2 sources"
+                format="compact"
+              />
+              <MetricCard
+                label="Single-source"
+                value={data.context.tierBottom.length}
+                tone="default"
+                caption="needs triangulation"
+                format="compact"
+              />
+              <MetricCard
+                label="Sources active"
+                value={`${data.context.sourcesQueried.length}/${data.context.sourcesQueried.length + data.context.sourcesFailed.length}`}
+                tone="accent"
+                caption={data.context.sourcesFailed.length > 0 ? `${data.context.sourcesFailed.length} unavailable` : "all configured sources live"}
+              />
             </div>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>

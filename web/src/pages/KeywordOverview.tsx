@@ -5,6 +5,7 @@ import { fetchKeywordResearch, fetchKeywordSuggestions, fetchKeywordTrends, fetc
 import { useGoogleOverlay } from "../lib/google-overlay";
 import { useRegion } from "../components/RegionPicker";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
+import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
 
 import { ErrorBanner } from "../components/UI";
 /**
@@ -178,8 +179,11 @@ export default function KeywordOverview() {
 
       {error && <ErrorBanner error={error} />}
       {loading && (
-        <div className="qa-panel">
-          <div className="qa-loading-panel">Querying Google Trends, Suggest, Wikipedia and DuckDuckGo SERP…</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginTop: 16 }}>
+          <MetricCardSkeleton tone="accent" />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
+          <MetricCardSkeleton />
         </div>
       )}
 
@@ -270,6 +274,52 @@ export default function KeywordOverview() {
               )}
             </div>
           )}
+
+          {/* ── Headline KPI strip (uniform MetricCards) ─────────── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+            <MetricCard
+              label="Monthly volume"
+              value={data.volume}
+              format="compact"
+              tone="accent"
+              sparkline={Array.isArray(data.trend) ? data.trend : undefined}
+              caption={`${region} region`}
+              source="google-ads"
+            />
+            <MetricCard
+              label="Keyword difficulty"
+              value={data.difficulty}
+              format="percent"
+              tone={data.difficulty >= 80 ? "bad" : data.difficulty >= 50 ? "warn" : "ok"}
+              caption={data.difficultyLabel}
+            />
+            <MetricCard
+              label="CPC"
+              value={data.cpc ?? 0}
+              format="currency"
+              tone="default"
+              caption={`Competitive density: ${data.competitiveDensity?.toFixed(2) ?? "0.00"}`}
+              source="google-ads"
+            />
+            <MetricCard
+              label="Global volume"
+              value={data.globalVolume ?? 0}
+              format="compact"
+              tone="default"
+              caption={`${(data.countryVolumes ?? []).length} countries tracked`}
+            />
+            {velocity && (
+              <MetricCard
+                label="Articles (4 weeks)"
+                value={velocity.total}
+                format="compact"
+                sparkline={velocity.weekly}
+                tone={velocity.total > 20 ? "ok" : "default"}
+                caption={`${velocity.providersHit.length} RSS sources`}
+                source="rss"
+              />
+            )}
+          </div>
 
           {/* ── Metrics Row ──────────────────────────────────────── */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>

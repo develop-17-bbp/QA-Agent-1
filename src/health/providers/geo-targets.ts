@@ -19,6 +19,11 @@ export interface GeoTarget {
 }
 
 export const GEO_TARGETS: GeoTarget[] = [
+  // "WW" = Worldwide / Global — mapped to DDG's worldwide code and a
+  // googleAdsId that callers can treat as "no geo constraint" (the
+  // keyword-research module already falls through to a global volume
+  // query when the region isn't found in country-specific mappings).
+  { iso: "WW", name: "Global (Worldwide)", googleAdsId: 2840, defaultLang: "en", ddgRegion: "wt-wt" },
   { iso: "US", name: "United States",      googleAdsId: 2840, defaultLang: "en", ddgRegion: "us-en" },
   { iso: "GB", name: "United Kingdom",     googleAdsId: 2826, defaultLang: "en", ddgRegion: "uk-en" },
   { iso: "CA", name: "Canada",             googleAdsId: 2124, defaultLang: "en", ddgRegion: "ca-en" },
