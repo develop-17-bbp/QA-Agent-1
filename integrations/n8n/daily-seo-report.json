@@ -1,0 +1,93 @@
+{
+  "name": "QA-Agent — Daily SEO Report (05:30 UTC)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "30 5 * * *" }
+          ]
+        }
+      },
+      "id": "schedule-node",
+      "name": "Schedule · Daily 05:30 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.QA_AGENT_BASE_URL || 'http://localhost:3847'}}/api/daily-report",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"sites\": [\n    \"https://www.realdrseattle.com/\"\n  ],\n  \"includePageSpeed\": true,\n  \"includeFormTests\": true,\n  \"maxPages\": 50\n}",
+        "options": {
+          "timeout": 600000,
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      },
+      "id": "http-request",
+      "name": "QA-Agent · /api/daily-report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "qa-agent-bearer", "name": "QA-Agent Bearer Token" }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.SMTP_FROM || 'qa-agent@example.com'}}",
+        "toEmail": "={{$env.SEO_TEAM_EMAILS || 'seo@example.com'}}",
+        "subject": "={{$json.subject}}",
+        "emailFormat": "both",
+        "html": "={{$json.html}}",
+        "text": "={{$json.text}}",
+        "options": {
+          "appendAttribution": false,
+          "replyTo": "={{$env.SMTP_REPLY_TO || ''}}"
+        }
+      },
+      "id": "email-node",
+      "name": "Send Email · SEO Team",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [820, 300],
+      "credentials": {
+        "smtp": { "id": "seo-smtp", "name": "SEO Team SMTP" }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## QA-Agent daily SEO report\n\n**Schedule:** every day at 05:30 UTC (11:00 IST)\n\n**Flow:**\n1. Cron fires at 05:30 UTC\n2. POST to `/api/daily-report` on the QA-Agent host\n   - sends bearer auth from the `QA-Agent Bearer Token` credential\n   - the endpoint runs a fresh 50-page crawl + PageSpeed + form tests\n   - responds with `subject` / `html` / `text` fields plus the full data payload\n3. Send Email node pipes those fields into your SMTP\n\n**To customize:**\n- Change the cron expression in the Schedule node (e.g. `0 3 * * 1` = Mon 3 UTC)\n- Edit the JSON body in the HTTP Request node to add more `sites` or `formTestSiteIds`\n- Update the env vars `QA_AGENT_BASE_URL`, `SEO_TEAM_EMAILS`, `SMTP_FROM`, `SMTP_REPLY_TO` in the n8n instance settings\n\n**Required credentials:**\n- `QA-Agent Bearer Token` (Header Auth): name = `Authorization`, value = `Bearer <DAILY_REPORT_TOKEN from QA-Agent .env>`\n- `SEO Team SMTP` (SMTP): host/port/user/pass for Gmail, SendGrid, or whatever your team uses",
+        "height": 280,
+        "width": 420
+      },
+      "id": "notes-sticky",
+      "name": "Setup notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [260, 540]
+    }
+  ],
+  "connections": {
+    "Schedule · Daily 05:30 UTC": {
+      "main": [[{ "node": "QA-Agent · /api/daily-report", "type": "main", "index": 0 }]]
+    },
+    "QA-Agent · /api/daily-report": {
+      "main": [[{ "node": "Send Email · SEO Team", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "",
+  "id": "",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "Daily QA-Agent SEO report: broken links + PageSpeed + form tests, emailed to the SEO team at 05:30 UTC."
+  },
+  "tags": []
+}

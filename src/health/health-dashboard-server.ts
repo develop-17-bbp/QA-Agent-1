@@ -72,6 +72,7 @@ import { ingestGscLinksCsv, fetchGscLinksBundle } from "./providers/gsc-links-cs
 import { ingestAwtBacklinksCsv, fetchAwtBundle } from "./providers/ahrefs-webmaster-csv.js";
 import { fetchBrandMentions } from "./providers/rss-aggregator.js";
 import { searchStartpage } from "./providers/startpage-serp.js";
+import { composeDailyReport, type DailyReport, type DailyReportFormTest } from "./modules/daily-report.js";
 import {
   addCompetitorPair,
   removeCompetitorPair,
@@ -2865,6 +2866,141 @@ export async function runHealthDashboard(options: {
           res.end(JSON.stringify(summary));
         } catch (e) {
           res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) }));
+        }
+        return;
+      }
+
+      // ── Daily report (for n8n cron / direct email / manual preview) ─────
+      // POST /api/daily-report
+      // Body: { sites: string[], includePageSpeed?: boolean,
+      //         includeFormTests?: boolean, formTestSiteIds?: string[],
+      //         maxPages?: number, existingRunId?: string }
+      //
+      // Returns: { subject, html, text, summary, sites[], formTests[] } ready
+      // to hand to n8n's Send Email node. Requires DAILY_REPORT_TOKEN via
+      // Authorization: Bearer header when set in .env (so public deployments
+      // can't trigger crawls). Without the env var, endpoint is open (handy
+      // for local testing).
+      if (req.method === "POST" && url.pathname === "/api/daily-report") {
+        const expectedToken = process.env.DAILY_REPORT_TOKEN?.trim();
+        if (expectedToken) {
+          const auth = req.headers["authorization"];
+          if (typeof auth !== "string" || !auth.startsWith("Bearer ") || auth.slice("Bearer ".length) !== expectedToken) {
+            res.writeHead(401, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ error: "Unauthorized — pass `Authorization: Bearer <DAILY_REPORT_TOKEN>`" }));
+            return;
+          }
+        }
+        let body: string;
+        try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: {
+          sites?: string[];
+          includePageSpeed?: boolean;
+          includeFormTests?: boolean;
+          formTestSiteIds?: string[];
+          maxPages?: number;
+          existingRunId?: string;
+        };
+        try { payload = body ? JSON.parse(body) : {}; } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+
+        try {
+          // Step 1: get crawl reports — either reuse an existing run or fire a
+          // fresh capped crawl. Fresh crawl respects the request's maxPages
+          // and only enables PageSpeed when asked (both PSI strategies).
+          let runId: string | undefined;
+          let runStartedAt: string | undefined;
+          let runFinishedAt: string | undefined;
+          let reports: SiteHealthReport[] = [];
+
+          if (typeof payload.existingRunId === "string" && isSafeRunIdSegment(payload.existingRunId)) {
+            const raw = await loadRawReportsForRun(outRoot, payload.existingRunId);
+            if (!raw) {
+              res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
+              res.end(JSON.stringify({ error: `Run not found: ${payload.existingRunId}` }));
+              return;
+            }
+            runId = payload.existingRunId;
+            reports = raw.reports;
+          } else {
+            const sites = Array.isArray(payload.sites) ? payload.sites.map((u) => String(u).trim()).filter(Boolean) : [];
+            if (sites.length === 0) {
+              res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+              res.end(JSON.stringify({ error: "Provide `sites` (non-empty array of URLs) or `existingRunId`." }));
+              return;
+            }
+            const extra: Partial<HealthDashboardOrchestrateOptions> = { urls: sites };
+            if (typeof payload.maxPages === "number" && payload.maxPages > 0) extra.maxPages = payload.maxPages;
+            else extra.maxPages = 50;
+            if (payload.includePageSpeed === true) {
+              const ps = baseOrchestrate.pageSpeed;
+              extra.pageSpeed = { enabled: true, strategies: ["mobile", "desktop"], maxUrls: ps?.maxUrls ?? 10, concurrency: ps?.concurrency ?? 3, timeoutMs: ps?.timeoutMs ?? 90_000 };
+            }
+            const before = new Date().toISOString();
+            runStartedAt = before;
+            const result = await runOrchestrate(extra);
+            runFinishedAt = new Date().toISOString();
+            runId = result?.runId;
+            if (runId) {
+              const raw = await loadRawReportsForRun(outRoot, runId);
+              if (raw) reports = raw.reports;
+            }
+          }
+
+          // Step 2: run form tests when requested — use config/sites.json,
+          // optionally filtered to formTestSiteIds.
+          const formTests: DailyReportFormTest[] = [];
+          if (payload.includeFormTests !== false) {
+            try {
+              const configPath = path.join(process.cwd(), "config", "sites.json");
+              const raw = await readFile(configPath, "utf8").catch(() => null);
+              if (raw) {
+                const parsed = sitesConfigSchema.safeParse(JSON.parse(raw));
+                if (parsed.success) {
+                  const ids = Array.isArray(payload.formTestSiteIds) ? payload.formTestSiteIds : undefined;
+                  const filtered = parsed.data.sites.filter((s) =>
+                    s.enabled && (ids ? ids.includes(s.id) : true),
+                  );
+                  if (filtered.length > 0) {
+                    const artifactsRoot = path.join(process.cwd(), "artifacts", "form-tests");
+                    const summary = await orchestrateRun({
+                      config: { sites: filtered, defaultNotify: parsed.data.defaultNotify },
+                      configPath,
+                      concurrency: Math.min(3, filtered.length),
+                      artifactsRoot,
+                      headless: true,
+                    });
+                    for (const r of summary.results) {
+                      formTests.push({
+                        siteId: r.siteId,
+                        siteName: r.siteName,
+                        url: r.url,
+                        status: r.status,
+                        durationMs: r.durationMs,
+                        errorMessage: r.errorMessage,
+                      });
+                    }
+                  }
+                }
+              }
+            } catch {
+              // Form-tests failure shouldn't nuke the whole report; we'll
+              // still ship broken-link + PageSpeed data.
+            }
+          }
+
+          const report: DailyReport = composeDailyReport({
+            reports,
+            runId,
+            runStartedAt,
+            runFinishedAt,
+            formTests,
+          });
+
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify(report));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
         }
         return;
       }
