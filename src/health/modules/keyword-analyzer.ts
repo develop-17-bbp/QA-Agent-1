@@ -1,6 +1,7 @@
 import type { SiteHealthReport } from "../types.js";
 import { researchKeyword } from "./keyword-research.js";
 import { dp, type DataPoint } from "../providers/types.js";
+import { fetchKeywordVolume, isGoogleAdsConfigured, type KeywordVolumeResult } from "../providers/google-ads.js";
 
 // ── Seed-based crawl keyword extractor (unchanged) ──────────────────────────
 
@@ -229,6 +230,55 @@ export async function generateMagicKeywords(seed: string, regionCode = "US"): Pr
 
   const keywords = [seedRow, ...variationRows, ...questionRows];
 
+  // ── Google Ads override — exact monthly volume + CPC per keyword ──────
+  // When an Ads account is configured, replace the bucketed "1K-10K" strings
+  // with the real integer Google Ads returns (e.g. "4,400"). Same data source
+  // Semrush / Ahrefs use for their own numbers. Batched in groups of 20
+  // (Ads API limit). If Ads errors or is unconfigured, bucketed ranges stay
+  // as the fallback so the table never comes back empty.
+  const adsPopulated: string[] = [];
+  if (isGoogleAdsConfigured() && keywords.length > 0) {
+    const allKws = keywords.map((k) => k.keyword);
+    const batches: string[][] = [];
+    for (let i = 0; i < allKws.length; i += 20) batches.push(allKws.slice(i, i + 20));
+    const adsMap = new Map<string, KeywordVolumeResult>();
+    for (const batch of batches) {
+      try {
+        const results = await fetchKeywordVolume(batch, regionCode);
+        for (const r of results) adsMap.set(r.keyword.toLowerCase().trim(), r);
+      } catch {
+        // One batch failure shouldn't nuke the page — keep whatever we have.
+        break;
+      }
+    }
+    if (adsMap.size > 0) {
+      for (const row of keywords) {
+        const hit = adsMap.get(row.keyword.toLowerCase().trim());
+        if (!hit) continue;
+        const v = hit.avgMonthlySearches?.value;
+        if (typeof v === "number" && v >= 0) {
+          row.volume = v.toLocaleString();
+          row.volumeData = dp<number>(v, "google-ads", "high", 24 * 60 * 60 * 1000, "Real monthly searches from Google Ads Keyword Planner");
+          adsPopulated.push(row.keyword);
+        }
+        const cpcLow = hit.lowTopOfPageBidMicros?.value;
+        const cpcHigh = hit.highTopOfPageBidMicros?.value;
+        if (typeof cpcLow === "number" && typeof cpcHigh === "number" && cpcHigh > 0) {
+          const mid = (cpcLow + cpcHigh) / 2;
+          row.cpc = `$${mid.toFixed(2)}`;
+        }
+        // Competition index → difficulty bucket override if present.
+        const compIdx = hit.competitionIndex?.value;
+        if (typeof compIdx === "number" && compIdx >= 0) {
+          row.difficulty = bucketDifficulty(compIdx);
+          row.difficultyData = dp<number>(compIdx, "google-ads", "high", 24 * 60 * 60 * 1000, "Competition index (0-100) from Google Ads Keyword Planner");
+        }
+      }
+      providersHit.push("google-ads");
+      realDataFields.push("volume", "cpc", "difficulty");
+    }
+  }
+
   const clusters: MagicKeywordCluster[] = research.clusters.map((c) => ({
     name: c.label,
     keywords: c.keywords,
@@ -236,8 +286,11 @@ export async function generateMagicKeywords(seed: string, regionCode = "US"): Pr
 
   // Intent classification is deterministic regex — list as real, not estimated.
   const augmentedReal = Array.from(new Set([...realDataFields, "intent-classification"]));
-  // CPC isn't populated from any free provider today.
-  const augmentedMissing = Array.from(new Set([...missingFields, "cpc"]));
+  // CPC is populated when Google Ads is configured; keep "cpc" missing only
+  // when no Ads data came back for any keyword.
+  const augmentedMissing = adsPopulated.length > 0
+    ? Array.from(new Set(missingFields)).filter((f) => f !== "cpc")
+    : Array.from(new Set([...missingFields, "cpc"]));
 
   void now; // keep the timestamp anchor for future expansion
   return {
@@ -248,7 +301,7 @@ export async function generateMagicKeywords(seed: string, regionCode = "US"): Pr
       realDataFields: augmentedReal,
       estimatedFields,
       missingFields: augmentedMissing,
-      providersHit,
+      providersHit: Array.from(new Set(providersHit)),
       providersFailed,
     },
   };

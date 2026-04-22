@@ -20,6 +20,7 @@ import { fetchSuggestions, fetchQuestionSuggestions } from "../providers/google-
 import { fetchBestMatchPageviews } from "../providers/wikipedia-pageviews.js";
 import { searchSerp } from "../agentic/duckduckgo-serp.js";
 import { ddgRegionCode } from "../providers/geo-targets.js";
+import { fetchKeywordVolume as fetchAdsVolume, isGoogleAdsConfigured } from "../providers/google-ads.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -233,18 +234,78 @@ export async function researchKeyword(keyword: string, regionCode = "US"): Promi
   }
 
   // ── Derive volume / difficulty from real signals ────────────────
-  const volume = estimateVolumeFromSignals({
+  // Use Google Ads as the PRIMARY source when configured — same data Semrush
+  // and Ahrefs use for their own numbers. Fall back to the heuristic volume
+  // estimator only when Ads isn't available for this keyword.
+  let volume = estimateVolumeFromSignals({
     trendAvg,
     trendPeak,
     wikiMonthly,
     suggestCount: suggestions.length,
   });
-  const globalVolume = Math.round(volume * 3.5); // rough global-to-US ratio
-  const difficulty = computeDifficultyFromSerp(serp);
-  estimatedFields.push("volume", "globalVolume", "difficulty", "countryVolumes");
+  let globalVolume = Math.round(volume * 3.5);
+  let difficulty = computeDifficultyFromSerp(serp);
 
-  // ── Build variations with proportional volume split ─────────────
+  const adsVariationVolumes = new Map<string, number>();
+  const adsQuestionVolumes = new Map<string, number>();
+  let realAdsSeed = false;
+  let realAdsCpc: number | undefined;
+  let realAdsCompetitionIndex: number | undefined;
+
+  if (isGoogleAdsConfigured()) {
+    try {
+      const adsKws = [clean, ...suggestions.slice(0, 10), ...questions.slice(0, 5)];
+      const adsBatches: string[][] = [];
+      for (let i = 0; i < adsKws.length; i += 20) adsBatches.push(adsKws.slice(i, i + 20));
+      type AdsRow = Awaited<ReturnType<typeof fetchAdsVolume>>[number];
+      const adsMap = new Map<string, AdsRow>();
+      for (const batch of adsBatches) {
+        try {
+          const r = await fetchAdsVolume(batch, region);
+          for (const row of r) adsMap.set(row.keyword.toLowerCase().trim(), row);
+        } catch { /* partial failure — use whatever came back */ }
+      }
+      if (adsMap.size > 0) {
+        providersHit.push("google-ads");
+        const seedRow = adsMap.get(clean.toLowerCase().trim());
+        if (seedRow && typeof seedRow.avgMonthlySearches?.value === "number") {
+          volume = seedRow.avgMonthlySearches.value;
+          globalVolume = Math.round(volume * 3.5);
+          realAdsSeed = true;
+          realDataFields.push("volume");
+          const lo = seedRow.lowTopOfPageBidMicros?.value;
+          const hi = seedRow.highTopOfPageBidMicros?.value;
+          if (typeof lo === "number" && typeof hi === "number" && hi > 0) {
+            realAdsCpc = Math.round(((lo + hi) / 2) * 100) / 100;
+          }
+          if (typeof seedRow.competitionIndex?.value === "number") {
+            realAdsCompetitionIndex = seedRow.competitionIndex.value;
+            // Let Ads competition index override SERP-based difficulty.
+            difficulty = Math.max(10, Math.min(100, realAdsCompetitionIndex));
+            realDataFields.push("difficulty");
+          }
+        }
+        for (const s of suggestions) {
+          const row = adsMap.get(s.toLowerCase().trim());
+          const v = row?.avgMonthlySearches?.value;
+          if (typeof v === "number") adsVariationVolumes.set(s, v);
+        }
+        for (const q of questions) {
+          const row = adsMap.get(q.toLowerCase().trim());
+          const v = row?.avgMonthlySearches?.value;
+          if (typeof v === "number") adsQuestionVolumes.set(q, v);
+        }
+      }
+    } catch { /* non-fatal */ }
+  }
+  if (!realAdsSeed) estimatedFields.push("volume", "globalVolume", "countryVolumes");
+
+  // ── Build variations with real Ads volume when available, proportional fallback otherwise ──
   const variations: KeywordVariation[] = suggestions.slice(0, 10).map((s, i) => {
+    const adsV = adsVariationVolumes.get(s);
+    if (typeof adsV === "number") {
+      return { keyword: s, volume: adsV, difficulty: Math.max(10, difficulty - i * 3) };
+    }
     const share = Math.max(0.02, 0.5 / (i + 1));
     return {
       keyword: s,
@@ -253,11 +314,17 @@ export async function researchKeyword(keyword: string, regionCode = "US"): Promi
     };
   });
 
-  const questionsTyped: KeywordQuestion[] = questions.slice(0, 5).map((q, i) => ({
-    keyword: q,
-    volume: Math.round(volume * 0.15 / (i + 1)),
-    difficulty: Math.max(10, difficulty - 15 - i * 2),
-  }));
+  const questionsTyped: KeywordQuestion[] = questions.slice(0, 5).map((q, i) => {
+    const adsV = adsQuestionVolumes.get(q);
+    if (typeof adsV === "number") {
+      return { keyword: q, volume: adsV, difficulty: Math.max(10, difficulty - 15 - i * 2) };
+    }
+    return {
+      keyword: q,
+      volume: Math.round(volume * 0.15 / (i + 1)),
+      difficulty: Math.max(10, difficulty - 15 - i * 2),
+    };
+  });
 
   const variationsTotalVolume = variations.reduce((a, v) => a + v.volume, 0);
   const questionsTotalVolume = questionsTyped.reduce((a, v) => a + v.volume, 0);
@@ -337,8 +404,10 @@ Rules:
   }
 
   // CPC — we don't have a free real source for this, omit the numeric field.
-  const cpc = 0;
-  missingFields.push("cpc");
+  const cpc = typeof realAdsCpc === "number" ? realAdsCpc : 0;
+  if (typeof realAdsCpc === "number") realDataFields.push("cpc");
+  else missingFields.push("cpc");
+  void realAdsCompetitionIndex; // surfaced via `difficulty` already
 
   return {
     keyword: clean,
