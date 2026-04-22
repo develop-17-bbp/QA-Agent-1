@@ -1,5 +1,6 @@
 import type { SiteHealthReport } from "../types.js";
 import { generateText } from "../llm.js";
+import { withLlmTelemetry } from "../agentic/llm-telemetry.js";
 import { searchSerp } from "../agentic/duckduckgo-serp.js";
 import { fetchDomainHits, type CommonCrawlHit } from "../providers/common-crawl.js";
 import { searchDomainReferences, isUrlscanConfigured, type UrlscanHit } from "../providers/urlscan.js";
@@ -217,7 +218,12 @@ ${sampleTitles}
 
 Return only the plain-text summary, no JSON, no markdown.`;
     try {
-      const raw = await generateText(prompt);
+      const raw = await withLlmTelemetry(
+        "brand-monitor",
+        process.env.OLLAMA_MODEL?.trim() || "llama3.2",
+        prompt,
+        () => generateText(prompt),
+      );
       summary = raw.replace(/```[\s\S]*?```/g, "").trim().slice(0, 400);
       if (summary) estimatedFields.push("summary");
     } catch {

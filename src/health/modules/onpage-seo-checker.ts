@@ -1,6 +1,7 @@
 import type { SiteHealthReport, PageFetchRecord } from "../types.js";
 import { generateText } from "../llm.js";
 import { dp, type DataPoint } from "../providers/types.js";
+import { withLlmTelemetry } from "../agentic/llm-telemetry.js";
 
 // ── Unit 9 honesty goal ─────────────────────────────────────────────────
 //
@@ -213,7 +214,12 @@ Flagged checks for ${page.url}:
 ${flagged.map((c, i) => `${i + 1}. [${c.status.toUpperCase()}] ${c.element} — ${c.value}`).join("\n")}`;
 
     try {
-      const raw = await generateText(prompt);
+      const raw = await withLlmTelemetry(
+        "onpage-seo",
+        process.env.OLLAMA_MODEL?.trim() || "llama3.2",
+        prompt,
+        () => generateText(prompt),
+      );
       const clean = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       const parsed = JSON.parse(clean) as unknown;
       if (Array.isArray(parsed) && parsed.length === flagged.length) {

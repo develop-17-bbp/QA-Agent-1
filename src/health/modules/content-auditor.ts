@@ -1,6 +1,7 @@
 import type { SiteHealthReport } from "../types.js";
 import { generateText } from "../llm.js";
 import { dp, type DataPoint } from "../providers/types.js";
+import { withLlmTelemetry } from "../agentic/llm-telemetry.js";
 
 // ── Unit 8 honesty goal ──────────────────────────────────────────────────
 //
@@ -264,7 +265,12 @@ ${topIssues.map((i) => `- ${i.issue} (${i.count} pages)`).join("\n")}
 
 Return plain text only, no JSON, no markdown headers.`;
     try {
-      const raw = await generateText(prompt);
+      const raw = await withLlmTelemetry(
+        "content-audit",
+        process.env.OLLAMA_MODEL?.trim() || "llama3.2",
+        prompt,
+        () => generateText(prompt),
+      );
       commentary = raw.replace(/```[\s\S]*?```/g, "").trim().slice(0, 600);
       if (commentary) estimatedFields.push("commentary");
     } catch {

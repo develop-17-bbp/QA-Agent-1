@@ -3,6 +3,7 @@ import { generateText } from "../llm.js";
 import { fetchSuggestions, fetchQuestionSuggestions } from "../providers/google-suggest.js";
 import { fetchBestMatchPageviews } from "../providers/wikipedia-pageviews.js";
 import { dp, type DataPoint } from "../providers/types.js";
+import { withLlmTelemetry } from "../agentic/llm-telemetry.js";
 
 // ── Unit 4 honesty goal ──────────────────────────────────────────────────────
 //
@@ -210,7 +211,12 @@ Return ONLY valid JSON (no markdown, no backticks):
 Produce 5 angles, each ≤120 chars.`;
 
     try {
-      const text = await generateText(prompt);
+      const text = await withLlmTelemetry(
+        "topic-research",
+        process.env.OLLAMA_MODEL?.trim() || "llama3.2",
+        prompt,
+        () => generateText(prompt),
+      );
       const clean2 = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       const parsed = JSON.parse(clean2) as {
         clusters?: Record<string, unknown>;
