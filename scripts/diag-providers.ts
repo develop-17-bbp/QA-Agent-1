@@ -131,6 +131,13 @@ async function main() {
     return `${r.value.length} verified host(s)`;
   });
 
+  await probe("Naver Search Advisor", async () => {
+    const mod = await import("../src/health/providers/naver-webmaster.js");
+    if (!mod.isNaverWebmasterConfigured()) throw new Error("NAVER_CLIENT_ID + NAVER_CLIENT_SECRET not set");
+    const r = await mod.fetchNaverSites();
+    return `${r.value.length} verified site(s)`;
+  });
+
   await probe("Brave Search", async () => {
     const mod = await import("../src/health/providers/brave-search.js");
     if (!mod.isBraveConfigured()) throw new Error("BRAVE_SEARCH_API_KEY not set");
