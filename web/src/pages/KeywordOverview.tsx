@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { BarChart, Bar, ResponsiveContainer } from "recharts";
-import { fetchKeywordResearch, fetchKeywordSuggestions, fetchKeywordTrends, fetchGscKeywordStats, type GscSite } from "../api";
+import { fetchKeywordResearch, fetchKeywordSuggestions, fetchKeywordTrends, fetchGscKeywordStats, fetchBrandMentionsAggregated, type GscSite, type BrandMentionRow } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 import { useRegion } from "../components/RegionPicker";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
@@ -38,6 +38,31 @@ function formatVolume(n: number): string {
 
 const MONTHS = ["May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
 
+/** Bucket RSS/news mentions into the 4 most recent ISO weeks (oldest → newest)
+ *  so we can show a compact sparkline of how often the keyword is being
+ *  written about. Mentions with no publishedAt are dropped (most RSS feeds
+ *  do provide one; a few don't). */
+function bucketArticleVelocity(mentions: BrandMentionRow[]): { weekly: number[]; total: number; startedAt: string | null } {
+  const now = Date.now();
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const weekly = [0, 0, 0, 0]; // oldest → newest
+  let counted = 0;
+  for (const m of mentions) {
+    if (!m.publishedAt) continue;
+    const t = Date.parse(m.publishedAt);
+    if (!Number.isFinite(t)) continue;
+    const delta = now - t;
+    if (delta < 0 || delta > 4 * week) continue;
+    const idx = 3 - Math.floor(delta / week); // newest → last bucket
+    if (idx >= 0 && idx < 4) {
+      weekly[idx]!++;
+      counted++;
+    }
+  }
+  const startedAt = new Date(now - 4 * week).toISOString().slice(0, 10);
+  return { weekly, total: counted, startedAt };
+}
+
 export default function KeywordOverview() {
   const [keyword, setKeyword] = useState("");
   const [data, setData] = useState<any>(null);
@@ -53,6 +78,7 @@ export default function KeywordOverview() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
   const [trend, setTrend] = useState<any>(null);
+  const [velocity, setVelocity] = useState<{ weekly: number[]; total: number; startedAt: string | null; providersHit: string[] } | null>(null);
   const [region] = useRegion();
 
   const research = async () => {
@@ -64,16 +90,22 @@ export default function KeywordOverview() {
     setSuggestions([]);
     setQuestions([]);
     setTrend(null);
+    setVelocity(null);
     try {
-      const [main, sugg, tr] = await Promise.allSettled([
+      const [main, sugg, tr, vel] = await Promise.allSettled([
         fetchKeywordResearch(kw, region),
         fetchKeywordSuggestions(kw, "en", region),
         fetchKeywordTrends(kw, region),
+        fetchBrandMentionsAggregated(kw),
       ]);
       if (main.status === "fulfilled") setData(main.value);
       else setError(main.reason?.message ?? String(main.reason));
       if (sugg.status === "fulfilled") { setSuggestions(sugg.value.suggestions); setQuestions(sugg.value.questions); }
       if (tr.status === "fulfilled") setTrend(tr.value);
+      if (vel.status === "fulfilled") {
+        const bucketed = bucketArticleVelocity(vel.value.mentions ?? []);
+        setVelocity({ ...bucketed, providersHit: vel.value.providersHit ?? [] });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -161,6 +193,28 @@ export default function KeywordOverview() {
               </span>
               {trend.peakMonth && <span style={{ fontSize: 11, color: "var(--muted)" }}>Peak: {trend.peakMonth}</span>}
               <span style={{ fontSize: 10, color: "var(--muted)" }}>google-trends</span>
+            </div>
+          )}
+          {velocity && (
+            <div
+              className="qa-panel"
+              style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}
+              title={`${velocity.total} articles across ${velocity.providersHit.length} sources in the last 4 weeks`}
+            >
+              <span style={{ fontWeight: 600 }}>Articles (4wk):</span>
+              <ArticleVelocitySparkline weekly={velocity.weekly} />
+              <span style={{ fontWeight: 700 }}>{velocity.total}</span>
+              {(() => {
+                const w = velocity.weekly;
+                const last = w[3] ?? 0;
+                const prev = (w[0]! + w[1]! + w[2]!) / 3;
+                if (prev < 1 && last < 1) return <span style={{ fontSize: 11, color: "var(--muted)" }}>→ quiet</span>;
+                const delta = last - prev;
+                const color = delta > 0.3 * Math.max(prev, 1) ? "#38a169" : delta < -0.3 * Math.max(prev, 1) ? "#e53e3e" : "var(--muted)";
+                const label = delta > 0.3 * Math.max(prev, 1) ? "↑ accelerating" : delta < -0.3 * Math.max(prev, 1) ? "↓ cooling" : "→ steady";
+                return <span style={{ fontSize: 11, color, fontWeight: 600 }}>{label}</span>;
+              })()}
+              <span style={{ fontSize: 10, color: "var(--muted)" }}>rss+news</span>
             </div>
           )}
           {suggestions.length > 0 && (
@@ -484,6 +538,32 @@ export default function KeywordOverview() {
           )}
         </motion.div>
       )}
+    </div>
+  );
+}
+
+/** 4-bar sparkline (oldest → newest). Bars scale relative to the max in
+ *  the series so a low-activity keyword still shows shape. */
+function ArticleVelocitySparkline({ weekly }: { weekly: number[] }) {
+  const max = Math.max(1, ...weekly);
+  return (
+    <div style={{ display: "flex", gap: 2, alignItems: "flex-end", height: 22 }} aria-label={`Weekly counts: ${weekly.join(", ")}`}>
+      {weekly.map((v, i) => {
+        const h = Math.max(2, Math.round((v / max) * 22));
+        return (
+          <div
+            key={i}
+            title={`Week ${i + 1}: ${v}`}
+            style={{
+              width: 6,
+              height: h,
+              background: i === weekly.length - 1 ? "var(--accent)" : "var(--accent)",
+              opacity: 0.4 + (i * 0.2),
+              borderRadius: 1,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
