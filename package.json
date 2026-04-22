@@ -24,6 +24,10 @@
     "diagnose": "tsx scripts/diag-providers.ts",
     "prune-runs": "tsx scripts/prune-old-runs.ts",
     "eval:link-fix": "tsx scripts/eval-link-fix.ts",
+    "eval:run-summary": "tsx scripts/eval-run-summary.ts",
+    "eval:competitive": "tsx scripts/eval-competitive-estimator.ts",
+    "eval:brand-monitor": "tsx scripts/eval-brand-monitor.ts",
+    "eval:all": "tsx scripts/eval-link-fix.ts && tsx scripts/eval-run-summary.ts && tsx scripts/eval-competitive-estimator.ts && tsx scripts/eval-brand-monitor.ts",
     "daily-report": "tsx scripts/daily-report.ts",
     "setup-browsers": "playwright install chromium"
   },
