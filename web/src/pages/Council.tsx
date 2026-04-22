@@ -61,6 +61,196 @@ function sourceChip(src: string): { bg: string; color: string; label: string } {
   return { bg: `${color}20`, color, label: src };
 }
 
+// ── Per-feature metric visualizations ──────────────────────────────────────
+// Generic metric chips only serve keywords + backlinks well. Authority,
+// Vitals, and SERP carry their meaning in relationships between numbers
+// (lab vs field LCP, OPR vs Tranco vs Cloudflare, per-source rank spread),
+// which chips hide. These renderers expose the comparison directly.
+
+function ScoreBar({ label, value, max, color, note }: { label: string; value: number | undefined; max: number; color: string; note?: string }) {
+  const pct = typeof value === "number" ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+  return (
+    <div style={{ flex: 1, minWidth: 140 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, fontWeight: 600, color: "var(--muted)", marginBottom: 3 }}>
+        <span style={{ textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</span>
+        <span style={{ color: typeof value === "number" ? "var(--text)" : "var(--muted)" }}>
+          {typeof value === "number" ? value.toLocaleString() : "—"}
+        </span>
+      </div>
+      <div style={{ height: 6, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
+        {typeof value === "number" && <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} />}
+      </div>
+      {note && <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{note}</div>}
+    </div>
+  );
+}
+
+function AuthorityMetrics({ item }: { item: CouncilAgendaItem }) {
+  const opr = item.metrics.oprAuthority as number | undefined;
+  const oprRank = item.metrics.oprGlobalRank as number | undefined;
+  const trPct = item.metrics.trancoPercentile as number | undefined;
+  const trRank = item.metrics.trancoRank as number | undefined;
+  const radarRank = item.metrics.radarRank as number | undefined;
+  return (
+    <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 10, padding: "10px 12px", background: "#f8fafc", borderRadius: 8, border: "1px solid var(--border)" }}>
+      <ScoreBar
+        label="OPR Authority (0-100)"
+        value={opr}
+        max={100}
+        color={SOURCE_COLOR.opr!}
+        note={oprRank != null ? `Global rank #${oprRank.toLocaleString()}` : "not indexed"}
+      />
+      <ScoreBar
+        label="Tranco Percentile"
+        value={trPct}
+        max={100}
+        color={SOURCE_COLOR.tranco!}
+        note={trRank != null ? `Top-1M rank #${trRank.toLocaleString()}` : "not in top 1M"}
+      />
+      <ScoreBar
+        label="Cloudflare Radar"
+        value={radarRank != null ? Math.max(0, 100 - Math.min(100, Math.log10(radarRank + 1) * 15)) : undefined}
+        max={100}
+        color={SOURCE_COLOR["cloudflare-radar"]!}
+        note={radarRank != null ? `Radar rank #${radarRank.toLocaleString()}` : "not in Cloudflare top list"}
+      />
+    </div>
+  );
+}
+
+function lcpRating(ms: number | undefined): { label: string; color: string } {
+  if (typeof ms !== "number") return { label: "—", color: "#94a3b8" };
+  if (ms <= 2500) return { label: "good", color: "#16a34a" };
+  if (ms <= 4000) return { label: "needs work", color: "#d97706" };
+  return { label: "poor", color: "#dc2626" };
+}
+function clsRating(cls: number | undefined): { label: string; color: string } {
+  if (typeof cls !== "number") return { label: "—", color: "#94a3b8" };
+  if (cls <= 0.1) return { label: "good", color: "#16a34a" };
+  if (cls <= 0.25) return { label: "needs work", color: "#d97706" };
+  return { label: "poor", color: "#dc2626" };
+}
+
+function MetricPair({ metric, lab, field, unit, rate }: {
+  metric: string;
+  lab: number | undefined;
+  field: number | undefined;
+  unit: string;
+  rate: (v: number | undefined) => { label: string; color: string };
+}) {
+  const labR = rate(lab);
+  const fieldR = rate(field);
+  const bothPresent = typeof lab === "number" && typeof field === "number";
+  const gap = bothPresent ? Math.abs(lab! - field!) : undefined;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 10px", background: "#fff", borderRadius: 6, border: "1px solid var(--border)", minWidth: 160, flex: 1 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--muted)" }}>{metric}</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, color: "var(--muted)" }}>Lab (PSI)</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: labR.color }}>
+            {typeof lab === "number" ? (unit === "ms" ? `${Math.round(lab)}ms` : lab.toFixed(3)) : "—"}
+          </div>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, color: "var(--muted)" }}>Field (CrUX p75)</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: fieldR.color }}>
+            {typeof field === "number" ? (unit === "ms" ? `${Math.round(field)}ms` : field.toFixed(3)) : "—"}
+          </div>
+        </div>
+      </div>
+      {bothPresent && (
+        <div style={{ fontSize: 10, color: gap! > 1000 ? "#dc2626" : gap! > 300 ? "#d97706" : "var(--muted)", fontWeight: gap! > 1000 ? 700 : 500 }}>
+          Δ {unit === "ms" ? `${Math.round(gap!)}ms` : gap!.toFixed(3)} {gap! > 1000 ? "— real users slower than lab" : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VitalsMetrics({ item }: { item: CouncilAgendaItem }) {
+  const labLcpMobile = item.metrics.labLcpMobileMs as number | undefined;
+  const fieldLcpPhone = item.metrics.fieldLcpPhoneMs as number | undefined;
+  const labLcpDesktop = item.metrics.labLcpDesktopMs as number | undefined;
+  const fieldLcpDesktop = item.metrics.fieldLcpDesktopMs as number | undefined;
+  const labClsMobile = item.metrics.labClsMobile as number | undefined;
+  const fieldClsPhone = item.metrics.fieldClsPhone as number | undefined;
+  const fieldInpPhone = item.metrics.fieldInpPhoneMs as number | undefined;
+  const gapSeverity = item.metrics.labFieldGap as string | undefined;
+  const labPerfMobile = item.metrics.labPerfMobile as number | undefined;
+  const labPerfDesktop = item.metrics.labPerfDesktop as number | undefined;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      {gapSeverity === "large" && (
+        <div style={{ padding: "6px 10px", background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: 6, fontSize: 11.5, marginBottom: 8, fontWeight: 600 }}>
+          ⚠ Lab-vs-field gap &gt; 1s — the regression is not visible in Lighthouse CI but real users feel it.
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <MetricPair metric="LCP (mobile)" lab={labLcpMobile} field={fieldLcpPhone} unit="ms" rate={lcpRating} />
+        <MetricPair metric="LCP (desktop)" lab={labLcpDesktop} field={fieldLcpDesktop} unit="ms" rate={lcpRating} />
+        <MetricPair metric="CLS (mobile)" lab={labClsMobile} field={fieldClsPhone} unit="" rate={clsRating} />
+      </div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "var(--muted)" }}>
+        {typeof labPerfMobile === "number" && <span>Lab perf (mobile): <strong style={{ color: labPerfMobile >= 90 ? "#16a34a" : labPerfMobile >= 50 ? "#d97706" : "#dc2626" }}>{labPerfMobile}/100</strong></span>}
+        {typeof labPerfDesktop === "number" && <span>Lab perf (desktop): <strong style={{ color: labPerfDesktop >= 90 ? "#16a34a" : labPerfDesktop >= 50 ? "#d97706" : "#dc2626" }}>{labPerfDesktop}/100</strong></span>}
+        {typeof fieldInpPhone === "number" && <span>Field INP (p75): <strong style={{ color: fieldInpPhone <= 200 ? "#16a34a" : fieldInpPhone <= 500 ? "#d97706" : "#dc2626" }}>{fieldInpPhone}ms</strong></span>}
+      </div>
+    </div>
+  );
+}
+
+function RankBadge({ source, rank }: { source: string; rank: number | undefined }) {
+  const color = SOURCE_COLOR[source] ?? "#64748b";
+  const present = typeof rank === "number";
+  return (
+    <div style={{
+      padding: "6px 10px", borderRadius: 6, border: `1px solid ${present ? color : "var(--border)"}`,
+      background: present ? `${color}12` : "#f8fafc",
+      minWidth: 96, textAlign: "center",
+    }}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color }}>{source}</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: present ? "var(--text)" : "var(--muted)", lineHeight: 1.1 }}>
+        {present ? `#${rank}` : "—"}
+      </div>
+    </div>
+  );
+}
+
+function SerpMetrics({ item }: { item: CouncilAgendaItem }) {
+  const ddg = item.metrics.ddgRank as number | undefined;
+  const sp = item.metrics.startpageRank as number | undefined;
+  const gsc = item.metrics.gscRank as number | undefined;
+  const br = item.metrics.braveRank as number | undefined;
+  const consensus = item.metrics.consensusPosition as number | undefined;
+  const spread = item.metrics.sourceSpread as number | undefined;
+  return (
+    <div style={{ marginBottom: 10, padding: "10px 12px", background: "#f8fafc", borderRadius: 8, border: "1px solid var(--border)" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--muted)" }}>Consensus</div>
+        <div style={{
+          fontSize: 22, fontWeight: 800, padding: "2px 12px", borderRadius: 8,
+          background: typeof consensus === "number" && consensus <= 10 ? "#dcfce7" : typeof consensus === "number" && consensus <= 30 ? "#fef3c7" : "#f1f5f9",
+          color: typeof consensus === "number" && consensus <= 10 ? "#166534" : typeof consensus === "number" && consensus <= 30 ? "#92400e" : "var(--muted)",
+        }}>
+          {typeof consensus === "number" ? `#${consensus}` : "—"}
+        </div>
+        {typeof spread === "number" && spread > 0 && (
+          <div style={{ fontSize: 11, color: spread > 10 ? "#dc2626" : "var(--muted)" }}>
+            range across sources: {spread}{spread > 10 ? " — sources disagree" : ""}
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <RankBadge source="ddg" rank={ddg} />
+        <RankBadge source="startpage" rank={sp} />
+        <RankBadge source="gsc" rank={gsc} />
+        <RankBadge source="brave" rank={br} />
+      </div>
+    </div>
+  );
+}
+
 function AdvisorVerdictCard({ advisor, verdict }: { advisor: CouncilAdvisor; verdict: string | undefined }) {
   return (
     <div
@@ -84,16 +274,33 @@ function AdvisorVerdictCard({ advisor, verdict }: { advisor: CouncilAdvisor; ver
   );
 }
 
+function GenericMetricChips({ item }: { item: CouncilAgendaItem }) {
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+      {Object.entries(item.metrics)
+        .filter(([, v]) => v !== undefined && v !== null && v !== "")
+        .slice(0, 6)
+        .map(([k, v]) => (
+          <span key={k} style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 10, background: "#f8fafc", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+            {k}: {typeof v === "number" ? v.toLocaleString() : String(v)}
+          </span>
+        ))}
+    </div>
+  );
+}
+
 function TierRow({
   item,
   advisors,
   verdicts,
   tierTone,
+  feature,
 }: {
   item: CouncilAgendaItem;
   advisors: CouncilAdvisor[];
   verdicts: Record<string, string> | undefined;
   tierTone: typeof TIER_META[keyof typeof TIER_META];
+  feature: CouncilFeature;
 }) {
   return (
     <div
@@ -107,7 +314,7 @@ function TierRow({
       }}
     >
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 8 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{item.label}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", wordBreak: "break-all" }}>{item.label}</div>
         {item.sublabel && <div style={{ fontSize: 11, color: "var(--muted)" }}>{item.sublabel}</div>}
         <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
           <div
@@ -119,7 +326,8 @@ function TierRow({
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+      {/* Source chips shown for every feature */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
         {item.sources.map((s) => {
           const c = sourceChip(s);
           return (
@@ -128,19 +336,17 @@ function TierRow({
             </span>
           );
         })}
-        {Object.entries(item.metrics)
-          .filter(([, v]) => v !== undefined && v !== null && v !== "")
-          .slice(0, 6)
-          .map(([k, v]) => (
-            <span key={k} style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 10, background: "#f8fafc", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-              {k}: {typeof v === "number" ? v.toLocaleString() : String(v)}
-            </span>
-          ))}
       </div>
+
+      {/* Feature-specific metric visualization */}
+      {feature === "authority" && <AuthorityMetrics item={item} />}
+      {feature === "vitals" && <VitalsMetrics item={item} />}
+      {feature === "serp" && <SerpMetrics item={item} />}
+      {(feature === "keywords" || feature === "backlinks") && <GenericMetricChips item={item} />}
 
       {item.rawVariants && item.rawVariants.length > 0 && (
         <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>
-          as: {item.rawVariants.map((v) => `"${v}"`).join(" · ")}
+          {feature === "backlinks" ? "top anchor text" : "as"}: {item.rawVariants.map((v) => `"${v}"`).join(" · ")}
         </div>
       )}
 
@@ -340,6 +546,7 @@ export default function Council() {
                       advisors={data.context.advisors}
                       verdicts={councilResult?.verdicts?.[item.id]}
                       tierTone={meta}
+                      feature={data.context.feature as CouncilFeature}
                     />
                   ))
                 )}
