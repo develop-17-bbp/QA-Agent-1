@@ -74,6 +74,13 @@ import { fetchBrandMentions } from "./providers/rss-aggregator.js";
 import { searchStartpage } from "./providers/startpage-serp.js";
 import { composeDailyReport, type DailyReport, type DailyReportFormTest } from "./modules/daily-report.js";
 import {
+  isBingOAuthClientConfigured,
+  buildBingOAuthAuthorizeUrl,
+  exchangeBingOAuthCode,
+  loadBingTokens,
+  clearBingTokens,
+} from "./providers/bing-webmaster-oauth.js";
+import {
   addCompetitorPair,
   removeCompetitorPair,
   listCompetitorPairs as listCompetitorRankPairs,
@@ -2590,6 +2597,64 @@ export async function runHealthDashboard(options: {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ bundle: bundle ? bundle.value : null }));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })); }
+        return;
+      }
+
+      // ── Bing WMT OAuth (alternative to API-key path) ─────────────────────
+      // Optional: when BING_WMT_OAUTH_CLIENT_ID + BING_WMT_OAUTH_CLIENT_SECRET
+      // are set in .env, users can connect via Azure AD OAuth consent instead
+      // of pasting an API key. Tokens persist to data/bing-wmt-tokens.json.
+      if (req.method === "GET" && url.pathname === "/api/auth/bing/status") {
+        const tokens = await loadBingTokens();
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify({
+          clientConfigured: isBingOAuthClientConfigured(),
+          connected: !!tokens,
+          connectedAt: tokens?.connectedAt,
+          expiresAt: tokens?.expiresAt,
+          apiKeyAlsoSet: !!process.env.BING_WEBMASTER_API_KEY?.trim(),
+        }));
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/auth/bing/start") {
+        if (!isBingOAuthClientConfigured()) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "BING_WMT_OAUTH_CLIENT_ID / BING_WMT_OAUTH_CLIENT_SECRET not set in .env" }));
+          return;
+        }
+        const state = Buffer.from(String(Date.now()) + "::" + Math.random().toString(36).slice(2)).toString("base64url");
+        const authUrl = buildBingOAuthAuthorizeUrl(state, options.port);
+        res.writeHead(302, { Location: authUrl, "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/auth/bing/callback") {
+        const code = url.searchParams.get("code");
+        const error = url.searchParams.get("error");
+        if (error) {
+          res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(`<!DOCTYPE html><html><body><h1>Bing OAuth failed</h1><p>${error}: ${url.searchParams.get("error_description") ?? ""}</p><a href="/integrations">Back to Connections</a></body></html>`);
+          return;
+        }
+        if (!code) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "Missing ?code parameter from Microsoft OAuth callback" }));
+          return;
+        }
+        try {
+          await exchangeBingOAuthCode(code, options.port);
+          res.writeHead(302, { Location: "/integrations?bing=connected", "Cache-Control": "no-store" });
+          res.end();
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(`<!DOCTYPE html><html><body><h1>Bing OAuth exchange failed</h1><pre>${String(e instanceof Error ? e.message : e)}</pre><a href="/integrations">Back to Connections</a></body></html>`);
+        }
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/auth/bing/disconnect") {
+        await clearBingTokens();
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: true }));
         return;
       }
 
