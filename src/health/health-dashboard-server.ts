@@ -3191,6 +3191,64 @@ export async function runHealthDashboard(options: {
       }
 
       // ── Daily report (for n8n cron / direct email / manual preview) ─────
+      // ── Council — cross-source consensus + LLM advisor panel ─────────────
+      // POST /api/council
+      // Body: { feature: "keywords" | "backlinks" | "serp", domain: string,
+      //         keywords?: string[] /* serp only */, includeLlm?: boolean }
+      // Returns: { context: CouncilContext, council: CouncilResult | null,
+      //            elapsed: { aggregateMs, llmMs } }
+      if (req.method === "POST" && url.pathname === "/api/council") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { feature?: string; domain?: string; keywords?: string[]; includeLlm?: boolean };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const feature = typeof payload.feature === "string" ? payload.feature : "";
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        const includeLlm = payload.includeLlm !== false;
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        if (!["keywords", "backlinks", "serp"].includes(feature)) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "feature must be one of: keywords, backlinks, serp" }));
+          return;
+        }
+        try {
+          const aggregateStart = Date.now();
+          let context;
+          if (feature === "keywords") {
+            const { buildKeywordCouncilContext } = await import("./modules/keyword-consensus.js");
+            context = await buildKeywordCouncilContext(domain);
+          } else if (feature === "backlinks") {
+            const { buildBacklinksCouncilContext } = await import("./modules/backlinks-consensus.js");
+            context = await buildBacklinksCouncilContext(domain);
+          } else {
+            const { buildSerpCouncilContext } = await import("./modules/serp-consensus.js");
+            const keywords = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string") : [];
+            context = await buildSerpCouncilContext({ domain, keywords });
+          }
+          const aggregateMs = Date.now() - aggregateStart;
+
+          let council: unknown = null;
+          let llmMs = 0;
+          if (includeLlm && (context.tierTop.length > 0 || context.tierMid.length > 0)) {
+            const llmStart = Date.now();
+            try {
+              const { runCouncil } = await import("./modules/council-runner.js");
+              council = await runCouncil(context);
+            } catch (e) {
+              council = { error: e instanceof Error ? e.message : String(e) };
+            }
+            llmMs = Date.now() - llmStart;
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ context, council, elapsed: { aggregateMs, llmMs } }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // POST /api/daily-report
       // Body: { sites: string[], includePageSpeed?: boolean,
       //         includeFormTests?: boolean, formTestSiteIds?: string[],

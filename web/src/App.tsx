@@ -46,6 +46,7 @@ const KeywordImpact = lazy(() => import("./pages/KeywordImpact"));
 const LinkFixAdvisor = lazy(() => import("./pages/LinkFixAdvisor"));
 const CompetitiveEstimator = lazy(() => import("./pages/CompetitiveEstimator"));
 const CompetitorRankTracker = lazy(() => import("./pages/CompetitorRankTracker"));
+const Council = lazy(() => import("./pages/Council"));
 
 function LazyFallback() {
   return (
@@ -131,6 +132,7 @@ export default function App() {
           {/* Integrations */}
           <Route path="/google-connections" element={<GoogleConnections />} />
           <Route path="/integrations" element={<IntegrationsHub />} />
+          <Route path="/council" element={<Council />} />
         </Route>
       </Routes>
     </Suspense>

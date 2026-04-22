@@ -360,6 +360,7 @@ function Topbar() {
               { to: "/reports", label: "Reports" },
               { to: "/upload", label: "Import" },
               { to: "/integrations", label: "Integrations" },
+              { to: "/council", label: "Council" },
             ].map(({ to, label }) => (
               <NavLink
                 key={to}

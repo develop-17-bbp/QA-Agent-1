@@ -677,6 +677,61 @@ export function fetchBrandMentionsAggregated(query: string, sources?: string[]):
   return postApi<BrandMentionsBundle>("/api/brand-mentions", { query, sources });
 }
 
+// ── Council — cross-source consensus + LLM advisor panel ──────────────────
+export type CouncilFeature = "keywords" | "backlinks" | "serp";
+export interface CouncilAdvisor {
+  id: string;
+  name: string;
+  focus: string;
+}
+export interface CouncilAgendaItem {
+  id: string;
+  label: string;
+  sublabel?: string;
+  sources: string[];
+  metrics: Record<string, number | string | undefined>;
+  score: number;
+  rawVariants?: string[];
+}
+export interface CouncilContext {
+  feature: CouncilFeature;
+  featureLabel: string;
+  featureTagline: string;
+  target: string;
+  sourcesQueried: string[];
+  sourcesFailed: { source: string; reason: string }[];
+  tierTop: CouncilAgendaItem[];
+  tierMid: CouncilAgendaItem[];
+  tierBottom: CouncilAgendaItem[];
+  totalItems: number;
+  collectedAt: string;
+  advisors: CouncilAdvisor[];
+}
+export interface CouncilResult {
+  verdicts: Record<string, Record<string, string>>;
+  synthesis: string;
+  reviewedItemIds: string[];
+  model: string;
+  durationMs: number;
+}
+export interface CouncilResponse {
+  context: CouncilContext;
+  council: CouncilResult | { error: string } | null;
+  elapsed: { aggregateMs: number; llmMs: number };
+}
+export function runCouncilApi(
+  feature: CouncilFeature,
+  domain: string,
+  extras?: { keywords?: string[]; includeLlm?: boolean },
+): Promise<CouncilResponse> {
+  return postApi<CouncilResponse>("/api/council", {
+    feature,
+    domain,
+    keywords: extras?.keywords,
+    includeLlm: extras?.includeLlm !== false,
+  });
+}
+
 // Startpage SERP — ~0.9 correlation with Google, free, Playwright-backed.
 export type StartpageSerpResult = { position: number; title: string; url: string; displayUrl?: string; snippet?: string };
 export type StartpageSerpResponse = { query: string; region: string; fetchedAt: string; results: StartpageSerpResult[]; selectorVariant: string; durationMs: number };
