@@ -83,6 +83,13 @@ import {
   clearBingTokens,
 } from "./providers/bing-webmaster-oauth.js";
 import {
+  isYandexOAuthClientConfigured,
+  buildYandexOAuthAuthorizeUrl,
+  exchangeYandexOAuthCode,
+  loadYandexTokens,
+  clearYandexTokens,
+} from "./providers/yandex-oauth.js";
+import {
   addCompetitorPair,
   removeCompetitorPair,
   listCompetitorPairs as listCompetitorRankPairs,
@@ -2662,14 +2669,23 @@ export async function runHealthDashboard(options: {
             covers: ["Inbound links for verified sites (40-60% of Ahrefs)", "Anchor text extraction"],
             price: "Free",
           },
-          yandex: {
-            connected: !!(process.env.YANDEX_WEBMASTER_API_KEY?.trim() && process.env.YANDEX_WEBMASTER_USER_ID?.trim()),
-            connectionKind: "api-token",
-            apiKeyVar: "YANDEX_WEBMASTER_API_KEY",
-            helpUrl: "https://webmaster.yandex.com/",
-            covers: ["Russian-language markets (60%+ .ru share)", "Inbound links + indexing for verified sites"],
-            price: "Free",
-          },
+          yandex: await (async () => {
+            const oauthTokens = await loadYandexTokens();
+            const oauthConfigured = isYandexOAuthClientConfigured();
+            const staticSet = !!(process.env.YANDEX_WEBMASTER_API_KEY?.trim() && process.env.YANDEX_WEBMASTER_USER_ID?.trim());
+            return {
+              connected: !!oauthTokens || staticSet,
+              connectionKind: oauthConfigured ? "oauth" : "api-token",
+              oauthClientConfigured: oauthConfigured,
+              connectUrl: oauthConfigured ? "/api/auth/yandex/start" : undefined,
+              email: oauthTokens?.displayName,
+              connectedAt: oauthTokens?.connectedAt,
+              apiKeyVar: "YANDEX_WEBMASTER_API_KEY",
+              helpUrl: "https://oauth.yandex.com/client/new",
+              covers: ["Russian-language markets (60%+ .ru share)", "Inbound links + indexing for verified sites"],
+              price: "Free",
+            };
+          })(),
           naver: {
             connected: !!(process.env.NAVER_CLIENT_ID?.trim() && process.env.NAVER_CLIENT_SECRET?.trim()),
             connectionKind: "api-keys",
@@ -2835,6 +2851,63 @@ export async function runHealthDashboard(options: {
       }
       if (req.method === "POST" && url.pathname === "/api/auth/bing/disconnect") {
         await clearBingTokens();
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      // ── Yandex OAuth 2.0 (alternative to static OAuth-token + user_id env) ─
+      if (req.method === "GET" && url.pathname === "/api/auth/yandex/status") {
+        const tokens = await loadYandexTokens();
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify({
+          clientConfigured: isYandexOAuthClientConfigured(),
+          connected: !!tokens,
+          connectedAt: tokens?.connectedAt,
+          expiresAt: tokens?.expiresAt,
+          displayName: tokens?.displayName,
+          userId: tokens?.userId,
+          staticTokenAlsoSet: !!(process.env.YANDEX_WEBMASTER_API_KEY?.trim() && process.env.YANDEX_WEBMASTER_USER_ID?.trim()),
+        }));
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/auth/yandex/start") {
+        if (!isYandexOAuthClientConfigured()) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "YANDEX_OAUTH_CLIENT_ID / YANDEX_OAUTH_CLIENT_SECRET not set (operator must register an OAuth app at https://oauth.yandex.com/client/new)" }));
+          return;
+        }
+        const state = Buffer.from(String(Date.now()) + "::" + Math.random().toString(36).slice(2)).toString("base64url");
+        const authUrl = buildYandexOAuthAuthorizeUrl(state, options.port);
+        res.writeHead(302, { Location: authUrl, "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/auth/yandex/callback") {
+        const code = url.searchParams.get("code");
+        const error = url.searchParams.get("error");
+        if (error) {
+          res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(`<!DOCTYPE html><html><body><h1>Yandex OAuth failed</h1><p>${error}: ${url.searchParams.get("error_description") ?? ""}</p><a href="/integrations">Back to Connections</a></body></html>`);
+          return;
+        }
+        if (!code) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "Missing ?code parameter from Yandex OAuth callback" }));
+          return;
+        }
+        try {
+          await exchangeYandexOAuthCode(code, options.port);
+          res.writeHead(302, { Location: "/integrations?yandex=connected", "Cache-Control": "no-store" });
+          res.end();
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(`<!DOCTYPE html><html><body><h1>Yandex OAuth exchange failed</h1><pre>${String(e instanceof Error ? e.message : e)}</pre><a href="/integrations">Back to Connections</a></body></html>`);
+        }
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/auth/yandex/disconnect") {
+        await clearYandexTokens();
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ ok: true }));
         return;

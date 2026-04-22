@@ -27,6 +27,7 @@ import { dp, ProviderError, type DataPoint } from "./types.js";
 import { httpGet } from "./http.js";
 import { cacheGet, cacheSet, registerLimit, tryConsume } from "./rate-limit.js";
 import { resolveKey } from "../modules/runtime-keys.js";
+import { loadYandexTokens, refreshYandexTokens } from "./yandex-oauth.js";
 
 const PROVIDER = "yandex-webmaster";
 registerLimit(PROVIDER, 60, 60_000);
@@ -34,16 +35,40 @@ const TTL_MS = 6 * 60 * 60 * 1000; // 6h — Yandex index refreshes daily
 
 const API_BASE = "https://api.webmaster.yandex.net/v4";
 
-function resolveToken(): string | undefined {
+function resolveStaticToken(): string | undefined {
   return resolveKey("YANDEX_WEBMASTER_API_KEY");
 }
 
-function resolveUserId(): string | undefined {
+function resolveStaticUserId(): string | undefined {
   return resolveKey("YANDEX_WEBMASTER_USER_ID");
 }
 
+/** Sync check — true when the static token + user_id are both set (via
+ *  runtime-keys or .env). Does NOT check OAuth because that requires a
+ *  disk read. Use isYandexConnected() (async) when you need the full answer. */
 export function isYandexWebmasterConfigured(): boolean {
-  return !!(resolveToken() && resolveUserId());
+  return !!(resolveStaticToken() && resolveStaticUserId());
+}
+
+/** Resolve usable (token, userId) — prefers static path (more reliable,
+ *  doesn't need refresh), falls back to OAuth tokens with automatic refresh.
+ *  Returns null if neither path is set up. */
+async function resolveYandexCredentials(): Promise<{ token: string; userId: string } | null> {
+  const staticToken = resolveStaticToken();
+  const staticUserId = resolveStaticUserId();
+  if (staticToken && staticUserId) return { token: staticToken, userId: staticUserId };
+
+  const oauth = await refreshYandexTokens();
+  if (oauth && oauth.userId) return { token: oauth.accessToken, userId: oauth.userId };
+  return null;
+}
+
+/** Async "is Yandex connected at all?" — true if static OR OAuth path works.
+ *  Dashboard status endpoint uses this. */
+export async function isYandexConnected(): Promise<boolean> {
+  if (isYandexWebmasterConfigured()) return true;
+  const t = await loadYandexTokens();
+  return !!(t && t.userId);
 }
 
 export interface YandexSite {
@@ -83,9 +108,9 @@ interface SitesListResponse {
 /** List every site verified under the user's Yandex account. Useful for the
  *  Connections hub to show "connected as <user>, N sites verified". */
 export async function fetchYandexSites(): Promise<DataPoint<YandexSite[]>> {
-  const token = resolveToken();
-  const userId = resolveUserId();
-  if (!token || !userId) throw new ProviderError(PROVIDER, "YANDEX_WEBMASTER_API_KEY + YANDEX_WEBMASTER_USER_ID not set");
+  const creds = await resolveYandexCredentials();
+  if (!creds) throw new ProviderError(PROVIDER, "Yandex not connected — set YANDEX_WEBMASTER_API_KEY + YANDEX_WEBMASTER_USER_ID or use OAuth");
+  const { token, userId } = creds;
 
   const cacheKey = `${PROVIDER}:sites:${userId}`;
   const cached = cacheGet<YandexSite[]>(cacheKey);
@@ -128,9 +153,9 @@ interface ExternalLinksResponse {
 /** Fetch inbound backlinks for a verified site. Returns up to `limit` rows
  *  (Yandex default 100, we cap at 1000). */
 export async function fetchYandexInboundLinks(hostId: string, limit = 500): Promise<DataPoint<YandexInboundLink[]>> {
-  const token = resolveToken();
-  const userId = resolveUserId();
-  if (!token || !userId) throw new ProviderError(PROVIDER, "YANDEX_WEBMASTER_API_KEY + YANDEX_WEBMASTER_USER_ID not set");
+  const creds = await resolveYandexCredentials();
+  if (!creds) throw new ProviderError(PROVIDER, "Yandex not connected — set YANDEX_WEBMASTER_API_KEY + YANDEX_WEBMASTER_USER_ID or use OAuth");
+  const { token, userId } = creds;
   if (!hostId) throw new ProviderError(PROVIDER, "hostId required — call fetchYandexSites() first");
 
   const cacheKey = `${PROVIDER}:links:${userId}:${hostId}:${limit}`;
@@ -174,9 +199,9 @@ interface IndexStatsResponse {
 
 /** Indexing snapshot — how many of your pages Yandex currently has. */
 export async function fetchYandexIndexSnapshot(hostId: string): Promise<DataPoint<YandexIndexSnapshot>> {
-  const token = resolveToken();
-  const userId = resolveUserId();
-  if (!token || !userId) throw new ProviderError(PROVIDER, "YANDEX_WEBMASTER_API_KEY + YANDEX_WEBMASTER_USER_ID not set");
+  const creds = await resolveYandexCredentials();
+  if (!creds) throw new ProviderError(PROVIDER, "Yandex not connected — set YANDEX_WEBMASTER_API_KEY + YANDEX_WEBMASTER_USER_ID or use OAuth");
+  const { token, userId } = creds;
 
   const cacheKey = `${PROVIDER}:index:${userId}:${hostId}`;
   const cached = cacheGet<YandexIndexSnapshot>(cacheKey);
