@@ -95,6 +95,16 @@ export function FilterableTable<T>(props: FilterableTableProps<T>) {
   const [sort, setSort] = useState<SortState>(null);
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const [addFilterOpen, setAddFilterOpen] = useState(false);
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const [colPickerOpen, setColPickerOpen] = useState(false);
+  const visibleColumns = useMemo(() => columns.filter((c) => !hiddenCols.has(c.key)), [columns, hiddenCols]);
+  const toggleCol = (key: string) => {
+    setHiddenCols((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   // Reset pagination when the underlying data changes.
   useEffect(() => setVisibleCount(pageSize), [rows, pageSize]);
@@ -304,11 +314,48 @@ export function FilterableTable<T>(props: FilterableTableProps<T>) {
             {itemLabel}
             {sorted.length === 1 ? "" : "s"}
           </span>
+          <div style={{ position: "relative" }}>
+            <button
+              className="qa-btn-ghost"
+              onClick={() => setColPickerOpen((v) => !v)}
+              title="Toggle column visibility"
+              style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600 }}
+            >
+              ⧉ Columns{hiddenCols.size > 0 ? ` (${columns.length - hiddenCols.size}/${columns.length})` : ""}
+            </button>
+            {colPickerOpen && (
+              <div
+                onMouseLeave={() => setColPickerOpen(false)}
+                style={{
+                  position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50,
+                  background: "var(--glass)", border: "1px solid var(--border)",
+                  borderRadius: 8, padding: 8, minWidth: 220,
+                  boxShadow: "0 10px 30px rgba(15,23,42,0.14)",
+                }}
+              >
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "var(--muted)", padding: "4px 6px 8px" }}>Show columns</div>
+                {columns.map((c) => (
+                  <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 6px", fontSize: 12.5, cursor: "pointer", borderRadius: 4 }}>
+                    <input type="checkbox" checked={!hiddenCols.has(c.key)} onChange={() => toggleCol(c.key)} />
+                    {c.label}
+                  </label>
+                ))}
+                {hiddenCols.size > 0 && (
+                  <button
+                    onClick={() => setHiddenCols(new Set())}
+                    style={{ marginTop: 6, padding: "4px 10px", fontSize: 11, border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--muted)", cursor: "pointer", width: "100%" }}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           {exportCsv && sorted.length > 0 && (
             <button
               className="qa-btn-ghost"
-              onClick={() => downloadCsv(sorted, columns, exportFilename ?? itemLabel)}
-              title={`Download ${sorted.length} filtered ${itemLabel}(s) as CSV`}
+              onClick={() => downloadCsv(sorted, visibleColumns, exportFilename ?? itemLabel)}
+              title={`Download ${sorted.length} filtered ${itemLabel}(s) as CSV (visible columns only)`}
               style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600 }}
             >
               ↓ CSV
@@ -324,43 +371,46 @@ export function FilterableTable<T>(props: FilterableTableProps<T>) {
           {emptyMessage ?? "No rows match the current filters."}
         </div>
       ) : (
-        <div className="qa-panel" style={{ padding: 0, overflow: "hidden" }}>
-          <table className="qa-table">
-            <thead>
-              <tr>
-                {columns.map((c) => {
-                  const sortable = !c.unsortable;
-                  const isSorted = sort?.key === c.key;
-                  const arrow = isSorted ? (sort!.dir === "asc" ? " ▲" : " ▼") : "";
-                  return (
-                    <th
-                      key={c.key}
-                      style={{
-                        width: c.width,
-                        cursor: sortable ? "pointer" : undefined,
-                        userSelect: "none",
-                        ...c.headerStyle,
-                      }}
-                      onClick={sortable ? () => toggleSort(c.key) : undefined}
-                    >
-                      {c.label}{arrow}
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((row) => (
-                <tr key={rowKey(row)}>
-                  {columns.map((c) => (
-                    <td key={c.key} style={c.cellStyle}>
-                      {c.render ? c.render(row) : stringify(c.accessor(row))}
-                    </td>
-                  ))}
+        <div className="qa-panel qa-filterable-table" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ maxHeight: 640, overflowY: "auto" }}>
+            <table className="qa-table">
+              <thead style={{ position: "sticky", top: 0, zIndex: 2, background: "var(--glass)" }}>
+                <tr>
+                  {visibleColumns.map((c) => {
+                    const sortable = !c.unsortable;
+                    const isSorted = sort?.key === c.key;
+                    const arrow = isSorted ? (sort!.dir === "asc" ? " ▲" : " ▼") : "";
+                    return (
+                      <th
+                        key={c.key}
+                        style={{
+                          width: c.width,
+                          cursor: sortable ? "pointer" : undefined,
+                          userSelect: "none",
+                          background: "var(--glass)",
+                          ...c.headerStyle,
+                        }}
+                        onClick={sortable ? () => toggleSort(c.key) : undefined}
+                      >
+                        {c.label}{arrow}
+                      </th>
+                    );
+                  })}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((row) => (
+                  <tr key={rowKey(row)}>
+                    {visibleColumns.map((c) => (
+                      <td key={c.key} style={c.cellStyle}>
+                        {c.render ? c.render(row) : stringify(c.accessor(row))}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

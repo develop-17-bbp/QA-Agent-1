@@ -59,7 +59,7 @@
   /* ── Legacy aliases (keep old refs working) ── */
   --accent2:        var(--accent);
   --accent-soft:    var(--accent-light);
-  --sidebar-bg:     var(--glass);
+  --sidebar-bg:     #fcfdfe;  /* subtle off-white so it reads as a distinct rail */
   --sidebar-active: var(--accent-light);
   --input-bg:       #ffffff;
   --qa-elevation:       var(--shadow-sm);
@@ -113,6 +113,7 @@
   --shadow-lg:  0 20px 25px rgba(0,0,0,0.4), 0 8px 10px rgba(0,0,0,0.3);
 
   --input-bg:       #0f172a;
+  --sidebar-bg:     #0b1220;  /* slightly darker than --bg-app so the rail reads */
 }
 
 /* ─── Reset & Base ────────────────────────────────────────────── */
@@ -478,6 +479,19 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.55; }
 }
 .qa-table tbody tr:hover { background: var(--glass2); }
 .qa-table tbody tr:last-child td { border-bottom: none; }
+
+/* Sticky table headers inside the scrollable wrapper on FilterableTable.
+   Use the actual surface color (not glass2) so rows scrolling under the
+   header don't bleed through in dark mode. */
+.qa-filterable-table thead th {
+  background: var(--glass) !important;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+/* Sidebar item hover for both themes. */
+.qa-sidebar-item:hover { background: var(--glass2); }
+.qa-sidebar-item--active { font-weight: 600; }
+.qa-sidebar-group:hover { background: var(--glass2); }
 
 /* Sortable header */
 .qa-table th.sortable { cursor: pointer; user-select: none; }
