@@ -124,6 +124,13 @@ async function main() {
     return r ? `${r.value.totalLinks} inbound link(s)` : "site not verified in Bing Webmaster Tools";
   });
 
+  await probe("Yandex Webmaster Tools", async () => {
+    const mod = await import("../src/health/providers/yandex-webmaster.js");
+    if (!mod.isYandexWebmasterConfigured()) throw new Error("YANDEX_WEBMASTER_API_KEY + YANDEX_WEBMASTER_USER_ID not set");
+    const r = await mod.fetchYandexSites();
+    return `${r.value.length} verified host(s)`;
+  });
+
   await probe("Brave Search", async () => {
     const mod = await import("../src/health/providers/brave-search.js");
     if (!mod.isBraveConfigured()) throw new Error("BRAVE_SEARCH_API_KEY not set");
