@@ -39,6 +39,7 @@ const LocalSeo = lazy(() => import("./pages/LocalSeo"));
 const SerpAnalyzer = lazy(() => import("./pages/SerpAnalyzer"));
 const AgenticCrawl = lazy(() => import("./pages/AgenticCrawl"));
 const GoogleConnections = lazy(() => import("./pages/GoogleConnections"));
+const IntegrationsHub = lazy(() => import("./pages/IntegrationsHub"));
 const UrlReport = lazy(() => import("./pages/UrlReport"));
 const FormTests = lazy(() => import("./pages/FormTests"));
 const KeywordImpact = lazy(() => import("./pages/KeywordImpact"));
@@ -129,6 +130,7 @@ export default function App() {
 
           {/* Integrations */}
           <Route path="/google-connections" element={<GoogleConnections />} />
+          <Route path="/integrations" element={<IntegrationsHub />} />
         </Route>
       </Routes>
     </Suspense>

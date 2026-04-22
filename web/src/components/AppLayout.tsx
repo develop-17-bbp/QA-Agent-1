@@ -359,7 +359,7 @@ function Topbar() {
               { to: "/history", label: "History" },
               { to: "/reports", label: "Reports" },
               { to: "/upload", label: "Import" },
-              { to: "/google-connections", label: "Integrations" },
+              { to: "/integrations", label: "Integrations" },
             ].map(({ to, label }) => (
               <NavLink
                 key={to}

@@ -2600,6 +2600,102 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Unified /integrations status — aggregate every connection's state ──
+      if (req.method === "GET" && url.pathname === "/api/integrations/status") {
+        const googleConnected = await getConnectionStatus();
+        const bingTokens = await loadBingTokens();
+        const byok = (await import("./providers/byok-config.js")).listByokProviders();
+        const status = {
+          google: {
+            connected: googleConnected.connected,
+            configured: googleConnected.configured,
+            email: googleConnected.email,
+            scopes: googleConnected.scopes ?? [],
+            connectedAt: googleConnected.connectedAt,
+            connectUrl: "/api/auth/google/start",
+            covers: ["Google Search Console", "Google Analytics 4", "Google Ads Keyword Planner", "PageSpeed Insights", "Chrome UX Report"],
+            price: "Free",
+          },
+          bing: {
+            connected: !!bingTokens || !!process.env.BING_WEBMASTER_API_KEY?.trim(),
+            connectionKind: process.env.BING_WEBMASTER_API_KEY?.trim() ? "api-key" : (bingTokens ? "oauth" : "none"),
+            oauthClientConfigured: isBingOAuthClientConfigured(),
+            connectUrl: "/api/auth/bing/start",
+            apiKeyVar: "BING_WEBMASTER_API_KEY",
+            helpUrl: "https://www.bing.com/webmasters/",
+            covers: ["Inbound links for verified sites (40-60% of Ahrefs)", "Anchor text extraction"],
+            price: "Free",
+          },
+          yandex: {
+            connected: !!(process.env.YANDEX_WEBMASTER_API_KEY?.trim() && process.env.YANDEX_WEBMASTER_USER_ID?.trim()),
+            connectionKind: "api-token",
+            apiKeyVar: "YANDEX_WEBMASTER_API_KEY",
+            helpUrl: "https://webmaster.yandex.com/",
+            covers: ["Russian-language markets (60%+ .ru share)", "Inbound links + indexing for verified sites"],
+            price: "Free",
+          },
+          naver: {
+            connected: !!(process.env.NAVER_CLIENT_ID?.trim() && process.env.NAVER_CLIENT_SECRET?.trim()),
+            connectionKind: "api-keys",
+            apiKeyVar: "NAVER_CLIENT_ID",
+            helpUrl: "https://searchadvisor.naver.com/",
+            covers: ["Korean-language markets (60% .kr share)", "Indexing + robots/sitemap validation"],
+            price: "Free",
+          },
+          ahrefsWebmaster: {
+            connected: false, // Can't check without a specific domain; UI will reload on domain select
+            connectionKind: "csv-upload",
+            uploadFlowUrl: "/backlinks",
+            helpUrl: "https://ahrefs.com/webmaster-tools",
+            covers: ["95% of paid Ahrefs coverage for your own verified sites"],
+            price: "Free",
+          },
+          pagespeed: {
+            connected: !!(process.env.PAGESPEED_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || googleConnected.connected),
+            connectionKind: process.env.PAGESPEED_API_KEY?.trim() ? "api-key" : "via-google-oauth",
+            apiKeyVar: "PAGESPEED_API_KEY",
+            helpUrl: "https://console.cloud.google.com/apis/library/pagespeedonline.googleapis.com",
+            covers: ["Lab PageSpeed + Lighthouse scores"],
+            price: "Free",
+          },
+          openPageRank: {
+            connected: !!(process.env.OPR_API_KEY?.trim() || process.env.OPEN_PAGERANK_API_KEY?.trim() || process.env.OPEN_PAGE_RANK_API_KEY?.trim()),
+            connectionKind: "api-key",
+            apiKeyVar: "OPR_API_KEY",
+            helpUrl: "https://www.domcop.com/openpagerank/",
+            covers: ["Domain authority score 0-10 / 0-100"],
+            price: "Free",
+          },
+          urlscan: {
+            connected: !!process.env.URLSCAN_API_KEY?.trim(),
+            connectionKind: "api-key",
+            apiKeyVar: "URLSCAN_API_KEY",
+            helpUrl: "https://urlscan.io/user/signup",
+            covers: ["Brand monitor signals, recent scans, resource graphs"],
+            price: "Free",
+          },
+          cloudflareRadar: {
+            connected: !!(process.env.CLOUDFLARE_API_TOKEN?.trim() || process.env.CF_API_TOKEN?.trim()),
+            connectionKind: "api-token",
+            apiKeyVar: "CLOUDFLARE_API_TOKEN",
+            helpUrl: "https://dash.cloudflare.com/profile/api-tokens",
+            covers: ["Real domain traffic rank in Cloudflare dataset"],
+            price: "Free",
+          },
+          ollama: {
+            connected: true, // auto-started; if not running UI surfaces it separately
+            connectionKind: "local",
+            helpUrl: "https://ollama.com/",
+            covers: ["All AI narrative, cluster labels, LLM content commentary"],
+            price: "Free (local)",
+          },
+          byok: byok,
+        };
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify(status));
+        return;
+      }
+
       // ── Bing WMT OAuth (alternative to API-key path) ─────────────────────
       // Optional: when BING_WMT_OAUTH_CLIENT_ID + BING_WMT_OAUTH_CLIENT_SECRET
       // are set in .env, users can connect via Azure AD OAuth consent instead

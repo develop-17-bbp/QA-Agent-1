@@ -569,6 +569,50 @@ export async function uploadGscLinksCsv(domain: string, csv: string): Promise<{ 
   return res.json();
 }
 
+// Unified integrations hub status — aggregate state of every connection (OAuth + key + CSV + paid BYOK).
+export type IntegrationCard = {
+  connected: boolean;
+  connectionKind?: "oauth" | "api-key" | "api-keys" | "api-token" | "csv-upload" | "via-google-oauth" | "local" | "none";
+  oauthClientConfigured?: boolean;
+  configured?: boolean;
+  email?: string;
+  scopes?: string[];
+  connectedAt?: string;
+  connectUrl?: string;
+  uploadFlowUrl?: string;
+  apiKeyVar?: string;
+  helpUrl?: string;
+  covers?: string[];
+  price: string;
+};
+export type ByokProviderStatus = {
+  id: string;
+  label: string;
+  description: string;
+  signUpUrl: string;
+  pricingHint: string;
+  configured: boolean;
+  envVars: string[];
+};
+export type IntegrationsStatus = {
+  google: IntegrationCard;
+  bing: IntegrationCard;
+  yandex: IntegrationCard;
+  naver: IntegrationCard;
+  ahrefsWebmaster: IntegrationCard;
+  pagespeed: IntegrationCard;
+  openPageRank: IntegrationCard;
+  urlscan: IntegrationCard;
+  cloudflareRadar: IntegrationCard;
+  ollama: IntegrationCard;
+  byok: ByokProviderStatus[];
+};
+export async function fetchIntegrationsStatus(): Promise<IntegrationsStatus> {
+  const res = await fetch("/api/integrations/status");
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // Ahrefs Webmaster Tools CSV import — 95% paid-Ahrefs parity for your verified site, free.
 export type AwtSummary = {
   totalBacklinks: number;
