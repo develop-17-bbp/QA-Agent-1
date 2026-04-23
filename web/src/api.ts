@@ -678,7 +678,7 @@ export function fetchBrandMentionsAggregated(query: string, sources?: string[]):
 }
 
 // ── Council — cross-source consensus + LLM advisor panel ──────────────────
-export type CouncilFeature = "keywords" | "backlinks" | "serp" | "authority" | "vitals";
+export type CouncilFeature = "keywords" | "backlinks" | "serp" | "authority" | "vitals" | "site-audit";
 export interface CouncilAdvisor {
   id: string;
   name: string;
@@ -722,7 +722,7 @@ export interface CouncilResponse {
 export function runCouncilApi(
   feature: CouncilFeature,
   domain: string,
-  extras?: { keywords?: string[]; competitors?: string[]; urls?: string[]; includeLlm?: boolean },
+  extras?: { keywords?: string[]; competitors?: string[]; urls?: string[]; runId?: string; includeLlm?: boolean },
 ): Promise<CouncilResponse> {
   return postApi<CouncilResponse>("/api/council", {
     feature,
@@ -730,6 +730,7 @@ export function runCouncilApi(
     keywords: extras?.keywords,
     competitors: extras?.competitors,
     urls: extras?.urls,
+    runId: extras?.runId,
     includeLlm: extras?.includeLlm !== false,
   });
 }

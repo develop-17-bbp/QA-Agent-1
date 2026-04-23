@@ -91,6 +91,11 @@ export interface PageFetchRecord {
   canonicalUrl?: string;
   /** Populated when health run uses --pagespeed and this URL was analyzed. */
   insights?: PageSpeedInsightRecord | PageSpeedInsightsBundle;
+  /** Raw HTML body, retained only when crawlSite() was called with
+   *  `retainBodies: true` (set by orchestrator when post-crawl enrichment is
+   *  on). Dropped from the persisted report after enrichers finish to keep
+   *  artifact size bounded. Never appears in durable JSON on disk. */
+  retainedBody?: string;
 }
 
 /** Playwright-based load check for mobile vs desktop viewports (optional per run). */
@@ -195,4 +200,100 @@ export interface SiteHealthReport {
   startedAt: string;
   finishedAt: string;
   crawl: CrawlSiteResult;
+  /** Post-crawl enrichment findings (Googlebot-grade audits that run after
+   *  BFS completes). Every field is optional so older reports and cheaper
+   *  runs stay valid. See src/health/crawl-enrichers/*.ts for producers. */
+  enrichments?: {
+    robots?: RobotsFindings;
+    redirectChains?: RedirectChainFindings;
+    structuredData?: StructuredDataFindings;
+    hreflang?: HreflangFindings;
+    sitemapDiff?: SitemapDiffFindings;
+    canonicalChains?: CanonicalChainFindings;
+    /** Per-enricher runtime + error summary so the UI can show gracefully
+     *  when an enricher failed or was skipped. */
+    status?: { name: string; ok: boolean; durationMs: number; error?: string; skipped?: string }[];
+  };
+}
+
+// ─── Enrichment findings ────────────────────────────────────────────────────
+// Each interface matches the return shape of src/health/crawl-enrichers/<name>.ts.
+
+export interface RobotsFindings {
+  fetched: boolean;
+  /** Robots.txt URL we tried to fetch. */
+  url: string;
+  /** Sitemap URLs declared in robots.txt Sitemap: directives. */
+  declaredSitemaps: string[];
+  /** Groups: one per User-agent block. `paths` are effective rules. */
+  groups: { userAgent: string; disallow: string[]; allow: string[]; crawlDelay?: number }[];
+  /** Crawled URLs that a compliant Googlebot would have been blocked from
+   *  (our crawler ignores robots.txt by default — this is a compliance hint). */
+  disallowedButCrawled: { url: string; matchedRule: string; userAgent: string }[];
+  /** Free-text error when the fetch failed. */
+  error?: string;
+}
+
+export interface RedirectChainFindings {
+  /** Chains with >1 hop (single redirects ignored — they're normal). */
+  chains: { startUrl: string; hops: { url: string; status: number; location?: string }[]; loop: boolean }[];
+  longestChainHops: number;
+  loopCount: number;
+}
+
+export interface StructuredDataFindings {
+  /** Pages we successfully parsed JSON-LD from. */
+  pagesWithSchema: number;
+  pagesScanned: number;
+  /** Count of each @type seen across the whole site. */
+  byType: Record<string, number>;
+  /** Per-page findings for pages with issues or with schema. */
+  pages: {
+    url: string;
+    types: string[];
+    issues: string[];
+    blocksTotal: number;
+    blocksInvalidJson: number;
+  }[];
+  /** JSON blocks that failed to parse — site-wide rollup. */
+  invalidJsonBlocks: number;
+}
+
+export interface HreflangFindings {
+  pagesWithHreflang: number;
+  pagesScanned: number;
+  /** Non-reciprocal pairs: A declares B as alternate but B doesn't declare A. */
+  nonMutualPairs: { from: string; to: string; lang: string }[];
+  /** Pages missing x-default. */
+  missingXDefault: string[];
+  /** Invalid ISO language-region codes found. */
+  invalidLangs: { url: string; lang: string }[];
+  /** Self-targeting hreflang (page points to itself with a lang other than
+   *  its actual lang — usually a CMS bug). */
+  selfTargetingMismatches: { url: string; declaredLang: string; actualLang?: string }[];
+}
+
+export interface SitemapDiffFindings {
+  /** Sitemap URLs that worked (subset of robots-declared + /sitemap.xml fallbacks). */
+  sitemapsFetched: string[];
+  /** Total URLs declared across all sitemaps. */
+  declaredUrlCount: number;
+  /** Declared URL set that our crawl never visited. */
+  declaredNotCrawled: string[];
+  /** Crawled URLs that aren't declared in any sitemap (true orphans from
+   *  sitemap perspective — might be indexable but invisible to search bots
+   *  that rely on sitemap discovery). */
+  crawledNotDeclared: string[];
+  error?: string;
+}
+
+export interface CanonicalChainFindings {
+  /** Pages with canonicalUrl pointing somewhere other than themselves. */
+  nonSelfCanonicalCount: number;
+  /** Chains longer than 1 (A → B → C …). */
+  chains: { startUrl: string; chain: string[]; loop: boolean }[];
+  /** Canonical targets that 404'd or otherwise weren't in the crawl. */
+  danglingTargets: { from: string; to: string; reason: string }[];
+  longestChain: number;
+  loopCount: number;
 }

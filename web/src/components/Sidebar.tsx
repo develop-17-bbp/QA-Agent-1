@@ -53,7 +53,7 @@ const GROUPS: NavGroup[] = [
   {
     id: "council", label: "Council", icon: "🧭",
     items: [
-      { label: "Council", path: "/council", badge: "NEW" },
+      { label: "Council — 6 AI panels", path: "/council", badge: "NEW" },
     ],
   },
   {

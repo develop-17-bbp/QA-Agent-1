@@ -1,21 +1,23 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 import { ErrorBanner } from "../components/UI";
 import { SkeletonCard, MetricCard, MetricCardSkeleton } from "../components/MetricCard";
 import {
   runCouncilApi,
+  fetchHistory,
   type CouncilFeature,
   type CouncilResponse,
   type CouncilAgendaItem,
   type CouncilAdvisor,
+  type HealthRunMeta,
 } from "../api";
 
 type FeatureDef = {
   id: CouncilFeature;
   label: string;
   blurb: string;
-  extraInput?: "keywords" | "competitors" | "urls";
+  extraInput?: "keywords" | "competitors" | "urls" | "runId";
   extraLabel?: string;
   extraPlaceholder?: string;
 };
@@ -25,6 +27,7 @@ const FEATURES: FeatureDef[] = [
   { id: "serp", label: "SERP Ranks", blurb: "Your domain's ranking consensus across DDG + Startpage + GSC + Brave for a given keyword set.", extraInput: "keywords", extraLabel: "Keywords to probe (comma or newline separated)", extraPlaceholder: "best seo tools\nkeyword research\nbacklink audit" },
   { id: "authority", label: "Domain Authority", blurb: "OpenPageRank + Tranco + Cloudflare Radar agreement per domain. 3/3 sources = genuine top-tier site; 1/3 may be SEO-juiced.", extraInput: "competitors", extraLabel: "Competitor domains (optional — comma or newline separated)", extraPlaceholder: "wikipedia.org\nahrefs.com\nsemrush.com" },
   { id: "vitals", label: "Web Vitals", blurb: "Lab (PageSpeed mobile + desktop) vs. field (CrUX phone + desktop) per URL. Big lab-vs-field gaps are where real regressions hide.", extraInput: "urls", extraLabel: "URLs to probe (optional — defaults to homepage; 1 per line)", extraPlaceholder: "/\n/pricing\n/blog" },
+  { id: "site-audit", label: "Site Audit (AI)", blurb: "Pick a completed crawl → the council reconciles robots/redirects/JSON-LD/hreflang/sitemap/canonical enrichers with GSC, Ahrefs, and CrUX, then returns prioritized issues with AI verdicts from 4 advisors.", extraInput: "runId" },
 ];
 
 const TIER_META = {
@@ -55,6 +58,16 @@ const SOURCE_COLOR: Record<string, string> = {
   "psi-desktop": "#1a73e8",
   "crux-phone": "#ea4335",
   "crux-desktop": "#fbbc04",
+  // Site Audit
+  crawl: "#0ea5e9",
+  robots: "#ef4444",
+  redirects: "#f59e0b",
+  "structured-data": "#a855f7",
+  hreflang: "#14b8a6",
+  sitemap: "#3b82f6",
+  canonical: "#ec4899",
+  ahrefs: "#ff6a00",
+  crux: "#ea4335",
 };
 
 function sourceChip(src: string): { bg: string; color: string; label: string } {
@@ -366,6 +379,8 @@ export default function Council() {
   const [feature, setFeature] = useState<CouncilFeature>("keywords");
   const [domain, setDomain] = useState("");
   const [extrasText, setExtrasText] = useState("");
+  const [selectedRunId, setSelectedRunId] = useState("");
+  const [runChoices, setRunChoices] = useState<HealthRunMeta[]>([]);
   const [includeLlm, setIncludeLlm] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -373,19 +388,33 @@ export default function Council() {
 
   const featureMeta = useMemo(() => FEATURES.find((f) => f.id === feature)!, [feature]);
 
+  // Load the most-recent 40 runs for the Site Audit run picker.
+  useEffect(() => {
+    if (feature !== "site-audit") return;
+    if (runChoices.length > 0) return;
+    void fetchHistory()
+      .then((h) => {
+        const all = h.days.flatMap((d) => d.runs).slice(0, 40);
+        setRunChoices(all);
+      })
+      .catch(() => { /* silent — user will see empty dropdown */ });
+  }, [feature, runChoices.length]);
+
   const run = async () => {
     const d = domain.trim();
     if (!d) { setError("domain required"); return; }
     if (feature === "serp" && !extrasText.trim()) { setError("at least one keyword required for SERP council"); return; }
+    if (feature === "site-audit" && !selectedRunId) { setError("pick a completed run from the dropdown"); return; }
     setError("");
     setLoading(true);
     setData(null);
     try {
       const lines = extrasText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
-      const extras: { keywords?: string[]; competitors?: string[]; urls?: string[]; includeLlm: boolean } = { includeLlm };
+      const extras: { keywords?: string[]; competitors?: string[]; urls?: string[]; runId?: string; includeLlm: boolean } = { includeLlm };
       if (feature === "serp") extras.keywords = lines;
       else if (feature === "authority") extras.competitors = lines;
       else if (feature === "vitals") extras.urls = lines;
+      else if (feature === "site-audit") extras.runId = selectedRunId;
       const resp = await runCouncilApi(feature, d, extras);
       setData(resp);
     } catch (e: any) {
@@ -411,7 +440,7 @@ export default function Council() {
           {FEATURES.map((f) => (
             <button
               key={f.id}
-              onClick={() => { setFeature(f.id); setExtrasText(""); }}
+              onClick={() => { setFeature(f.id); setExtrasText(""); setSelectedRunId(""); }}
               style={{
                 padding: "8px 16px",
                 borderRadius: 8,
@@ -443,7 +472,7 @@ export default function Council() {
             />
           </div>
 
-          {featureMeta.extraInput && (
+          {featureMeta.extraInput && featureMeta.extraInput !== "runId" && (
             <div style={{ flex: 2, minWidth: 280 }}>
               <label className="qa-kicker" style={{ display: "block", marginBottom: 4 }}>{featureMeta.extraLabel}</label>
               <textarea
@@ -454,6 +483,32 @@ export default function Council() {
                 style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, resize: "vertical" }}
                 disabled={loading}
               />
+            </div>
+          )}
+
+          {featureMeta.extraInput === "runId" && (
+            <div style={{ flex: 2, minWidth: 280 }}>
+              <label className="qa-kicker" style={{ display: "block", marginBottom: 4 }}>Crawl run</label>
+              <select
+                className="qa-input"
+                value={selectedRunId}
+                onChange={(e) => setSelectedRunId(e.target.value)}
+                disabled={loading}
+                style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13 }}
+              >
+                <option value="">Pick a completed run…</option>
+                {runChoices.map((r) => {
+                  const started = r.startedAt ? new Date(r.startedAt).toLocaleString() : "";
+                  return (
+                    <option key={r.runId} value={r.runId}>
+                      {(r.label ?? r.runId)} — {r.totalSites} site{r.totalSites === 1 ? "" : "s"}{started ? ` · ${started}` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                Only runs with enrichers enabled give the full cross-signal analysis (default on).
+              </div>
             </div>
           )}
         </div>

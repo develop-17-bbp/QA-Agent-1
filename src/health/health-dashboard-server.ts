@@ -3217,15 +3217,20 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/council") {
         let body: string;
         try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { feature?: string; domain?: string; keywords?: string[]; competitors?: string[]; urls?: string[]; includeLlm?: boolean };
+        let payload: { feature?: string; domain?: string; keywords?: string[]; competitors?: string[]; urls?: string[]; runId?: string; includeLlm?: boolean };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const feature = typeof payload.feature === "string" ? payload.feature : "";
         const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
         const includeLlm = payload.includeLlm !== false;
         if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
-        if (!["keywords", "backlinks", "serp", "authority", "vitals"].includes(feature)) {
+        if (!["keywords", "backlinks", "serp", "authority", "vitals", "site-audit"].includes(feature)) {
           res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ error: "feature must be one of: keywords, backlinks, serp, authority, vitals" }));
+          res.end(JSON.stringify({ error: "feature must be one of: keywords, backlinks, serp, authority, vitals, site-audit" }));
+          return;
+        }
+        if (feature === "site-audit" && (typeof payload.runId !== "string" || !payload.runId.trim() || !isSafeRunIdSegment(payload.runId))) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "runId required for site-audit (pick from /api/history)" }));
           return;
         }
         try {
@@ -3234,7 +3239,7 @@ export async function runHealthDashboard(options: {
           // cache because its cost (10-45s Ollama) justifies a hit even on
           // warm consensus, and users re-running the council typically want
           // fresh advisor commentary.
-          const cacheKey = buildCacheKey(`/api/council:${feature}`, { domain, keywords: payload.keywords, competitors: payload.competitors, urls: payload.urls });
+          const cacheKey = buildCacheKey(`/api/council:${feature}`, { domain, keywords: payload.keywords, competitors: payload.competitors, urls: payload.urls, runId: payload.runId });
           const { value: context, hit: consensusCacheHit } = await cachedResponse(cacheKey, 5 * 60_000, async () => {
             if (feature === "keywords") {
               const { buildKeywordCouncilContext } = await import("./modules/keyword-consensus.js");
@@ -3250,6 +3255,9 @@ export async function runHealthDashboard(options: {
               const { buildAuthorityCouncilContext } = await import("./modules/authority-consensus.js");
               const competitors = Array.isArray(payload.competitors) ? payload.competitors.filter((c): c is string => typeof c === "string") : [];
               return await buildAuthorityCouncilContext({ domain, competitors });
+            } else if (feature === "site-audit") {
+              const { buildSiteAuditCouncilContext } = await import("./modules/site-audit-consensus.js");
+              return await buildSiteAuditCouncilContext({ runId: payload.runId!, domain, outRoot });
             } else {
               const { buildVitalsCouncilContext } = await import("./modules/vitals-consensus.js");
               const urls = Array.isArray(payload.urls) ? payload.urls.filter((u): u is string => typeof u === "string") : [];

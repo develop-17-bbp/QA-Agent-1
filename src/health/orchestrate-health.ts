@@ -122,6 +122,11 @@ export async function orchestrateHealthCheck(options: {
   aiSummary?: boolean;
   /** Run Ollama-powered autonomous smart analysis after crawl. */
   smartAnalysis?: boolean;
+  /** Run Googlebot-grade post-crawl enrichers (robots.txt compliance,
+   *  redirect chains, JSON-LD, hreflang, sitemap diff, canonical chains).
+   *  Defaults to true. Adds ~5-15s to each site depending on size and
+   *  enables the Site-Audit Council. */
+  enrich?: boolean;
   onProgress?: (event: HealthProgressEvent) => void;
 }): Promise<{ runId: string; runDir: string; siteFailures: number }> {
   const rid = runId();
@@ -181,12 +186,14 @@ export async function orchestrateHealthCheck(options: {
     const startedAt = new Date().toISOString();
     let crawl: import("./types.js").CrawlSiteResult;
     try {
+      const enrichEnabled = options.enrich !== false;
       crawl = await crawlSite({
         startUrl,
         maxPages: options.maxPages,
         maxLinkChecks: options.maxLinkChecks,
         requestTimeoutMs: options.requestTimeoutMs,
         fetchConcurrency: options.fetchConcurrency,
+        retainBodies: enrichEnabled, // enrichers re-parse bodies; dropped before persist
       });
 
       // ── Post-crawl steps run IN PARALLEL for speed ──────────────
@@ -259,6 +266,61 @@ export async function orchestrateHealthCheck(options: {
       finishedAt,
       crawl,
     };
+
+    // ── Post-crawl enrichers (Googlebot-grade audits) ────────────────────
+    // Each runs independently; a failure in one doesn't block the others.
+    // After all finish, we drop the retained HTML bodies from pages so the
+    // persisted report stays small.
+    if (options.enrich !== false) {
+      const enrichStatus: NonNullable<SiteHealthReport["enrichments"]>["status"] = [];
+      const enrichments: NonNullable<SiteHealthReport["enrichments"]> = { status: enrichStatus };
+      report.enrichments = enrichments;
+
+      const runEnricher = async <K extends keyof typeof enrichments>(
+        name: K & string,
+        run: () => Promise<NonNullable<typeof enrichments[K]>>,
+      ): Promise<void> => {
+        const started = Date.now();
+        try {
+          const result = await run();
+          (enrichments as Record<string, unknown>)[name] = result;
+          enrichStatus.push({ name, ok: true, durationMs: Date.now() - started });
+        } catch (e) {
+          enrichStatus.push({
+            name,
+            ok: false,
+            durationMs: Date.now() - started,
+            error: e instanceof Error ? e.message.slice(0, 160) : String(e).slice(0, 160),
+          });
+        }
+      };
+
+      const { enrichRobotsTxt } = await import("./crawl-enrichers/robots-txt.js");
+      const { enrichRedirectChains } = await import("./crawl-enrichers/redirect-chain.js");
+      const { enrichStructuredData } = await import("./crawl-enrichers/structured-data.js");
+      const { enrichHreflang } = await import("./crawl-enrichers/hreflang-audit.js");
+      const { enrichSitemapDiff } = await import("./crawl-enrichers/sitemap-diff.js");
+      const { enrichCanonicalChains } = await import("./crawl-enrichers/canonical-chain.js");
+
+      // Robots runs first so sitemap-diff can reuse its declared sitemaps.
+      await runEnricher("robots", () => enrichRobotsTxt(report));
+      const declaredSitemaps = enrichments.robots?.declaredSitemaps ?? [];
+
+      await Promise.allSettled([
+        runEnricher("redirectChains", () => enrichRedirectChains(report)),
+        runEnricher("structuredData", () => enrichStructuredData(report)),
+        runEnricher("hreflang", () => enrichHreflang(report)),
+        runEnricher("sitemapDiff", () => enrichSitemapDiff(report, declaredSitemaps)),
+        runEnricher("canonicalChains", () => enrichCanonicalChains(report)),
+      ]);
+
+      // Drop retained bodies now that enrichers have consumed them; keeps
+      // persisted JSON size bounded (a 500-page HTML crawl would otherwise
+      // serialize ~50MB+ of duplicated HTML).
+      for (const p of crawl.pages) {
+        if (p.retainedBody) delete p.retainedBody;
+      }
+    }
 
     const siteDir = path.join(runDir, outputDirName);
     const siteFileBase = perSiteReportBaseName(report.hostname, report.finishedAt);

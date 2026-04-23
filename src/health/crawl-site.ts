@@ -450,6 +450,11 @@ export async function crawlSite(options: {
   requestTimeoutMs: number;
   /** Parallel HTTP fetches per site (BFS + link checks). Default callers pass >= 1. */
   fetchConcurrency: number;
+  /** When true, attach the raw HTML body to each PageFetchRecord under
+   *  `retainedBody` so post-crawl enrichers (structured-data, hreflang)
+   *  can re-parse it. Orchestrator drops bodies before persisting the
+   *  report. Default false to avoid blowing up memory on large sites. */
+  retainBodies?: boolean;
 }): Promise<CrawlSiteResult> {
   const started = Date.now();
   let base = new URL(options.startUrl);
@@ -547,6 +552,7 @@ export async function crawlSite(options: {
       redirected,
       finalUrl,
       ...docSignals,
+      ...(options.retainBodies && body ? { retainedBody: body } : {}),
     });
 
     if (!ok && status !== 0) {
