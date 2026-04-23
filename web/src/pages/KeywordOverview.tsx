@@ -246,11 +246,23 @@ export default function KeywordOverview() {
 
       {data && !loading && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          {/* Top title */}
-          <div style={{ marginBottom: 20 }}>
+          {/* Top title + Ask the Council deep-link */}
+          <div style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
             <h2 style={{ margin: 0, fontSize: 22 }}>
               Keyword Overview: <span style={{ fontWeight: 400, color: "var(--muted)" }}>{data.keyword}</span>
             </h2>
+            <a
+              href={`/term-intel?term=${encodeURIComponent(data.keyword)}`}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px",
+                borderRadius: 8, background: "var(--accent-light)", color: "var(--accent)",
+                border: "1px solid var(--accent-muted)", fontWeight: 600, fontSize: 12.5,
+                textDecoration: "none", whiteSpace: "nowrap",
+              }}
+              title='Query every configured source (Ads, Trends, Suggest, GSC, Bing/Yandex/Ahrefs anchors, RSS, SERPs) for this term and run 4 AI advisors'
+            >
+              🧭 Ask the Council about this term →
+            </a>
           </div>
 
           {/* Data quality badges */}

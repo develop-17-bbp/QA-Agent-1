@@ -47,6 +47,7 @@ const LinkFixAdvisor = lazy(() => import("./pages/LinkFixAdvisor"));
 const CompetitiveEstimator = lazy(() => import("./pages/CompetitiveEstimator"));
 const CompetitorRankTracker = lazy(() => import("./pages/CompetitorRankTracker"));
 const Council = lazy(() => import("./pages/Council"));
+const TermIntel = lazy(() => import("./pages/TermIntel"));
 
 function LazyFallback() {
   return (
@@ -133,6 +134,7 @@ export default function App() {
           <Route path="/google-connections" element={<GoogleConnections />} />
           <Route path="/integrations" element={<IntegrationsHub />} />
           <Route path="/council" element={<Council />} />
+          <Route path="/term-intel" element={<TermIntel />} />
         </Route>
       </Routes>
     </Suspense>

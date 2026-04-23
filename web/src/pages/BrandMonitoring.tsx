@@ -123,6 +123,16 @@ export default function BrandMonitoring() {
           >
             {radarLoading ? "Scanning…" : "Run radar"}
           </button>
+          <a
+            href={radarQuery.trim() ? `/term-intel?term=${encodeURIComponent(radarQuery.trim())}` : "/term-intel"}
+            style={{
+              padding: "8px 14px", borderRadius: 6, background: "#fff", border: "1px solid var(--border)",
+              color: "var(--accent)", fontWeight: 600, fontSize: 12.5, textDecoration: "none", whiteSpace: "nowrap",
+            }}
+            title="Ask the Council about this term — queries every source (Ads, Trends, GSC, Bing/Yandex/Ahrefs anchors, etc.) and runs the AI advisor panel"
+          >
+            🧭 Ask the Council →
+          </a>
         </div>
         {radarError && <ErrorBanner error={radarError} />}
         {radar && (

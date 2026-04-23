@@ -73,7 +73,21 @@ export default function SerpAnalyzer() {
           <input className="qa-input" value={targetDomain} onChange={e => setTargetDomain(e.target.value)} placeholder="Your domain (e.g. example.com) — optional" style={{ flex: 1, padding: "8px 12px" }} />
         </div>
         <textarea className="qa-input" value={keywords} onChange={e => setKeywords(e.target.value)} placeholder="Enter keywords (one per line)..." style={{ width: "100%", padding: "8px 12px", minHeight: 100, resize: "vertical", fontFamily: "monospace", fontSize: 12 }} />
-        <button className="qa-btn-primary" onClick={analyze} disabled={loading || !keywords.trim()} style={{ marginTop: 8, padding: "8px 24px" }}>{loading ? "Searching..." : "Analyze SERPs"}</button>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 8 }}>
+          <button className="qa-btn-primary" onClick={analyze} disabled={loading || !keywords.trim()} style={{ padding: "8px 24px" }}>{loading ? "Searching..." : "Analyze SERPs"}</button>
+          {keywords.trim() && (
+            <a
+              href={`/term-intel?term=${encodeURIComponent(keywords.split("\n")[0]?.trim() ?? "")}${targetDomain.trim() ? `&domain=${encodeURIComponent(targetDomain.trim())}` : ""}`}
+              style={{
+                padding: "8px 14px", borderRadius: 6, background: "#fff", border: "1px solid var(--border)",
+                color: "var(--accent)", fontWeight: 600, fontSize: 12.5, textDecoration: "none", whiteSpace: "nowrap",
+              }}
+              title="Ask the Council about the first keyword — queries every configured source and runs the 4 AI advisors"
+            >
+              🧭 Ask the Council about "{(keywords.split("\n")[0] ?? "").slice(0, 24)}{(keywords.split("\n")[0]?.length ?? 0) > 24 ? "…" : ""}"
+            </a>
+          )}
+        </div>
       </div>
 
       {error && <ErrorBanner error={error} />}

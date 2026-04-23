@@ -3203,6 +3203,54 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Term Intel — universal cross-source lookup for any term ─────────
+      // POST /api/term-intel
+      // Body: { term: string, region?: string, domain?: string, includeLlm?: boolean }
+      // Returns: { intel: TermIntelResult, context: CouncilContext, council: CouncilResult | null, elapsed: {gatherMs, llmMs} }
+      if (req.method === "POST" && url.pathname === "/api/term-intel") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { term?: string; region?: string; domain?: string; includeLlm?: boolean };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const term = typeof payload.term === "string" ? payload.term.trim() : "";
+        const region = typeof payload.region === "string" && payload.region.trim() ? payload.region.trim() : "US";
+        const domain = typeof payload.domain === "string" && payload.domain.trim() ? payload.domain.trim() : undefined;
+        const includeLlm = payload.includeLlm !== false;
+        if (!term) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "term required" })); return; }
+        try {
+          const gatherStart = Date.now();
+          const cacheKey = buildCacheKey("/api/term-intel", { term, region, domain });
+          const { value: intel, hit } = await cachedResponse(cacheKey, 10 * 60_000, async () => {
+            const { gatherTermIntel } = await import("./modules/term-intel.js");
+            return await gatherTermIntel({ term, region, domain });
+          });
+          const gatherMs = Date.now() - gatherStart;
+
+          const { buildTermIntelCouncilContext } = await import("./modules/term-intel.js");
+          const context = buildTermIntelCouncilContext(intel, domain);
+
+          let council: unknown = null;
+          let llmMs = 0;
+          if (includeLlm && context.tierTop.length + context.tierMid.length + context.tierBottom.length > 0) {
+            const llmStart = Date.now();
+            try {
+              const { runCouncil } = await import("./modules/council-runner.js");
+              council = await runCouncil(context);
+            } catch (e) {
+              council = { error: e instanceof Error ? e.message : String(e) };
+            }
+            llmMs = Date.now() - llmStart;
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify({ intel, context, council, elapsed: { gatherMs, llmMs } }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Daily report (for n8n cron / direct email / manual preview) ─────
       // ── Council — cross-source consensus + LLM advisor panel ─────────────
       // POST /api/council

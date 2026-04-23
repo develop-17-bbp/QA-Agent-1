@@ -33,6 +33,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
   "/competitor-rank-tracker": "real",
   "/council": "mixed", "/integrations": "real", "/google-connections": "real",
+  "/term-intel": "mixed",
 };
 const DOT_COLORS: Record<SourceClass, string> = { real: "#22c55e", "llm-safe": "#3b82f6", mixed: "#eab308" };
 
@@ -54,6 +55,7 @@ const GROUPS: NavGroup[] = [
     id: "council", label: "Council", icon: "🧭",
     items: [
       { label: "Council — 6 AI panels", path: "/council", badge: "NEW" },
+      { label: "Term Intel — every source", path: "/term-intel", badge: "NEW" },
     ],
   },
   {

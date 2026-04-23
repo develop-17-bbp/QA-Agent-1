@@ -735,6 +735,47 @@ export function runCouncilApi(
   });
 }
 
+// ── Term Intel — universal cross-source lookup for any term ──────────────
+export type TermIntelSourceStatus = "ok" | "no-data" | "not-configured" | "error";
+export type TermIntelDetail =
+  | { kind: "table"; columns: string[]; rows: (string | number)[][] }
+  | { kind: "list"; items: string[] }
+  | { kind: "serp"; results: { position: number; url: string; title: string }[] }
+  | { kind: "trend"; monthly: number[] }
+  | { kind: "text"; text: string };
+export interface TermIntelSource {
+  id: string;
+  name: string;
+  category: "volume" | "editorial" | "anchor" | "serp" | "topic";
+  status: TermIntelSourceStatus;
+  headline: string;
+  metric?: string;
+  detail?: TermIntelDetail;
+  reason?: string;
+}
+export interface TermIntelResult {
+  term: string;
+  region: string;
+  fetchedAt: string;
+  perSource: TermIntelSource[];
+  sourcesHit: string[];
+  sourcesMissed: string[];
+}
+export interface TermIntelResponse {
+  intel: TermIntelResult;
+  context: CouncilContext;
+  council: CouncilResult | { error: string } | null;
+  elapsed: { gatherMs: number; llmMs: number };
+}
+export function runTermIntelApi(term: string, extras?: { region?: string; domain?: string; includeLlm?: boolean }): Promise<TermIntelResponse> {
+  return postApi<TermIntelResponse>("/api/term-intel", {
+    term,
+    region: extras?.region,
+    domain: extras?.domain,
+    includeLlm: extras?.includeLlm !== false,
+  });
+}
+
 // Startpage SERP — ~0.9 correlation with Google, free, Playwright-backed.
 export type StartpageSerpResult = { position: number; title: string; url: string; displayUrl?: string; snippet?: string };
 export type StartpageSerpResponse = { query: string; region: string; fetchedAt: string; results: StartpageSerpResult[]; selectorVariant: string; durationMs: number };
