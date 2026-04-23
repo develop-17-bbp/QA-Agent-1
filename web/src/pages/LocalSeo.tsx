@@ -4,6 +4,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchLocalSeo } from "../api";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import AskCouncilButton from "../components/AskCouncilButton";
 const CATEGORY_ORDER = ["NAP & Contact", "Schema Markup", "Localization", "Discoverability"];
 
 const STATUS_COLOR: Record<string, string> = {
@@ -53,6 +54,7 @@ export default function LocalSeo() {
         <input className="qa-input" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Business name..." style={{ flex: 1, minWidth: 150, padding: "8px 12px" }} />
         <input className="qa-input" value={location} onChange={e => setLocation(e.target.value)} onKeyDown={e => e.key === "Enter" && analyze()} placeholder="Location (city, state)..." style={{ flex: 1, minWidth: 150, padding: "8px 12px" }} />
         <button className="qa-btn-primary" onClick={analyze} disabled={loading || !businessName.trim() || !location.trim() || !runId}>{loading ? "Analyzing..." : "Run Checklist"}</button>
+        {businessName.trim() && <AskCouncilButton term={`${businessName.trim()}${location.trim() ? ` ${location.trim()}` : ""}`} compact />}
       </div>
 
       {error && <ErrorBanner error={error} />}

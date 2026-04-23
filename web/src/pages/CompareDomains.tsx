@@ -5,6 +5,7 @@ import {
   ResponsiveContainer, Tooltip, Legend,
 } from "recharts";
 import { fetchHistory, fetchCompareDomains, type HealthRunMeta } from "../api";
+import AskCouncilButton from "../components/AskCouncilButton";
 
 const COLORS = ["#111111", "#e53e3e", "#38a169", "#dd6b20", "#3182ce", "#d53f8c"];
 const METRIC_LABELS: Record<string, string> = {
@@ -176,6 +177,18 @@ export default function CompareDomains() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
         >
+          {/* Ask the Council per compared domain */}
+          {(data.domains ?? []).length > 0 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, fontSize: 11.5, color: "var(--muted)", alignItems: "center" }}>
+              <span style={{ fontWeight: 600 }}>Ask the Council:</span>
+              {(data.domains ?? [])
+                .filter((d: { hostname?: string }) => typeof d.hostname === "string" && d.hostname.length > 0)
+                .map((d: { hostname: string }) => (
+                  <AskCouncilButton key={d.hostname} term={d.hostname} compact />
+                ))}
+            </div>
+          )}
+
           {/* Radar Chart */}
           <div className="qa-panel" style={{ padding: 24, marginBottom: 16 }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>

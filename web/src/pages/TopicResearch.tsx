@@ -4,6 +4,8 @@ import RunSelector from "../components/RunSelector";
 import { fetchTopicResearch } from "../api";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import AskCouncilButton from "../components/AskCouncilButton";
+import CouncilSidecar from "../components/CouncilSidecar";
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
 const CONFIDENCE_LABELS: Record<string, string> = { high: "real", medium: "derived", low: "estimated" };
 
@@ -74,6 +76,7 @@ export default function TopicResearch() {
       <div className="qa-panel" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <input className="qa-input" value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === "Enter" && research()} placeholder="Enter topic to research..." style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
         <button className="qa-btn-primary" onClick={research} disabled={loading || !topic.trim()}>{loading ? "Researching..." : "Research"}</button>
+        {topic.trim() && <AskCouncilButton term={topic} compact />}
       </div>
 
       {error && <ErrorBanner error={error} />}
@@ -198,6 +201,9 @@ export default function TopicResearch() {
           )}
         </>
       )}
+
+      {/* Embedded Council Sidecar — cross-source intel on the researched topic */}
+      {data && topic.trim() && <CouncilSidecar term={topic.trim()} autoInvoke />}
     </motion.div>
   );
 }

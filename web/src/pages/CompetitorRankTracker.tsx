@@ -13,6 +13,8 @@ import {
 } from "../api";
 import { useRegion } from "../components/RegionPicker";
 import { ErrorBanner } from "../components/UI";
+import AskCouncilButton from "../components/AskCouncilButton";
+import CouncilSidecar from "../components/CouncilSidecar";
 
 function rankLabel(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
@@ -164,6 +166,11 @@ export default function CompetitorRankTracker() {
           {adding ? "Checking…" : `Add & Check (${region})`}
         </button>
       </form>
+      {keyword.trim() && (
+        <div style={{ marginTop: -8, marginBottom: 14, display: "flex", justifyContent: "flex-end" }}>
+          <AskCouncilButton term={keyword} domain={domain.trim() || undefined} compact />
+        </div>
+      )}
 
       {error && <ErrorBanner error={error} />}
 
@@ -277,6 +284,15 @@ export default function CompetitorRankTracker() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Embedded Council Sidecar — when a competitor is selected, fire on that pair */}
+      {selected && (
+        <CouncilSidecar
+          term={selected.keyword}
+          domain={selected.domain}
+          defaultOpen
+        />
+      )}
     </motion.div>
   );
 }

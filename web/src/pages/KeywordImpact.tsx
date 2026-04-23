@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { fetchKeywordImpact } from "../api";
 import { useRegion } from "../components/RegionPicker";
 import { ErrorBanner } from "../components/UI";
+import AskCouncilButton from "../components/AskCouncilButton";
 
 type Projection = { period: "3-month" | "6-month" | "12-month"; rankingEstimate: string; trafficDelta: string; confidence: "low" | "medium" | "high" };
 
@@ -186,6 +187,11 @@ export default function KeywordImpact() {
         <button className="qa-btn-primary" onClick={run} disabled={loading || !url.trim() || !keyword.trim()} style={{ padding: "10px 22px", whiteSpace: "nowrap" }}>
           {loading ? "Predicting…" : "Predict impact"}
         </button>
+        {keyword.trim() && (() => {
+          let domain: string | undefined;
+          try { domain = new URL(url.trim()).hostname; } catch { /* ignore */ }
+          return <AskCouncilButton term={keyword} domain={domain} compact />;
+        })()}
       </div>
 
       {error && <ErrorBanner error={error} />}

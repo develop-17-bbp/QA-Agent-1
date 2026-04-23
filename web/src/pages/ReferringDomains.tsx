@@ -6,6 +6,7 @@ import { FilterableTable, type FilterableColumn } from "../components/Filterable
 import { PageShell, SectionCard, StatGrid, EmptyState } from "../components/PageUI";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import AskCouncilButton from "../components/AskCouncilButton";
 const AUTH_COLORS = { high: "#38a169", medium: "#dd6b20", low: "#e53e3e" };
 
 export default function ReferringDomains() {
@@ -53,6 +54,7 @@ export default function ReferringDomains() {
         <div style={{ display: "flex", gap: 8 }}>
           <input className="qa-input" placeholder="e.g. example.com" value={daInput} onChange={e => setDaInput(e.target.value)} onKeyDown={e => e.key === "Enter" && lookupDa()} style={{ flex: 1, padding: "7px 10px" }} />
           <button className="qa-btn-primary" onClick={lookupDa} disabled={daLoading || !daInput.trim()}>{daLoading ? "Checking…" : "Lookup"}</button>
+          {daInput.trim() && <AskCouncilButton term={daInput} compact />}
         </div>
         {daError && <ErrorBanner error={daError} />}
         {daData && !daLoading && (

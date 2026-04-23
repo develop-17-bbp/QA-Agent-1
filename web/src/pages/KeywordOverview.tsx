@@ -6,6 +6,7 @@ import { useGoogleOverlay } from "../lib/google-overlay";
 import { useRegion } from "../components/RegionPicker";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
+import CouncilSidecar from "../components/CouncilSidecar";
 
 import { ErrorBanner } from "../components/UI";
 /**
@@ -598,6 +599,9 @@ export default function KeywordOverview() {
               <VariationsTable rows={data.questions ?? []} filename={`questions-${data.keyword}`} />
             </div>
           )}
+
+          {/* Embedded Council Sidecar — cross-source intel + AI advisors inline */}
+          <CouncilSidecar term={data.keyword} autoInvoke />
         </motion.div>
       )}
     </div>

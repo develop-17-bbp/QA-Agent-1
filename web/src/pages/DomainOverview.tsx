@@ -8,6 +8,7 @@ import {
   fetchGa4Totals,
 } from "../api";
 import { useGoogleOverlay, findMatchingGscSite, findMatchingGa4Property } from "../lib/google-overlay";
+import AskCouncilButton from "../components/AskCouncilButton";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
 type GscTotals = {
@@ -149,14 +150,17 @@ export default function DomainOverview() {
         const matchedGa4Property = findMatchingGa4Property(overlay.ga4Properties, site.hostname);
         return (
           <div key={site.hostname} className="qa-panel" style={{ marginTop: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>{site.hostname}</div>
                 <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>{site.pageCount} pages crawled | Avg load: {site.avgLoadMs}ms</div>
               </div>
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 42, fontWeight: 700, color: site.scores.overall >= 70 ? "#38a169" : site.scores.overall >= 50 ? "#dd6b20" : "#e53e3e" }}>{site.scores.overall}</div>
-                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Overall Score</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <AskCouncilButton term={site.hostname} compact />
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 42, fontWeight: 700, color: site.scores.overall >= 70 ? "#38a169" : site.scores.overall >= 50 ? "#dd6b20" : "#e53e3e" }}>{site.scores.overall}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Overall Score</div>
+                </div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>

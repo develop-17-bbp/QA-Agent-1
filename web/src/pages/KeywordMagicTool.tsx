@@ -6,6 +6,7 @@ import RegionPicker, { useRegion } from "../components/RegionPicker";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 
 import { ErrorBanner } from "../components/UI";
+import AskCouncilButton from "../components/AskCouncilButton";
 const INTENT_COLORS: Record<string, string> = { Informational: "#3182ce", Commercial: "#dd6b20", Transactional: "#38a169", Navigational: "#111111" };
 const DIFF_COLORS: Record<string, string> = { Easy: "#38a169", Medium: "#dd6b20", Hard: "#e53e3e", "Very Hard": "#9b2c2c" };
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
@@ -248,6 +249,7 @@ export default function KeywordMagicTool() {
         <input className="qa-input" value={seed} onChange={e => setSeed(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Enter seed keyword..." style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
         <RegionPicker compact />
         <button className="qa-btn-primary" onClick={() => search()} disabled={loading || !seed.trim()} style={{ padding: "8px 24px" }}>{loading ? "Researching..." : "Research"}</button>
+        {seed.trim() && <AskCouncilButton term={seed} domain={gscDomain.trim() || undefined} compact />}
         <input className="qa-input" value={gscDomain} onChange={e => setGscDomain(e.target.value)} placeholder="Your domain for GSC overlay (optional — e.g. example.com)" style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
         {overlay.connected && overlay.matchedGscSite && (
           <span style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20, background: "#e8f5e8", color: "#1a7a1a", fontWeight: 600, border: "1px solid #a3d9a3", whiteSpace: "nowrap" }}>

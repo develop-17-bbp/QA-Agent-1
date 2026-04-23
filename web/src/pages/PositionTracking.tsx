@@ -30,6 +30,8 @@ import {
   fetchStartpageSerp,
   type GscSite,
 } from "../api";
+import AskCouncilButton from "../components/AskCouncilButton";
+import CouncilSidecar from "../components/CouncilSidecar";
 
 import { LoadingPanel, ErrorBanner, EmptyState } from "../components/UI";
 const COLORS = ["#38a169", "#111111", "#dd6b20", "#e53e3e"];
@@ -485,6 +487,13 @@ export default function PositionTracking() {
           >
             {liveLoading ? "Sweeping…" : "Sweep now"}
           </button>
+          {liveKeywords.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)[0] && (
+            <AskCouncilButton
+              term={liveKeywords.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)[0]}
+              domain={liveDomain.trim() || undefined}
+              compact
+            />
+          )}
           {sampledAt && <span style={{ fontSize: 11, color: "var(--muted)" }}>Last sampled: {sampledAt.slice(0, 19).replace("T", " ")} UTC</span>}
         </div>
 
@@ -589,6 +598,14 @@ export default function PositionTracking() {
           </div>
         )}
       </div>
+
+      {/* Embedded Council Sidecar — cross-source intel on the first keyword being tracked */}
+      {(() => {
+        const firstKw = liveKeywords.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)[0];
+        return firstKw ? (
+          <CouncilSidecar term={firstKw} domain={liveDomain.trim() || undefined} />
+        ) : null;
+      })()}
     </motion.div>
   );
 }

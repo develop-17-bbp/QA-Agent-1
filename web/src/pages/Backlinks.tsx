@@ -6,6 +6,8 @@ import { FilterableTable, type FilterableColumn } from "../components/Filterable
 import { PageShell } from "../components/PageUI";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import AskCouncilButton from "../components/AskCouncilButton";
+import CouncilSidecar from "../components/CouncilSidecar";
 
 interface BrokenLink { source: string; target: string; status: number | null; error?: string }
 interface BingLink { sourceUrl: string; anchorText?: string; targetUrl: string }
@@ -286,6 +288,7 @@ export default function Backlinks() {
           >
             {extLoading ? "Querying…" : "Discover"}
           </button>
+          {extDomain.trim() && <AskCouncilButton term={extDomain} compact />}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 10, marginTop: 10 }}>
@@ -502,6 +505,9 @@ export default function Backlinks() {
           </div>
         )}
       </div>
+
+      {/* Embedded Council Sidecar — cross-source intel on the entered domain */}
+      {extDomain.trim() && <CouncilSidecar term={extDomain.trim()} autoInvoke />}
     </PageShell>
   );
 }
