@@ -16,6 +16,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AUTO_COUNCIL_KEY, readAutoCouncilRaw } from "./CouncilSidecar";
+import { Icon, type IconName } from "./Icon";
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -54,11 +55,11 @@ export default function AgenticModeChip() {
     else mode = "agentic-live";
   }
 
-  const palette = mode === "agentic-live"
-    ? { bg: "var(--accent-light)", color: "var(--accent-hover, #1d4ed8)", dot: "#22c55e", label: "🧠 Agentic · live" }
+  const palette: { bg: string; color: string; dot: string; label: string; icon: IconName } = mode === "agentic-live"
+    ? { bg: "var(--accent-light)", color: "var(--accent-hover, #1d4ed8)", dot: "#22c55e", label: "Agentic · live", icon: "zap" }
     : mode === "agent-ready"
-    ? { bg: "#fef3c7", color: "#92400e", dot: "#eab308", label: "Agent ready · auto off" }
-    : { bg: "var(--glass2)", color: "var(--muted)", dot: "#94a3b8", label: "Heuristic only" };
+    ? { bg: "#fef3c7", color: "#92400e", dot: "#eab308", label: "Agent ready · auto off", icon: "brain" }
+    : { bg: "var(--glass2)", color: "var(--muted)", dot: "#94a3b8", label: "Heuristic only", icon: "bar-chart" };
 
   const title = mode === "agentic-live"
     ? "Agentic mode is LIVE — Ollama is reachable and analytics pages are auto-synthesizing cross-source AI verdicts. Crawls will ship with LLM-driven queue prioritization."
@@ -91,6 +92,7 @@ export default function AgenticModeChip() {
         borderRadius: "50%",
         background: palette.dot,
       }} />
+      <Icon name={palette.icon} size={13} />
       {palette.label}
     </Link>
   );

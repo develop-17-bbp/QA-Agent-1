@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { Icon, type IconName } from "./Icon";
 
 // ─── Data honesty (kept in sync with AppLayout.tsx) ────────────────────────
 type SourceClass = "real" | "llm-safe" | "mixed";
@@ -43,11 +44,11 @@ const DOT_COLORS: Record<SourceClass, string> = { real: "#22c55e", "llm-safe": "
 
 // ─── Structure ───────────────────────────────────────────────────────────────
 interface NavItem { label: string; path: string; badge?: string }
-interface NavGroup { id: string; label: string; icon: string; items: NavItem[] }
+interface NavGroup { id: string; label: string; icon: IconName; items: NavItem[] }
 
 const GROUPS: NavGroup[] = [
   {
-    id: "workspace", label: "Workspace", icon: "🏠",
+    id: "workspace", label: "Workspace", icon: "home",
     items: [
       { label: "Dashboard", path: "/" },
       { label: "Run History", path: "/history" },
@@ -59,14 +60,14 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "council", label: "Council", icon: "🧭",
+    id: "council", label: "Council", icon: "compass",
     items: [
       { label: "Council — 6 AI panels", path: "/council", badge: "NEW" },
       { label: "Term Intel — every source", path: "/term-intel", badge: "NEW" },
     ],
   },
   {
-    id: "audit", label: "Audit", icon: "🔍",
+    id: "audit", label: "Audit", icon: "search",
     items: [
       { label: "Site Audit", path: "/site-audit" },
       { label: "On-Page Checker", path: "/onpage-seo-checker" },
@@ -76,7 +77,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "keywords", label: "Keywords", icon: "🔑",
+    id: "keywords", label: "Keywords", icon: "target",
     items: [
       { label: "Keyword Overview", path: "/keyword-overview" },
       { label: "Magic Tool", path: "/keyword-magic-tool" },
@@ -87,7 +88,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "competitive", label: "Competitive", icon: "📊",
+    id: "competitive", label: "Competitive", icon: "bar-chart",
     items: [
       { label: "Domain Overview", path: "/domain-overview" },
       { label: "Compare Domains", path: "/compare-domains" },
@@ -101,7 +102,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "links", label: "Links", icon: "🔗",
+    id: "links", label: "Links", icon: "link",
     items: [
       { label: "Backlinks", path: "/backlinks" },
       { label: "Referring Domains", path: "/referring-domains" },
@@ -109,7 +110,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "content", label: "Content", icon: "✍️",
+    id: "content", label: "Content", icon: "pen",
     items: [
       { label: "Writing Assistant", path: "/seo-writing-assistant" },
       { label: "Topic Research", path: "/topic-research" },
@@ -119,7 +120,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "monitoring", label: "Monitoring", icon: "👁️",
+    id: "monitoring", label: "Monitoring", icon: "eye",
     items: [
       { label: "Brand Monitor", path: "/brand-monitoring" },
       { label: "Log File Analyzer", path: "/log-file-analyzer" },
@@ -128,7 +129,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "ai", label: "AI Tools", icon: "🤖",
+    id: "ai", label: "AI Tools", icon: "sparkles",
     items: [
       { label: "Query Lab", path: "/query-lab" },
       { label: "SERP Analyzer", path: "/serp-analyzer" },
@@ -136,7 +137,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "integrations", label: "Integrations", icon: "🔌",
+    id: "integrations", label: "Integrations", icon: "plug",
     items: [
       { label: "Integrations Hub", path: "/integrations" },
       { label: "Google Connections", path: "/google-connections" },
@@ -306,12 +307,11 @@ function GroupHeader({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 18,
           color: hasActive ? "var(--accent)" : "var(--muted)",
           borderLeft: hasActive ? "2px solid var(--accent)" : "2px solid transparent",
         }}
       >
-        {group.icon}
+        <Icon name={group.icon} size={18} />
       </div>
     );
   }
@@ -328,9 +328,9 @@ function GroupHeader({
       }}
       className="qa-sidebar-group"
     >
-      <span aria-hidden style={{ fontSize: 14, opacity: 0.95 }}>{group.icon}</span>
+      <Icon name={group.icon} size={15} style={{ opacity: 0.9 }} />
       <span style={{ flex: 1 }}>{group.label}</span>
-      <span aria-hidden style={{ fontSize: 10, opacity: 0.7, transform: isClosed ? "rotate(-90deg)" : "none", transition: "transform 0.15s" }}>▾</span>
+      <Icon name="chevron-down" size={12} style={{ opacity: 0.6, transform: isClosed ? "rotate(-90deg)" : "none", transition: "transform 0.15s" }} />
     </button>
   );
 }

@@ -56,6 +56,33 @@
   --shadow-md:  0 10px 15px rgba(15,23,42,0.08), 0 4px 6px rgba(15,23,42,0.05);
   --shadow-lg:  0 20px 25px rgba(15,23,42,0.10), 0 8px 10px rgba(15,23,42,0.06);
 
+  /* ── Accent ramp (50→900) — use for gradients, hovers, subtle washes ── */
+  --accent-50:  #eff6ff;
+  --accent-100: #dbeafe;
+  --accent-200: #bfdbfe;
+  --accent-300: #93c5fd;
+  --accent-400: #60a5fa;
+  --accent-500: #3b82f6;
+  --accent-600: #2563eb;
+  --accent-700: #1d4ed8;
+  --accent-800: #1e40af;
+  --accent-900: #1e3a8a;
+
+  /* ── Chart palette (harmonious, distinct, colorblind-safer) ── */
+  --chart-1: #2563eb;  /* blue — primary */
+  --chart-2: #16a34a;  /* green */
+  --chart-3: #d97706;  /* amber */
+  --chart-4: #dc2626;  /* red */
+  --chart-5: #8b5cf6;  /* violet */
+  --chart-6: #0891b2;  /* cyan */
+  --chart-7: #ea580c;  /* orange */
+  --chart-8: #be185d;  /* pink */
+
+  /* ── Status rings (for focus outlines + warning edges) ── */
+  --ok-ring:   color-mix(in oklab, var(--ok) 35%, transparent);
+  --warn-ring: color-mix(in oklab, var(--warn) 35%, transparent);
+  --bad-ring:  color-mix(in oklab, var(--bad) 35%, transparent);
+
   /* ── Legacy aliases (keep old refs working) ── */
   --accent2:        var(--accent);
   --accent-soft:    var(--accent-light);
@@ -114,6 +141,29 @@
 
   --input-bg:       #0f172a;
   --sidebar-bg:     #0b1220;  /* slightly darker than --bg-app so the rail reads */
+
+  /* Accent ramp rebalanced for dark backgrounds — keep only 300-700 range
+     usable, 50/100 become near-text. */
+  --accent-50:  #1e3a8a;
+  --accent-100: #1e40af;
+  --accent-200: #1d4ed8;
+  --accent-300: #2563eb;
+  --accent-400: #3b82f6;
+  --accent-500: #60a5fa;
+  --accent-600: #93c5fd;
+  --accent-700: #bfdbfe;
+  --accent-800: #dbeafe;
+  --accent-900: #eff6ff;
+
+  /* Chart palette — slightly lighter to read on dark bg */
+  --chart-1: #60a5fa;
+  --chart-2: #4ade80;
+  --chart-3: #fbbf24;
+  --chart-4: #f87171;
+  --chart-5: #a78bfa;
+  --chart-6: #22d3ee;
+  --chart-7: #fb923c;
+  --chart-8: #f472b6;
 }
 
 /* ─── Reset & Base ────────────────────────────────────────────── */
