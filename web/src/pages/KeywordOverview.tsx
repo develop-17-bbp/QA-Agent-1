@@ -7,6 +7,7 @@ import { useRegion } from "../components/RegionPicker";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
 import CouncilSidecar from "../components/CouncilSidecar";
+import { ProvenanceBadge } from "../components/ProvenanceDot";
 
 import { ErrorBanner } from "../components/UI";
 /**
@@ -266,23 +267,24 @@ export default function KeywordOverview() {
             </a>
           </div>
 
-          {/* Data quality badges */}
+          {/* Data quality badges — provenance-honest */}
           {data.dataQuality && (
-            <div className="qa-panel" style={{ padding: 12, marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <div className="qa-panel" style={{ padding: 12, marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
               <span className="qa-kicker" style={{ marginRight: 4 }}>Data sources:</span>
               {(data.dataQuality.providersHit ?? []).map((p: string) => (
-                <span key={p} className="qa-lozenge" style={{ background: "var(--ok-bg, #ecfdf5)", color: "var(--ok, #047857)", fontSize: 11 }}>
-                  {p}
-                </span>
+                <ProvenanceBadge key={p} source={p} confidence="high" note="Returned data for this keyword" />
               ))}
               {(data.dataQuality.providersFailed ?? []).map((p: string) => (
-                <span key={p} className="qa-lozenge" style={{ background: "var(--warn-bg, #fef3c7)", color: "var(--warn, #b45309)", fontSize: 11 }}>
-                  {p} offline
-                </span>
+                <ProvenanceBadge key={`fail-${p}`} source={`${p} offline`} confidence="low" note="Provider reachable but returned error or empty response" />
               ))}
               {(data.dataQuality.missingFields ?? []).length > 0 && (
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: 4 }}>
                   • Missing: {(data.dataQuality.missingFields ?? []).join(", ")}
+                </span>
+              )}
+              {(data.dataQuality.estimatedFields ?? []).length > 0 && (
+                <span style={{ fontSize: 11, color: "var(--warn, #b45309)", marginLeft: 4 }} title="These fields aren't a direct provider read — they're derived from signals (Trends × Wikipedia blend etc.). The individual metric cards show provenance dots.">
+                  • Estimated: {(data.dataQuality.estimatedFields ?? []).join(", ")}
                 </span>
               )}
             </div>
@@ -341,7 +343,14 @@ export default function KeywordOverview() {
               <div className="qa-kicker" style={{ marginBottom: 4 }}>Volume</div>
               <div style={{ fontSize: 28, fontWeight: 700 }}>{formatVolume(data.volume)}</div>
               <div style={{ borderTop: "3px solid var(--accent)", marginTop: 8 }} />
-              <div className="qa-kicker" style={{ marginTop: 8 }}>Keyword Difficulty</div>
+              <div className="qa-kicker" style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Keyword Difficulty</span>
+                {data.difficultyBreakdown?.method && (
+                  <span title="Multi-factor scoring: authority of top-10 × Ads competition × SERP saturation × content depth" style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.3, padding: "1px 5px", borderRadius: 6, background: "#dcfce7", color: "#166534" }}>
+                    v2
+                  </span>
+                )}
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                 <svg width={48} height={48} viewBox="0 0 48 48">
                   <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border)" strokeWidth="4" />
@@ -356,6 +365,24 @@ export default function KeywordOverview() {
                 </svg>
                 <span style={{ fontSize: 13, color: DIFF_COLORS(data.difficulty), fontWeight: 600 }}>{data.difficultyLabel}</span>
               </div>
+              {data.difficultyBreakdown && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border)", fontSize: 10.5, color: "var(--muted)", lineHeight: 1.55 }}>
+                  <div style={{ fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", fontSize: 9, marginBottom: 4 }}>Breakdown</div>
+                  {[
+                    { id: "A", label: "Top-10 authority", info: data.difficultyBreakdown.breakdown.authorityOfTop10 },
+                    { id: "B", label: "Ads competition", info: data.difficultyBreakdown.breakdown.adsCompetition },
+                    { id: "C", label: "SERP saturation", info: data.difficultyBreakdown.breakdown.serpSaturation },
+                    { id: "D", label: "Content depth",    info: data.difficultyBreakdown.breakdown.contentDepth },
+                  ].map((row) => (
+                    <div key={row.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "1px 0", opacity: row.info.available ? 1 : 0.45 }} title={row.info.note ?? ""}>
+                      <span>{row.label}</span>
+                      <span style={{ fontWeight: 600, color: row.info.available ? "var(--text)" : "var(--muted)" }}>
+                        {row.info.available ? row.info.score : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Global Volume + Country Breakdown */}

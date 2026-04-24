@@ -294,6 +294,19 @@ export default function PositionTracking() {
       <p className="qa-page-desc">Track keyword SEO optimization scores across your crawled pages, and sweep live DuckDuckGo rankings for any domain.</p>
       <RunSelector value={runId} onChange={load} label="Select run" />
 
+      {/* Auto-track every GSC query ≥10 impressions across all verified sites */}
+      <div className="qa-panel" style={{ marginTop: 12, padding: 12, background: "var(--accent-light)", border: "1px solid var(--accent-muted)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--accent-hover, #1d4ed8)" }}>
+            🌱 Auto-track everything in GSC
+          </div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+            Sweeps every verified Google Search Console property and registers every query with ≥10 impressions in the last 28 days. Prevents your long-tail from disappearing when GSC's 16-month window rolls over.
+          </div>
+        </div>
+        <GscAutoTrackButton onComplete={refreshTrackedStats} />
+      </div>
+
       {/* Daily-tracked keywords — stored position history from GSC cron */}
       {(trackedLoading || trackedStats.length > 0) && (
         <div className="qa-panel" style={{ marginTop: 20, padding: 16 }}>
@@ -607,6 +620,43 @@ export default function PositionTracking() {
         ) : null;
       })()}
     </motion.div>
+  );
+}
+
+function GscAutoTrackButton({ onComplete }: { onComplete: () => void }) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ totalAdded: number; totalScanned: number; reason?: string } | null>(null);
+  const [error, setError] = useState("");
+  const run = async () => {
+    setRunning(true); setError(""); setResult(null);
+    try {
+      const res = await fetch("/api/gsc/auto-track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ impressionsFloor: 10 }) });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setResult(data);
+      onComplete();
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setRunning(false);
+    }
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+      <button
+        onClick={run}
+        disabled={running}
+        style={{ padding: "8px 16px", borderRadius: 6, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 12.5, cursor: running ? "default" : "pointer" }}
+      >
+        {running ? "Scanning GSC…" : "Sweep all GSC queries"}
+      </button>
+      {result && (
+        <span style={{ fontSize: 11, color: result.reason ? "#b45309" : "#166534" }}>
+          {result.reason ?? `+${result.totalAdded} new tracked (scanned ${result.totalScanned})`}
+        </span>
+      )}
+      {error && <span style={{ fontSize: 11, color: "#b91c1c" }}>{error.slice(0, 80)}</span>}
+    </div>
   );
 }
 

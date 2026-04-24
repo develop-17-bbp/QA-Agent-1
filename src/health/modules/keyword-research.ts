@@ -21,6 +21,7 @@ import { fetchBestMatchPageviews } from "../providers/wikipedia-pageviews.js";
 import { searchSerp } from "../agentic/duckduckgo-serp.js";
 import { ddgRegionCode } from "../providers/geo-targets.js";
 import { fetchKeywordVolume as fetchAdsVolume, isGoogleAdsConfigured } from "../providers/google-ads.js";
+import { computeDifficultyV2, type DifficultyV2 } from "./keyword-difficulty.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -61,6 +62,10 @@ export interface KeywordResearchData {
   questionsTotalVolume: number;
   /** Provenance data so the UI can show confidence badges. */
   dataQuality: DataQuality;
+  /** Multi-factor difficulty breakdown (v2). When present, the UI can
+   *  show users why the difficulty score is what it is — Authority of
+   *  top 10, Ads competition, SERP saturation, content-depth floor. */
+  difficultyBreakdown?: DifficultyV2;
 }
 
 function difficultyLabel(d: number): string {
@@ -300,6 +305,25 @@ export async function researchKeyword(keyword: string, regionCode = "US"): Promi
   }
   if (!realAdsSeed) estimatedFields.push("volume", "globalVolume", "countryVolumes");
 
+  // ── Difficulty v2 — multi-factor blend (OPR × Ads × saturation × depth) ──
+  // Replaces the v1 SERP-heuristic above. Produces a breakdown the UI can
+  // surface so users understand WHY the score is what it is.
+  let difficultyBreakdown: DifficultyV2 | undefined;
+  try {
+    difficultyBreakdown = await computeDifficultyV2({
+      serp: serp.map((s) => ({ position: s.position, url: s.url, title: s.title })),
+      adsCompetitionIndex: realAdsCompetitionIndex,
+    });
+    difficulty = difficultyBreakdown.score;
+    // v2 derives the label too; use it for consistency.
+    // (The KeywordResearchData.difficultyLabel field is set later.)
+    // Track provenance: if any v2 signal was real, mark the field real.
+    const anyRealSignal = difficultyBreakdown.breakdown.authorityOfTop10.available
+      || difficultyBreakdown.breakdown.adsCompetition.available
+      || difficultyBreakdown.breakdown.serpSaturation.available;
+    if (anyRealSignal && !realDataFields.includes("difficulty")) realDataFields.push("difficulty");
+  } catch { /* non-fatal — fall back to existing SERP-heuristic value */ }
+
   // ── Build variations with real Ads volume when available, proportional fallback otherwise ──
   const variations: KeywordVariation[] = suggestions.slice(0, 10).map((s, i) => {
     const adsV = adsVariationVolumes.get(s);
@@ -437,5 +461,6 @@ Rules:
       providersHit: Array.from(new Set(providersHit)),
       providersFailed: Array.from(new Set(providersFailed)),
     },
+    difficultyBreakdown,
   };
 }

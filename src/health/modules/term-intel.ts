@@ -31,6 +31,7 @@ import { fetchYandexSites, fetchYandexInboundLinks, isYandexWebmasterConfigured,
 import { loadAwtBundle } from "../providers/ahrefs-webmaster-csv.js";
 import { fetchBrandMentions } from "../providers/rss-aggregator.js";
 import { searchStartpage } from "../providers/startpage-serp.js";
+import { fetchDfsBacklinksSummary, fetchDfsTopAnchors, fetchDfsKeywordVolume, isDfsConfigured } from "../providers/dataforseo.js";
 
 export type SourceStatus = "ok" | "no-data" | "not-configured" | "error";
 
@@ -393,6 +394,84 @@ async function probeStartpage(term: string, region: string): Promise<SourcePersp
   }
 }
 
+/** DataForSEO volume probe — global keyword volume for any region. This
+ *  complements Google Ads: works without the operator connecting Google
+ *  OAuth, and gives coverage in regions where Ads isn't set up. Requires
+ *  BYOK DataForSEO credentials. */
+async function probeDfsKeywordVolume(term: string, region: string): Promise<SourcePerspective> {
+  if (!isDfsConfigured()) {
+    return { id: "dataforseo-volume", name: "DataForSEO volume", category: "volume", status: "not-configured", headline: "DataForSEO not configured (paid BYOK)", reason: "Paste DATAFORSEO_LOGIN + DATAFORSEO_PASSWORD in /integrations — typical spend $20-50/mo." };
+  }
+  try {
+    const regionName = region === "US" ? "United States" : region === "GB" ? "United Kingdom" : region === "IN" ? "India" : region;
+    const rows = await fetchDfsKeywordVolume([term], regionName);
+    const r = rows[0];
+    const v = r?.searchVolume?.value;
+    if (!r || v == null) {
+      return { id: "dataforseo-volume", name: "DataForSEO volume", category: "volume", status: "no-data", headline: "DataForSEO has no volume data for this term" };
+    }
+    return {
+      id: "dataforseo-volume",
+      name: "DataForSEO volume",
+      category: "volume",
+      status: "ok",
+      metric: `${fmt(v)}/mo`,
+      headline: `${v.toLocaleString()} monthly searches (DataForSEO, ${regionName})`,
+      detail: { kind: "text", text: `CPC: ${typeof r.cpc?.value === "number" ? `$${r.cpc.value.toFixed(2)}` : "—"} · Competition: ${typeof r.competition?.value === "number" ? r.competition.value.toFixed(2) : "—"}` },
+    };
+  } catch (e) {
+    return { id: "dataforseo-volume", name: "DataForSEO volume", category: "volume", status: "error", headline: "DataForSEO volume query failed", reason: e instanceof Error ? e.message.slice(0, 160) : "error" };
+  }
+}
+
+/** DataForSEO backlinks probe — competitor-grade backlink index for any
+ *  domain. Fires when the term looks like a domain (contains a dot) OR
+ *  when a domain is explicitly provided. */
+async function probeDfsBacklinks(term: string, domain: string | undefined): Promise<SourcePerspective> {
+  if (!isDfsConfigured()) {
+    return { id: "dataforseo-backlinks", name: "DataForSEO backlinks", category: "anchor", status: "not-configured", headline: "DataForSEO not configured (paid BYOK)", reason: "Closes the competitor-backlinks gap that free-tier sources have. Connect in /integrations." };
+  }
+  const targetDomain = domain || (term.includes(".") && !term.includes(" ") ? term : undefined);
+  if (!targetDomain) {
+    return { id: "dataforseo-backlinks", name: "DataForSEO backlinks", category: "anchor", status: "no-data", headline: "Enter a domain (or term is not a domain)", reason: "Backlinks probe requires a domain target." };
+  }
+  try {
+    const [summary, anchors] = await Promise.all([
+      fetchDfsBacklinksSummary(targetDomain),
+      // For anchor table, only fetch when the term looks like a keyword (so we
+      // can filter for term-matched anchors); otherwise skip to save calls.
+      term.includes(".") ? Promise.resolve(null) : fetchDfsTopAnchors(targetDomain, 100).catch(() => null),
+    ]);
+    const referring = summary.referringDomains.value;
+    const dofollow = summary.dofollow.value;
+    const nofollow = summary.nofollow.value;
+    const needle = term.toLowerCase().trim();
+    const matched = anchors?.value ? anchors.value.filter((a) => a.anchor.toLowerCase().includes(needle)) : [];
+    const metricLine = matched.length > 0
+      ? `${matched.length} anchor${matched.length === 1 ? "" : "s"} match "${term}"`
+      : `${referring.toLocaleString()} referring domains total`;
+    const headline = term.includes(".")
+      ? `${referring.toLocaleString()} referring domains to ${targetDomain} (${dofollow.toLocaleString()} dofollow / ${nofollow.toLocaleString()} nofollow)`
+      : matched.length > 0
+        ? `${matched.length} backlink anchor${matched.length === 1 ? "" : "s"} on ${targetDomain} contain "${term}"`
+        : `0 anchors on ${targetDomain} mention "${term}" (scanned ${anchors?.value?.length ?? 0} top anchors)`;
+    const detail = matched.length > 0
+      ? { kind: "table" as const, columns: ["Anchor", "Referring domains", "Backlinks"], rows: matched.slice(0, 25).map((a) => [a.anchor, a.referringDomains, a.backlinks] as (string | number)[]) }
+      : { kind: "text" as const, text: `DataForSEO live index: ${summary.backlinksTotal.value.toLocaleString()} total backlinks across ${referring.toLocaleString()} referring domains. ${typeof summary.domainRank?.value === "number" ? `DR rank ${summary.domainRank.value}.` : ""}` };
+    return {
+      id: "dataforseo-backlinks",
+      name: "DataForSEO backlinks",
+      category: "anchor",
+      status: "ok",
+      metric: metricLine.split(" ").slice(0, 3).join(" "),
+      headline,
+      detail,
+    };
+  } catch (e) {
+    return { id: "dataforseo-backlinks", name: "DataForSEO backlinks", category: "anchor", status: "error", headline: "DataForSEO query failed", reason: e instanceof Error ? e.message.slice(0, 160) : "error" };
+  }
+}
+
 // ── Main entry ────────────────────────────────────────────────────────
 
 /** Build a 1-item CouncilContext around a completed TermIntel result so
@@ -451,6 +530,7 @@ export async function gatherTermIntel(input: TermIntelInput): Promise<TermIntelR
   // of status (not-configured / no-data / error still appear in the UI).
   const results = await Promise.all([
     probeAds(term, region),
+    probeDfsKeywordVolume(term, region),
     probeTrends(term, region),
     probeSuggest(term),
     probeWikipedia(term),
@@ -458,6 +538,7 @@ export async function gatherTermIntel(input: TermIntelInput): Promise<TermIntelR
     probeBingAnchors(term, domain),
     probeYandexAnchors(term, domain),
     probeAhrefsCsv(term, domain),
+    probeDfsBacklinks(term, domain),
     probeRss(term),
     probeDdgSerp(term, region),
     probeStartpage(term, region),

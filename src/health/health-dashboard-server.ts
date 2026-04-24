@@ -3251,6 +3251,32 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── GSC auto-track — register every query ≥N impressions as a tracked pair ──
+      // POST /api/gsc/auto-track
+      // Body: { impressionsFloor?: number, maxNewPairs?: number, daysBack?: number, filterHosts?: string[] }
+      // Returns: { scanned: [...], totalAdded, totalScanned, totalSkipped, reason? }
+      if (req.method === "POST" && url.pathname === "/api/gsc/auto-track") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { impressionsFloor?: number; maxNewPairs?: number; daysBack?: number; filterHosts?: string[] };
+        try { payload = body ? JSON.parse(body) : {}; } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        try {
+          const { autoTrackGscQueries } = await import("./modules/gsc-auto-track.js");
+          const result = await autoTrackGscQueries({
+            impressionsFloor: typeof payload.impressionsFloor === "number" ? payload.impressionsFloor : undefined,
+            maxNewPairs: typeof payload.maxNewPairs === "number" ? payload.maxNewPairs : undefined,
+            daysBack: typeof payload.daysBack === "number" ? payload.daysBack : undefined,
+            filterHosts: Array.isArray(payload.filterHosts) ? payload.filterHosts.filter((h): h is string => typeof h === "string") : undefined,
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Daily report (for n8n cron / direct email / manual preview) ─────
       // ── Council — cross-source consensus + LLM advisor panel ─────────────
       // POST /api/council
