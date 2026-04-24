@@ -94,6 +94,33 @@
   --focus-ring:     0 0 0 2px #ffffff, 0 0 0 4px var(--accent);
 
   --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* ── 3D / Agentic theme tokens ──────────────────────────────────
+     Signature depth + gradient language used site-wide. Reach for
+     these instead of hand-rolling gradients or shadows per component. */
+  --depth-1: 0 1px 2px rgba(15,23,42,0.06), 0 2px 6px rgba(15,23,42,0.04);
+  --depth-2: 0 4px 12px rgba(15,23,42,0.08), 0 2px 4px rgba(15,23,42,0.04);
+  --depth-3: 0 14px 40px rgba(15,23,42,0.12), 0 6px 12px rgba(15,23,42,0.06);
+  --depth-hover: 0 22px 46px rgba(37,99,235,0.14), 0 6px 12px rgba(15,23,42,0.08);
+
+  /* Signature agentic gradient — blue → violet → pink */
+  --grad-agentic: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+  --grad-agentic-soft: linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(124,58,237,0.10) 50%, rgba(219,39,119,0.10) 100%);
+  --grad-ai: linear-gradient(90deg, #22d3ee 0%, #2563eb 45%, #7c3aed 100%);
+  --grad-live: linear-gradient(90deg, #22c55e 0%, #10b981 100%);
+  --grad-panel-top: linear-gradient(90deg, transparent 0%, rgba(37,99,235,0.35) 50%, transparent 100%);
+
+  /* Glow auras */
+  --glow-accent:   0 0 0 1px rgba(37,99,235,0.25), 0 8px 32px -8px rgba(37,99,235,0.45);
+  --glow-agentic:  0 0 0 1px rgba(124,58,237,0.25), 0 10px 32px -6px rgba(124,58,237,0.5);
+  --glow-live:     0 0 10px rgba(34,197,94,0.55);
+
+  /* Ambient background layers (light) */
+  --ambient-mesh:
+    radial-gradient(1200px 600px at 8% -12%, rgba(37,99,235,0.09), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(124,58,237,0.08), transparent 60%),
+    radial-gradient(800px 500px at 50% 110%, rgba(219,39,119,0.05), transparent 60%);
+  --ambient-grid-color: rgba(15,23,42,0.035);
 }
 
 /* ─── Dark mode ──────────────────────────────────────────────────
@@ -164,6 +191,27 @@
   --chart-6: #22d3ee;
   --chart-7: #fb923c;
   --chart-8: #f472b6;
+
+  /* 3D theme rebalanced for dark canvas */
+  --depth-1: 0 1px 2px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.25);
+  --depth-2: 0 4px 12px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+  --depth-3: 0 18px 44px rgba(0,0,0,0.65), 0 8px 14px rgba(0,0,0,0.4);
+  --depth-hover: 0 22px 48px rgba(96,165,250,0.25), 0 8px 14px rgba(0,0,0,0.5);
+
+  --grad-agentic: linear-gradient(135deg, #3b82f6 0%, #a78bfa 50%, #f472b6 100%);
+  --grad-agentic-soft: linear-gradient(135deg, rgba(59,130,246,0.22) 0%, rgba(167,139,250,0.20) 50%, rgba(244,114,182,0.18) 100%);
+  --grad-ai: linear-gradient(90deg, #22d3ee 0%, #60a5fa 45%, #a78bfa 100%);
+  --grad-panel-top: linear-gradient(90deg, transparent 0%, rgba(96,165,250,0.45) 50%, transparent 100%);
+
+  --glow-accent:   0 0 0 1px rgba(96,165,250,0.35), 0 10px 36px -8px rgba(96,165,250,0.55);
+  --glow-agentic:  0 0 0 1px rgba(167,139,250,0.35), 0 12px 36px -6px rgba(167,139,250,0.6);
+  --glow-live:     0 0 12px rgba(74,222,128,0.65);
+
+  --ambient-mesh:
+    radial-gradient(1200px 700px at 8% -12%, rgba(59,130,246,0.14), transparent 60%),
+    radial-gradient(900px 560px at 100% 0%, rgba(167,139,250,0.12), transparent 60%),
+    radial-gradient(800px 500px at 50% 110%, rgba(34,211,238,0.08), transparent 60%);
+  --ambient-grid-color: rgba(148,163,184,0.06);
 }
 
 /* ─── Reset & Base ────────────────────────────────────────────── */
@@ -180,6 +228,43 @@ html, body {
   text-rendering: optimizeLegibility;
   font-size: 14px;
   line-height: 1.5;
+  position: relative;
+}
+
+/* Ambient gradient mesh — the signature "agentic AI" backdrop. Slowly
+   drifts so the page never feels static. Respects reduced-motion. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -10%;
+  z-index: -2;
+  pointer-events: none;
+  background: var(--ambient-mesh);
+  animation: qa-ambient-drift 32s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Fine dot-grid — reads as 3D depth when combined with the mesh above. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 1px 1px, var(--ambient-grid-color) 1px, transparent 0);
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 72%);
+          mask-image: radial-gradient(ellipse at center, #000 30%, transparent 72%);
+}
+
+@keyframes qa-ambient-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(-24px, 16px, 0) scale(1.02); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
 }
 
 ::selection { background: var(--accent-light); color: var(--accent); }
@@ -217,20 +302,47 @@ code {
 
 /* ─── Surfaces ────────────────────────────────────────────────── */
 .qa-panel {
+  position: relative;
   background: var(--glass);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--depth-1);
+  transition: box-shadow 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
+}
+
+/* Subtle top-edge highlight that reads as specular on 3D surfaces.
+   Pointer-events none so it never eats clicks. */
+.qa-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: var(--grad-panel-top);
+  opacity: 0.55;
+  border-radius: var(--radius) var(--radius) 0 0;
+  pointer-events: none;
+}
+
+.qa-panel:hover {
+  box-shadow: var(--depth-2);
+}
+
+/* MetricCard & Chart-panel 3D hover lift — adds a real sense of depth. */
+.qa-metric-3d:hover,
+.qa-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--depth-hover);
+  border-color: var(--accent-muted);
 }
 
 a.qa-panel {
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 a.qa-panel:hover {
   text-decoration: none !important;
   border-color: var(--accent-muted);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  box-shadow: var(--depth-hover);
+  transform: translateY(-2px);
 }
 
 .qa-panel-header {
@@ -259,6 +371,7 @@ a.qa-panel:hover {
 
 /* ─── Buttons ─────────────────────────────────────────────────── */
 .qa-btn-primary {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -272,19 +385,33 @@ a.qa-panel:hover {
   font-size: 0.875rem;
   line-height: 1;
   color: #ffffff !important;
-  background: var(--accent);
+  background: var(--grad-agentic);
+  background-size: 160% 160%;
+  background-position: 0% 50%;
   cursor: pointer;
   text-decoration: none !important;
-  box-shadow: 0 1px 2px rgba(37,99,235,0.25);
-  transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+  box-shadow: var(--glow-accent);
+  transition: background-position 0.35s ease, box-shadow 0.22s ease, transform 0.12s ease;
+  overflow: hidden;
+}
+/* Shine sweep on hover — pure CSS, GPU-only, skipped if reduced-motion. */
+.qa-btn-primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.28) 50%, transparent 60%);
+  transform: translateX(-120%);
+  transition: transform 0.6s ease;
+  pointer-events: none;
 }
 .qa-btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  box-shadow: 0 2px 6px rgba(37,99,235,0.35);
+  background-position: 100% 50%;
+  box-shadow: var(--glow-agentic);
   transform: translateY(-1px);
   text-decoration: none !important;
 }
-.qa-btn-primary:active:not(:disabled) { background: #1e40af; transform: none; }
+.qa-btn-primary:hover:not(:disabled)::after { transform: translateX(120%); }
+.qa-btn-primary:active:not(:disabled) { transform: translateY(0); box-shadow: var(--glow-accent); }
 .qa-btn-primary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .qa-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -538,9 +665,57 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.55; }
   box-shadow: inset 0 -1px 0 var(--border);
 }
 
+/* Topbar — agentic-glow line under the sticky header. */
+.qa-app-topbar::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: var(--grad-panel-top);
+  opacity: 0.8;
+  pointer-events: none;
+}
+.qa-app-topbar { position: sticky; }
+
+/* Sidebar rail — glass + subtle gradient wash at the top for depth. */
+.qa-sidebar {
+  position: relative;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.qa-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 180px;
+  background: var(--grad-agentic-soft);
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 0;
+}
+.qa-sidebar > * { position: relative; z-index: 1; }
+
 /* Sidebar item hover for both themes. */
+.qa-sidebar-item {
+  position: relative;
+  transition: background 0.15s ease, color 0.15s ease;
+}
 .qa-sidebar-item:hover { background: var(--glass2); }
-.qa-sidebar-item--active { font-weight: 600; }
+.qa-sidebar-item--active {
+  font-weight: 600;
+  background: var(--grad-agentic-soft) !important;
+}
+/* Gradient left-accent on the active item — replaces the flat 2px border. */
+.qa-sidebar-item--active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--grad-agentic);
+  box-shadow: var(--glow-accent);
+}
 .qa-sidebar-group:hover { background: var(--glass2); }
 
 /* Sortable header */
@@ -796,7 +971,8 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.55; }
   width: 32px;
   height: 32px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  background: var(--grad-agentic);
+  box-shadow: var(--glow-accent);
   flex-shrink: 0;
   box-shadow: 0 2px 6px rgba(37,99,235,0.35);
 }
@@ -995,6 +1171,47 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.55; }
 }
 
 @keyframes qa-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ─── 3D agentic utilities ─────────────────────────────────────── */
+.qa-gradient-text {
+  background: var(--grad-agentic);
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  background-size: 200% 100%;
+  animation: qa-gradient-shift 6s ease-in-out infinite;
+}
+.qa-live-dot {
+  position: relative;
+  background: var(--grad-live) !important;
+  box-shadow: var(--glow-live);
+}
+.qa-live-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.6;
+  animation: qa-live-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes qa-live-pulse {
+  0%   { transform: scale(0.9); opacity: 0.55; }
+  80%  { transform: scale(2.2); opacity: 0;    }
+  100% { transform: scale(2.2); opacity: 0;    }
+}
+@keyframes qa-gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.qa-glow-accent { box-shadow: var(--glow-accent); }
+.qa-glow-agentic { box-shadow: var(--glow-agentic); }
+@media (prefers-reduced-motion: reduce) {
+  .qa-gradient-text,
+  .qa-live-dot::after { animation: none !important; }
+}
 
 @media (max-width: 768px) {
   .qa-stat-grid { grid-template-columns: repeat(2, 1fr); }

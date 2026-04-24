@@ -67,33 +67,41 @@ export default function AgenticModeChip() {
     ? "Ollama is reachable but Auto-Council is switched OFF — pages still have manual 'Ask the Council' buttons. Flip Auto-Council ON for full agentic mode."
     : "Ollama isn't reachable — the product is running on deterministic heuristics only. Start Ollama locally (or set OLLAMA_HOST) to unlock agentic mode.";
 
+  const isLive = mode === "agentic-live";
   return (
     <Link
       to="/integrations"
       title={title}
+      className={isLive ? "qa-agentic-chip qa-agentic-chip--live" : "qa-agentic-chip"}
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
-        padding: "4px 10px",
-        borderRadius: 6,
+        gap: 7,
+        padding: "4px 11px",
+        borderRadius: 999,
         border: "1px solid var(--border)",
-        background: palette.bg,
+        background: isLive ? "var(--grad-agentic-soft)" : palette.bg,
         color: palette.color,
         fontSize: 11.5,
         fontWeight: 600,
         textDecoration: "none",
         letterSpacing: 0.2,
+        boxShadow: isLive ? "var(--glow-agentic)" : "none",
+        transition: "box-shadow 0.25s ease, transform 0.12s ease",
       }}
     >
-      <span aria-hidden style={{
-        display: "inline-block",
-        width: 8, height: 8,
-        borderRadius: "50%",
-        background: palette.dot,
-      }} />
+      <span
+        aria-hidden
+        className={isLive ? "qa-live-dot" : undefined}
+        style={{
+          display: "inline-block",
+          width: 8, height: 8,
+          borderRadius: "50%",
+          background: isLive ? undefined : palette.dot,
+        }}
+      />
       <Icon name={palette.icon} size={13} />
-      {palette.label}
+      <span className={isLive ? "qa-gradient-text" : undefined} style={{ fontWeight: 700 }}>{palette.label}</span>
     </Link>
   );
 }

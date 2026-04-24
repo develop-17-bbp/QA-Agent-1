@@ -61,11 +61,22 @@ export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent
         marginBottom: 22,
         background: "var(--glass)",
         border: "1px solid var(--border)",
-        borderRadius: 12,
-        boxShadow: "var(--shadow-sm)",
+        borderRadius: 14,
+        boxShadow: "var(--depth-2)",
         overflow: "hidden",
       }}
     >
+      {/* Soft agentic gradient wash behind the content. */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "var(--grad-agentic-soft)",
+          opacity: 0.5,
+          pointerEvents: "none",
+        }}
+      />
       {accent && (
         <div
           aria-hidden
@@ -73,12 +84,13 @@ export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent
             position: "absolute",
             inset: "0 0 auto 0",
             height: 3,
-            background: "linear-gradient(90deg, var(--chart-1), var(--chart-5), var(--chart-2))",
+            background: "var(--grad-agentic)",
+            boxShadow: "var(--glow-accent)",
           }}
         />
       )}
 
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
+      <div style={{ position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flex: 1, minWidth: 260 }}>
           {icon && (
             <div
@@ -86,25 +98,26 @@ export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: 44,
-                height: 44,
-                borderRadius: 10,
-                background: "var(--accent-light)",
-                color: "var(--accent)",
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                background: "var(--grad-agentic)",
+                color: "#fff",
                 flexShrink: 0,
+                boxShadow: "var(--glow-accent)",
               }}
               aria-hidden
             >
-              <Icon name={icon} size={22} />
+              <Icon name={icon} size={24} />
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             {eyebrow && (
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: "var(--accent)", marginBottom: 4 }}>
+              <div className="qa-gradient-text" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", marginBottom: 4, display: "inline-block" }}>
                 {eyebrow}
               </div>
             )}
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)", lineHeight: 1.15 }}>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: "-0.025em", color: "var(--text)", lineHeight: 1.15 }}>
               {title}
             </h1>
             {subtitle && (

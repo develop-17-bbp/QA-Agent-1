@@ -120,7 +120,7 @@ export function MetricCard({
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
-      className="qa-panel"
+      className="qa-panel qa-metric-3d"
       style={{
         padding: 16,
         display: "flex",
@@ -129,7 +129,7 @@ export function MetricCard({
         minHeight: 120,
         borderTop: `3px solid ${tones.bar}`,
         cursor: onClick ? "pointer" : "default",
-        transition: "transform 0.12s ease, box-shadow 0.12s ease",
+        transition: "transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
