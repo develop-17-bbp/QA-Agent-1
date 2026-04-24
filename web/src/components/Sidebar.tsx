@@ -176,7 +176,7 @@ function SourceDot({ path, size = 7 }: { path: string; size?: number }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [closedGroups, setClosedGroups] = useState<Set<string>>(readClosedGroups);
   const { pathname } = useLocation();
@@ -269,7 +269,7 @@ export default function Sidebar() {
               {!isClosed && (
                 <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                   {g.items.map((item) => (
-                    <SidebarItem key={item.path} item={item} collapsed={collapsed} />
+                    <SidebarItem key={item.path} item={item} collapsed={collapsed} onNavigate={onNavigate} />
                   ))}
                 </ul>
               )}
@@ -335,13 +335,14 @@ function GroupHeader({
   );
 }
 
-function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+function SidebarItem({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate?: () => void }) {
   const dotSize = collapsed ? 5 : 7;
   return (
     <li>
       <NavLink
         to={item.path}
         end={item.path === "/"}
+        onClick={onNavigate}
         title={collapsed ? item.label : undefined}
         className={({ isActive }) => `qa-sidebar-item${isActive ? " qa-sidebar-item--active" : ""}`}
         style={({ isActive }) => ({

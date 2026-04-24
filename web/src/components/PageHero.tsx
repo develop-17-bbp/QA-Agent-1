@@ -54,6 +54,7 @@ const TONE_COLORS: Record<NonNullable<PageHeroKpi["tone"]>, string> = {
 export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent }: PageHeroProps) {
   return (
     <div
+      className="qa-page-hero"
       style={{
         position: "relative",
         padding: "22px 24px",
@@ -115,10 +116,10 @@ export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent
         </div>
 
         {(kpis && kpis.length > 0) || actions ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 12 }}>
+          <div className="qa-page-hero-right" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 12 }}>
             {actions && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>}
             {kpis && kpis.length > 0 && (
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div className="qa-page-hero-kpis" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {kpis.map((k, i) => (
                   <div
                     key={`${k.label}-${i}`}

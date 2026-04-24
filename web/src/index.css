@@ -939,11 +939,62 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.55; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
 /* ─── Responsive ──────────────────────────────────────────────── */
+
+/* Hamburger visible only on mobile, hidden on desktop. */
+.qa-sidebar-toggle { display: none; }
+.qa-sidebar-backdrop { display: none; }
+/* Default: secondary topbar widgets are shown. Overrides at breakpoints below. */
+.qa-topbar-only-desktop { display: inline-flex; }
+.qa-topbar-only-wide { display: inline-flex; }
+.qa-topbar-label { display: inline; }
+
 @media (max-width: 1024px) {
   .qa-topnav-row { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
   .qa-topnav-row::-webkit-scrollbar { display: none; }
   .qa-main__inner { padding: 24px 16px 60px; }
+  /* Tighten main-area padding on tablets. */
+  .qa-app-main-inner { padding: 22px 20px 60px !important; }
+  /* Drop the "Connections" wide-only widgets (RegionPicker label, Google link text). */
+  .qa-topbar-only-wide { display: none !important; }
 }
+
+@media (max-width: 900px) {
+  /* Flip the sidebar into a fixed-position drawer. */
+  .qa-sidebar-wrap {
+    position: fixed !important;
+    top: 0; left: 0;
+    height: 100vh;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.18));
+  }
+  .qa-sidebar-wrap--open { transform: translateX(0); }
+  .qa-sidebar-backdrop {
+    display: block;
+    position: fixed; inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    z-index: 199;
+    animation: qa-fade-in 0.18s ease;
+  }
+  .qa-sidebar-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px; height: 36px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .qa-sidebar-toggle:hover { background: var(--glass2); }
+  /* Desktop-only topbar pieces disappear below 900px. */
+  .qa-topbar-only-desktop { display: none !important; }
+}
+
+@keyframes qa-fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 768px) {
   .qa-stat-grid { grid-template-columns: repeat(2, 1fr); }
@@ -953,6 +1004,25 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.55; }
   .qa-table { font-size: 0.75rem; }
   .qa-table th, .qa-table td { padding: 8px 6px; }
   .qa-data-honesty { display: none !important; }
+  /* Shrink hero + page padding further. */
+  .qa-app-main-inner { padding: 18px 14px 56px !important; }
+  .qa-app-topbar { padding: 0 14px !important; height: 50px !important; }
+  /* Hide the "Connections" label (just keep the dots). */
+  .qa-topbar-label { display: none !important; }
+  /* Hide the data-source legend (exposed on Dashboard) on tight widths. */
+  .qa-dashboard-legend { display: none !important; }
+  /* PageHero: stack KPI strip under the title block. */
+  .qa-page-hero-right { align-items: flex-start !important; width: 100%; }
+}
+
+@media (max-width: 640px) {
+  /* Further topbar trimming: the Connect button collapses to icon. */
+  .qa-connect-link-label { display: none !important; }
+  .qa-connect-link { padding: 6px 10px !important; }
+  /* Collapse status text to dots-only so the row doesn't overflow. */
+  .qa-topbar-status-text { display: none !important; }
+  /* PageHero: title scale down. */
+  .qa-page-hero h1 { font-size: 22px !important; }
 }
 
 @media (max-width: 480px) {
@@ -961,4 +1031,8 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.55; }
   .qa-page-desc { font-size: 0.8125rem; }
   .qa-btn-primary, .qa-btn-default { min-height: 40px; padding: 10px 16px; }
   .qa-search-bar input { padding: 10px 12px; font-size: 0.875rem; }
+  .qa-app-main-inner { padding: 14px 10px 48px !important; }
+  /* PageHero KPI tiles go full-width so they don't crowd. */
+  .qa-page-hero-kpis { width: 100%; }
+  .qa-page-hero-kpis > div { flex: 1; min-width: 0 !important; }
 }

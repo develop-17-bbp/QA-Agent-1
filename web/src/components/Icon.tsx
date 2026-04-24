@@ -52,7 +52,9 @@ export type IconName =
   | "pause"
   | "trash"
   | "zap"          // fast / agent-live
-  | "target";
+  | "target"
+  | "menu"         // hamburger / mobile nav
+  | "x-circle";
 
 export interface IconProps {
   name: IconName;
@@ -100,6 +102,8 @@ const PATHS: Record<IconName, string> = {
   "trash": "M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M5 6v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6 M10 11v6 M14 11v6",
   "zap": "M13 2 3 14h7l-1 8 10-12h-7l1-8z",
   "target": "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+  "menu": "M3 6h18 M3 12h18 M3 18h18",
+  "x-circle": "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M15 9l-6 6 M9 9l6 6",
 };
 
 export function Icon({ name, size = 16, color, style, className, label }: IconProps) {
