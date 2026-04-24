@@ -735,6 +735,32 @@ export function runCouncilApi(
   });
 }
 
+// ── Bulk Keyword Analyzer — paste many keywords, get SEMrush-style table ──
+export interface BulkKeywordRow {
+  keyword: string;
+  volume: number | null;
+  difficulty: number | null;
+  cpcUsd: number | null;
+  competitionLabel: "LOW" | "MEDIUM" | "HIGH" | null;
+  volumeSource: string | null;
+  intent: "informational" | "commercial" | "navigational" | "transactional";
+  wordCount: number;
+}
+export interface BulkKeywordResult {
+  region: string;
+  rows: BulkKeywordRow[];
+  meta: {
+    requestedCount: number;
+    processedCount: number;
+    provider: "google-ads" | "dataforseo" | "none";
+    durationMs: number;
+    skippedReasons: { reason: string; count: number }[];
+  };
+}
+export function analyzeBulkKeywordsApi(keywords: string[], extras?: { region?: string; provider?: "google-ads" | "dataforseo" | "auto" }): Promise<BulkKeywordResult> {
+  return postApi<BulkKeywordResult>("/api/bulk-keywords", { keywords, region: extras?.region, provider: extras?.provider });
+}
+
 // ── Term Intel — universal cross-source lookup for any term ──────────────
 export type TermIntelSourceStatus = "ok" | "no-data" | "not-configured" | "error";
 export type TermIntelDetail =

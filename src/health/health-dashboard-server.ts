@@ -76,6 +76,8 @@ import { composeDailyReport, type DailyReport, type DailyReportFormTest } from "
 import { recordUsage, deriveClientKey, getUsageSnapshot } from "./modules/usage-meter.js";
 import { primeRuntimeKeys, setRuntimeKeys, clearRuntimeKey, listRuntimeKeyNames } from "./modules/runtime-keys.js";
 import { buildCacheKey, cachedResponse, getCacheStats, invalidateByPrefix } from "./modules/response-cache.js";
+import { listSchedules, createSchedule, updateSchedule, deleteSchedule, nextRun, startScheduler } from "./modules/scheduler.js";
+import { runAlertsCheck, readRecentAlerts, startAlertsTicker } from "./modules/alerts.js";
 import {
   isBingOAuthClientConfigured,
   buildBingOAuthAuthorizeUrl,
@@ -1414,7 +1416,8 @@ export async function runHealthDashboard(options: {
           return;
         }
         try {
-          const pdf = await renderHtmlFileToPdf(absHtml, { runRoot });
+          const { brandBannerHtml } = await import("./modules/brand-config.js");
+          const pdf = await renderHtmlFileToPdf(absHtml, { runRoot, brandBannerHtml: brandBannerHtml() });
           const base = path.basename(file, ".html").replace(/[^a-zA-Z0-9._-]+/g, "_");
           const download =
             url.searchParams.get("download") === "1" || url.searchParams.get("download") === "true";
@@ -2774,6 +2777,10 @@ export async function runHealthDashboard(options: {
         "CLOUDFLARE_API_TOKEN", "CF_API_TOKEN",
         "PAGESPEED_API_KEY", "GOOGLE_PAGESPEED_API_KEY",
         "CRUX_API_KEY",
+        // Branding for white-label PDF exports + dashboard
+        "BRAND_NAME", "BRAND_LOGO_URL", "BRAND_PRIMARY_HEX",
+        // Alerts webhook (Slack/Teams/custom endpoint URL)
+        "ALERT_WEBHOOK_URL",
       ]);
       if (req.method === "POST" && url.pathname === "/api/integrations/keys") {
         let body: string;
@@ -3244,6 +3251,127 @@ export async function runHealthDashboard(options: {
 
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
           res.end(JSON.stringify({ intel, context, council, elapsed: { gatherMs, llmMs } }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      // ── Alerts — rank/backlink change feed ────────────────────────────
+      if (req.method === "GET" && url.pathname === "/api/alerts") {
+        const limit = Number(url.searchParams.get("limit") ?? "100");
+        const alerts = await readRecentAlerts(Number.isFinite(limit) ? Math.min(Math.max(1, limit), 500) : 100);
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify({ alerts }));
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/alerts/run") {
+        let body: string;
+        try { body = await readBody(req, 2_000); } catch { body = "{}"; }
+        let payload: Record<string, unknown> = {};
+        try { payload = body ? JSON.parse(body) : {}; } catch { /* ignore */ }
+        try {
+          const result = await runAlertsCheck({
+            rankDropThreshold: typeof payload.rankDropThreshold === "number" ? payload.rankDropThreshold : undefined,
+            rankGainThreshold: typeof payload.rankGainThreshold === "number" ? payload.rankGainThreshold : undefined,
+            backlinkDropThreshold: typeof payload.backlinkDropThreshold === "number" ? payload.backlinkDropThreshold : undefined,
+            backlinkGainThreshold: typeof payload.backlinkGainThreshold === "number" ? payload.backlinkGainThreshold : undefined,
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
+      // ── Schedules — cron-driven audits (CRUD) ─────────────────────────
+      if (req.method === "GET" && url.pathname === "/api/schedules") {
+        const list = await listSchedules();
+        const withNext = list.map((s) => ({ ...s, nextRunPreview: nextRun(s.cron)?.toISOString() }));
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify({ schedules: withNext }));
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/schedules") {
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: Record<string, unknown>;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        try {
+          const sched = await createSchedule({
+            name: String(payload.name ?? "").trim(),
+            cron: String(payload.cron ?? "").trim(),
+            sites: Array.isArray(payload.sites) ? (payload.sites as unknown[]).filter((s): s is string => typeof s === "string") : [],
+            includePageSpeed: payload.includePageSpeed === true,
+            includeFormTests: payload.includeFormTests === true,
+            maxPages: typeof payload.maxPages === "number" ? payload.maxPages : undefined,
+            emailTo: Array.isArray(payload.emailTo) ? (payload.emailTo as unknown[]).filter((e): e is string => typeof e === "string") : undefined,
+            paused: payload.paused === true,
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(sched));
+        } catch (e) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+      if (req.method === "PATCH" && url.pathname.startsWith("/api/schedules/")) {
+        const id = url.pathname.slice("/api/schedules/".length);
+        let body: string;
+        try { body = await readBody(req, 16_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: Record<string, unknown>;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        try {
+          const updated = await updateSchedule(id, payload as Parameters<typeof updateSchedule>[1]);
+          if (!updated) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "not found" })); return; }
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(updated));
+        } catch (e) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+      if (req.method === "DELETE" && url.pathname.startsWith("/api/schedules/")) {
+        const id = url.pathname.slice("/api/schedules/".length);
+        const ok = await deleteSchedule(id);
+        res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok }));
+        return;
+      }
+
+      // ── Brand config (read-only view — write via /api/integrations/keys) ──
+      if (req.method === "GET" && url.pathname === "/api/brand") {
+        const { getBrandConfig } = await import("./modules/brand-config.js");
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify(getBrandConfig()));
+        return;
+      }
+
+      // ── Bulk Keyword Analyzer — paste up to 1000 keywords, get SEMrush-style table ──
+      // POST /api/bulk-keywords
+      // Body: { keywords: string[], region?: string, provider?: "google-ads"|"dataforseo"|"auto" }
+      if (req.method === "POST" && url.pathname === "/api/bulk-keywords") {
+        let body: string;
+        try { body = await readBody(req, 128_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { keywords?: unknown; region?: string; provider?: "google-ads" | "dataforseo" | "auto" };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const kws = Array.isArray(payload.keywords) ? payload.keywords.filter((k): k is string => typeof k === "string") : [];
+        if (kws.length === 0) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keywords array required" })); return; }
+        try {
+          const { analyzeBulkKeywords } = await import("./modules/bulk-keywords.js");
+          const ck = buildCacheKey("/api/bulk-keywords", { keywords: kws.slice(0, 1000).sort(), region: payload.region, provider: payload.provider });
+          const { value: result, hit } = await cachedResponse(ck, 30 * 60_000, () => analyzeBulkKeywords({
+            keywords: kws,
+            region: payload.region,
+            provider: payload.provider,
+          }));
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
         } catch (e) {
           res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
@@ -3863,6 +3991,10 @@ export async function runHealthDashboard(options: {
     void primeRuntimeKeys().finally(() => {
       server.listen(options.port, "127.0.0.1", () => {
         server.off("error", onError);
+        // Start the cron scheduler tick after listen so fires can self-POST.
+        startScheduler(`http://127.0.0.1:${options.port}`);
+        // Start the alerts background ticker (every 15 min).
+        startAlertsTicker();
         resolve();
       });
     });

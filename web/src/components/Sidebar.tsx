@@ -34,6 +34,9 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/competitor-rank-tracker": "real",
   "/council": "mixed", "/integrations": "real", "/google-connections": "real",
   "/term-intel": "mixed",
+  "/bulk-keywords": "real",
+  "/schedules": "real",
+  "/alerts": "real",
 };
 const DOT_COLORS: Record<SourceClass, string> = { real: "#22c55e", "llm-safe": "#3b82f6", mixed: "#eab308" };
 
@@ -49,6 +52,8 @@ const GROUPS: NavGroup[] = [
       { label: "Run History", path: "/history" },
       { label: "Reports", path: "/reports" },
       { label: "Import Data", path: "/upload" },
+      { label: "Schedules", path: "/schedules", badge: "NEW" },
+      { label: "Alerts", path: "/alerts", badge: "NEW" },
     ],
   },
   {
@@ -73,6 +78,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Keyword Overview", path: "/keyword-overview" },
       { label: "Magic Tool", path: "/keyword-magic-tool" },
+      { label: "Bulk Analyzer", path: "/bulk-keywords", badge: "NEW" },
       { label: "Impact Predictor", path: "/keyword-impact" },
       { label: "Strategy Builder", path: "/keyword-strategy" },
       { label: "Keyword Manager", path: "/keyword-manager" },

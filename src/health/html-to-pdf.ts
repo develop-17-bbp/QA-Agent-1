@@ -47,7 +47,7 @@ function chromiumLaunchOptions(): Parameters<typeof chromium.launch>[0] {
   return { headless: true, args: [...args] };
 }
 
-async function loadPageForPdf(browser: Browser, loadPath: string, runRoot: string | undefined): Promise<Page> {
+async function loadPageForPdf(browser: Browser, loadPath: string, runRoot: string | undefined, brandBannerHtml?: string): Promise<Page> {
   const page = await browser.newPage();
   try {
     /* Wider layout so wide tables are laid out before A4 shrink; pairs with @media print in HEALTH_REPORT_CSS. */
@@ -60,6 +60,16 @@ async function loadPageForPdf(browser: Browser, loadPath: string, runRoot: strin
     if (runRoot) {
       const ov = await loadSiteStatusOverrides(runRoot);
       await applySiteStatusForPdf(page, ov, loadPath);
+    }
+    // Inject branded header banner at the top of body (white-label PDF).
+    if (brandBannerHtml && brandBannerHtml.trim()) {
+      const payload = JSON.stringify(brandBannerHtml);
+      await page.evaluate(`((html) => {
+        const wrap = document.createElement("div");
+        wrap.innerHTML = html;
+        const el = wrap.firstElementChild;
+        if (el && document.body) document.body.insertBefore(el, document.body.firstChild);
+      })(${payload})`);
     }
     await page.evaluate(`() => {
       document.querySelectorAll("details.report-section__details").forEach((el) => {
@@ -99,6 +109,10 @@ export async function closeHealthPdfBrowser(): Promise<void> {
 export type RenderHtmlPdfOptions = {
   /** Run artifacts folder — loads `site-status-overrides.json` and applies before PDF. */
   runRoot?: string;
+  /** Optional HTML snippet injected at the top of <body> before printing.
+   *  Used by the white-label PDF feature to show the operator's logo +
+   *  brand name on every exported page. See brand-config.ts. */
+  brandBannerHtml?: string;
 };
 
 /**
@@ -120,7 +134,7 @@ export async function renderHtmlFileToPdf(absHtmlPath: string, options?: RenderH
   for (const round of PDF_ROUNDS) {
     const browser = await chromium.launch(chromiumLaunchOptions());
     try {
-      const page = await loadPageForPdf(browser, loadPath, runRoot);
+      const page = await loadPageForPdf(browser, loadPath, runRoot, options?.brandBannerHtml);
       try {
         const buf = await page.pdf({ ...basePdf, ...round });
         return buf instanceof Buffer ? buf : Buffer.from(buf);
