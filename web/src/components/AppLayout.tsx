@@ -7,6 +7,7 @@ import RegionPicker from "./RegionPicker";
 import { ThemeToggle } from "./PageUI";
 import Sidebar from "./Sidebar";
 import AutoCouncilToggle from "./AutoCouncilToggle";
+import AgenticModeChip from "./AgenticModeChip";
 
 // ─── Data honesty ────────────────────────────────────────────────────────────
 // Note: the per-path source map lives in Sidebar.tsx now (where the nav
@@ -128,6 +129,7 @@ function Topbar() {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <AgenticModeChip />
         <AutoCouncilToggle />
         <div style={{ width: 1, height: 20, background: "var(--border)" }} />
         <RegionPicker compact label="Region" />

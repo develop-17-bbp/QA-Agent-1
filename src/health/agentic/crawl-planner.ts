@@ -9,6 +9,11 @@
  */
 
 import { routeLlmJson, type LlmResponse } from "./llm-router.js";
+import { withLlmTelemetry } from "./llm-telemetry.js";
+
+function plannerModel(): string {
+  return process.env.OLLAMA_MODEL?.trim() || "llama3.2";
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,7 +79,13 @@ Return a JSON crawl plan with these fields:
 Consider: site structure, content types, SEO-important sections, duplicate content risk.`;
 
   try {
-    const { data } = await routeLlmJson<CrawlPlan>(prompt);
+    const { data } = await withLlmTelemetry(
+      "crawl-planner",
+      plannerModel(),
+      prompt,
+      () => routeLlmJson<CrawlPlan>(prompt),
+      (r) => JSON.stringify(r.data),
+    );
     return {
       strategy: data.strategy || "priority-guided",
       maxDepth: Math.min(10, Math.max(1, data.maxDepth || 5)),
@@ -153,7 +164,13 @@ Return JSON array: [{"url": "...", "priority": 0-100, "reason": "brief", "seoVal
 Sort by priority descending.`;
 
   try {
-    const { data } = await routeLlmJson<UrlPriority[]>(prompt);
+    const { data } = await withLlmTelemetry(
+      "url-prioritization",
+      plannerModel(),
+      prompt,
+      () => routeLlmJson<UrlPriority[]>(prompt),
+      (r) => JSON.stringify(r.data),
+    );
     if (Array.isArray(data)) return data;
   } catch { /* fallback below */ }
   return heuristicPrioritize(urls, ctx);

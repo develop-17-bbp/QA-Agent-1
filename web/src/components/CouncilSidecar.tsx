@@ -24,9 +24,30 @@ import { Link } from "react-router-dom";
 
 export const AUTO_COUNCIL_KEY = "qa-auto-council";
 
+/** Returns the user's explicit preference for auto-council, or `"unset"`
+ *  when they haven't clicked the toggle yet. Callers that want a boolean
+ *  should use `readAutoCouncilActive()` — it falls back to live Ollama
+ *  status when the preference is unset. */
+export function readAutoCouncilRaw(): "on" | "off" | "unset" {
+  if (typeof window === "undefined") return "unset";
+  const v = window.localStorage.getItem(AUTO_COUNCIL_KEY);
+  if (v === "1") return "on";
+  if (v === "0") return "off";
+  return "unset";
+}
+
 export function readAutoCouncilPreference(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(AUTO_COUNCIL_KEY) === "1";
+  return readAutoCouncilRaw() === "on";
+}
+
+/** Resolved preference — when user hasn't set anything, returns the live
+ *  `ollamaAvailable` flag so agentic behavior is ON by default for users
+ *  with a working Ollama and OFF otherwise. */
+export function readAutoCouncilActive(ollamaAvailable: boolean): boolean {
+  const raw = readAutoCouncilRaw();
+  if (raw === "on") return true;
+  if (raw === "off") return false;
+  return ollamaAvailable;
 }
 
 export function writeAutoCouncilPreference(on: boolean): void {
@@ -67,14 +88,28 @@ export default function CouncilSidecar({ term, domain, autoInvoke, defaultOpen =
 
   useEffect(() => {
     if (!autoInvoke || !t) return;
-    // Respect the user's Auto-Council preference. If off, render collapsed
-    // with an Ask button (same UX as manual sidecar).
-    if (!readAutoCouncilPreference()) { setOpen(false); return; }
+    // Respect the user's Auto-Council preference. When they haven't set one,
+    // fall back to live Ollama status — agentic when Ollama is reachable,
+    // collapsed-with-Ask-button when it isn't. Kicked off async so we don't
+    // block the first paint.
     const key = `${t}::${d ?? ""}`;
     if (invokedFor.current === key) return;
     invokedFor.current = key;
-    setOpen(true);
-    void run();
+    void (async () => {
+      let active = readAutoCouncilRaw() === "on";
+      if (readAutoCouncilRaw() === "unset") {
+        try {
+          const res = await fetch("/api/llm-stats", { cache: "no-store" });
+          if (res.ok) {
+            const stats = await res.json() as { ollama?: { available?: boolean } };
+            active = !!stats.ollama?.available;
+          }
+        } catch { /* treat as off */ }
+      }
+      if (!active) { setOpen(false); return; }
+      setOpen(true);
+      void run();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t, d, autoInvoke]);
 

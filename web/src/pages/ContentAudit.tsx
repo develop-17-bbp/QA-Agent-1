@@ -12,6 +12,7 @@ import { FilterableTable, type FilterableColumn } from "../components/Filterable
 import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import CouncilSidecar from "../components/CouncilSidecar";
 const CLASS_COLORS: Record<string, string> = { good: "#38a169", "needs-improvement": "#dd6b20", poor: "#e53e3e" };
 
 const CONFIDENCE_COLORS: Record<string, string> = { high: "#38a169", medium: "#dd6b20", low: "#9ca3af" };
@@ -134,6 +135,13 @@ export default function ContentAudit() {
   ].filter(d => d.value > 0) : [];
 
   const issueData = (data?.issueBreakdown ?? []).slice(0, 8);
+  // Derive primary hostname from the first crawled page so the Council
+  // sidecar has an entity to center its cross-source intel on.
+  const primaryHostname = useMemo(() => {
+    const first = pages[0]?.url;
+    if (!first) return "";
+    try { return new URL(first).hostname.replace(/^www\./, ""); } catch { return ""; }
+  }, [pages]);
 
   return (
     <PageShell
@@ -259,6 +267,11 @@ export default function ContentAudit() {
               <ContentAuditTable pages={pages} ga4Pages={ga4Pages} ga4Active={ga4Active} />
             )}
           </SectionCard>
+
+          {/* Embedded Council — advisors synthesize content quality × traffic */}
+          {primaryHostname && (
+            <CouncilSidecar term={primaryHostname} autoInvoke />
+          )}
         </>
       )}
     </PageShell>

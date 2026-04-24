@@ -5,6 +5,7 @@ import { fetchOnPageSeoChecker, fetchGscPageStats, fetchGa4PageTraffic } from ".
 import { useGoogleOverlay } from "../lib/google-overlay";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import CouncilSidecar from "../components/CouncilSidecar";
 const STATUS_COLORS: Record<string, string> = { pass: "#38a169", warning: "#dd6b20", fail: "#e53e3e" };
 const STATUS_LABELS: Record<string, string> = { pass: "PASS", warning: "WARN", fail: "FAIL" };
 
@@ -216,6 +217,11 @@ export default function OnPageSeoChecker() {
               );
             })}
           </div>
+
+          {/* Embedded Council — advisors prioritize the failed rules by ranking impact */}
+          {data?.url && (
+            <CouncilSidecar term={data.url} domain={domain || undefined} autoInvoke />
+          )}
         </>
       )}
     </motion.div>

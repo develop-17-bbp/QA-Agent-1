@@ -130,6 +130,27 @@ export interface LinkCheckRecord {
   method: "HEAD" | "GET_RANGE";
 }
 
+/** Meta recorded when the agentic crawl brain drove decisions on this run.
+ *  Absent when agentic mode was disabled or Ollama wasn't reachable. */
+export interface CrawlAgenticMeta {
+  /** Strategy the planner chose — preserved verbatim from the LLM output. */
+  strategy: "breadth-first" | "depth-first" | "priority-guided" | "sitemap-first";
+  /** Top URL-path prefixes the planner flagged as high-value (e.g. ["/blog/", "/products/"]). */
+  prioritySections: string[];
+  /** Keywords the planner inferred from sampled page titles + URLs. */
+  focusKeywords: string[];
+  /** Human-readable one-line justification for the strategy. */
+  reasoning: string;
+  /** How many times `prioritizeUrls()` was re-invoked mid-crawl on the remaining queue. */
+  replanCount: number;
+  /** Total ms spent in LLM planner+prioritizer calls (deterministic BFS runs in parallel). */
+  plannerMs: number;
+  /** Count of unmetered pages shifted to a higher BFS position by LLM priority. */
+  reorderedCount: number;
+  /** Skipped-by-LLM patterns (beyond the default skip list). */
+  extraSkipPatterns: string[];
+}
+
 export interface CrawlSiteResult {
   startUrl: string;
   siteId: string;
@@ -138,6 +159,8 @@ export interface CrawlSiteResult {
   uniqueUrlsChecked: number;
   pages: PageFetchRecord[];
   brokenLinks: BrokenLinkRecord[];
+  /** Agentic-mode trace. Undefined when agentic was off or Ollama unavailable. */
+  agenticMeta?: CrawlAgenticMeta;
   /** Discovered internal URLs checked with HEAD/GET (not crawled as full pages). Omitted in older report.json files. */
   linkChecks?: LinkCheckRecord[];
   /** Set when PageSpeed Insights was run for this crawl. */

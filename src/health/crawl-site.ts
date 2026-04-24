@@ -455,6 +455,11 @@ export async function crawlSite(options: {
    *  can re-parse it. Orchestrator drops bodies before persisting the
    *  report. Default false to avoid blowing up memory on large sites. */
   retainBodies?: boolean;
+  /** Enable the agentic brain — LLM planner reorders the BFS queue and
+   *  re-prioritizes mid-crawl. No-op when Ollama unreachable. Controlled
+   *  from orchestrate-health, which defaults it to true unless the env
+   *  has QA_AGENT_NO_AGENTIC=1. */
+  agentic?: boolean;
 }): Promise<CrawlSiteResult> {
   const started = Date.now();
   let base = new URL(options.startUrl);
@@ -506,6 +511,66 @@ export async function crawlSite(options: {
       console.log(`[crawl] ${hostname}: seeded ${seeded} URLs from sitemap${suffix}`);
     }
   } catch { /* sitemap fetch failed — continue with BFS only */ }
+
+  // ── Agentic plan + queue prioritization (before BFS starts) ────────────
+  // When the agentic brain is enabled AND Ollama is reachable, ask the LLM
+  // planner to pick a strategy and reorder the queue so the most SEO-valuable
+  // URLs crawl first. Falls back to the default BFS order when either
+  // condition isn't met — the crawler never BLOCKS on LLM availability.
+  let agenticMeta: import("./types.js").CrawlAgenticMeta | undefined;
+  if (options.agentic) {
+    const plannerStart = Date.now();
+    try {
+      const { checkOllamaAvailable } = await import("./agentic/llm-router.js");
+      if (await checkOllamaAvailable()) {
+        const { planCrawl, prioritizeUrls } = await import("./agentic/crawl-planner.js");
+        const plan = await planCrawl(base.href, queue, []);
+        // Apply extra skip patterns from the planner (additive to default SKIP_PATTERNS).
+        const extraSkipRegexes = (plan.skipPatterns ?? [])
+          .filter((p) => typeof p === "string" && p.trim())
+          .map((p) => { try { return new RegExp(p); } catch { return null; } })
+          .filter((r): r is RegExp => r !== null);
+        if (extraSkipRegexes.length > 0) {
+          const filtered = queue.filter((u) => !extraSkipRegexes.some((r) => r.test(u)));
+          queue.length = 0;
+          queue.push(...filtered);
+          // Rebuild queued set to match the filtered queue (drop removed URLs).
+          queued.clear();
+          for (const u of queue) queued.add(u);
+        }
+        // Reorder queue by LLM priority when reasonably sized (heuristic path
+        // above 30 URLs in crawl-planner.ts handles big queues efficiently).
+        let reordered = 0;
+        if (queue.length > 1) {
+          const priorities = await prioritizeUrls(queue, {
+            hostname,
+            focusKeywords: plan.focusKeywords,
+            prioritySections: plan.prioritySections,
+          });
+          if (priorities.length > 0) {
+            const priorityByUrl = new Map<string, number>();
+            for (const p of priorities) priorityByUrl.set(p.url, p.priority);
+            const before = queue.slice();
+            queue.sort((a, b) => (priorityByUrl.get(b) ?? 50) - (priorityByUrl.get(a) ?? 50));
+            for (let i = 0; i < queue.length; i++) if (queue[i] !== before[i]) reordered++;
+          }
+        }
+        agenticMeta = {
+          strategy: plan.strategy,
+          prioritySections: plan.prioritySections,
+          focusKeywords: plan.focusKeywords,
+          reasoning: plan.reasoning,
+          replanCount: 0,
+          plannerMs: Date.now() - plannerStart,
+          reorderedCount: reordered,
+          extraSkipPatterns: plan.skipPatterns ?? [],
+        };
+        console.log(`[crawl/agentic] ${hostname}: strategy=${plan.strategy} reordered=${reordered} sections=${plan.prioritySections.join(",") || "(none)"} in ${agenticMeta.plannerMs}ms`);
+      }
+    } catch (e) {
+      console.log(`[crawl/agentic] ${hostname}: planner failed, falling back to BFS — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 
   const pages: PageFetchRecord[] = [];
   const brokenLinks: BrokenLinkRecord[] = [];
@@ -622,7 +687,48 @@ export async function crawlSite(options: {
       }
     }
 
+    // Mid-crawl agentic replan — after 30% of maxPages have been visited,
+    // re-prioritize the REMAINING queue using what we've learned from the
+    // pages crawled so far (titles, statuses, content-type). Fires at most
+    // once per crawl. No-op when agentic is off or Ollama is unavailable.
+    let midReplanFired = false;
+    const replanThreshold = Math.max(5, Math.floor(maxPagesCap * 0.3));
+    async function maybeReplan(): Promise<void> {
+      if (midReplanFired) return;
+      if (!options.agentic || !agenticMeta) return;
+      if (visited.size < replanThreshold) return;
+      if (queue.length < 10) return;
+      midReplanFired = true;
+      try {
+        const replanStart = Date.now();
+        const { checkOllamaAvailable } = await import("./agentic/llm-router.js");
+        if (!(await checkOllamaAvailable())) return;
+        const { prioritizeUrls } = await import("./agentic/crawl-planner.js");
+        const priorities = await prioritizeUrls(queue.slice(), {
+          hostname,
+          focusKeywords: agenticMeta.focusKeywords,
+          prioritySections: agenticMeta.prioritySections,
+        });
+        if (priorities.length > 0) {
+          const priorityByUrl = new Map<string, number>();
+          for (const p of priorities) priorityByUrl.set(p.url, p.priority);
+          const before = queue.slice();
+          queue.sort((a, b) => (priorityByUrl.get(b) ?? 50) - (priorityByUrl.get(a) ?? 50));
+          let moved = 0;
+          for (let i = 0; i < queue.length; i++) if (queue[i] !== before[i]) moved++;
+          agenticMeta.replanCount++;
+          agenticMeta.reorderedCount += moved;
+          agenticMeta.plannerMs += Date.now() - replanStart;
+          console.log(`[crawl/agentic] ${hostname}: mid-crawl replan after ${visited.size} pages — moved ${moved} URLs`);
+        }
+      } catch { /* replan is best-effort */ }
+    }
+
     function scheduleNext(): void {
+      // Fire the one-shot replan on entry; fire-and-forget so BFS doesn't block.
+      if (!midReplanFired && visited.size >= replanThreshold && queue.length >= 10) {
+        void maybeReplan();
+      }
       while (queue.length > 0 && visited.size < maxPagesCap) {
         const pageUrl = queue.shift()!;
         if (visited.has(pageUrl)) continue;
@@ -779,5 +885,6 @@ export async function crawlSite(options: {
     brokenLinks: cleanedBrokenLinks,
     linkChecks,
     durationMs,
+    agenticMeta,
   };
 }

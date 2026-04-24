@@ -6,6 +6,7 @@ import { fetchTrafficAnalytics, queryGscAnalytics, fetchGa4Totals } from "../api
 import { useGoogleOverlay } from "../lib/google-overlay";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import CouncilSidecar from "../components/CouncilSidecar";
 const SOURCE_COLORS: Record<string, string> = {
   organic: "#38a169",
   direct: "#111111",
@@ -276,6 +277,11 @@ export default function TrafficAnalytics() {
               <div className="qa-panel-title">Insights</div>
               <ul style={{ margin: 0, paddingLeft: 20 }}>{data.insights.map((ins: string, i: number) => <li key={i} style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text-secondary)" }}>{ins}</li>)}</ul>
             </div>
+          )}
+
+          {/* Embedded Council — advisors weigh in on traffic shifts */}
+          {primaryDomain && (
+            <CouncilSidecar term={primaryDomain} autoInvoke />
           )}
         </>
       )}

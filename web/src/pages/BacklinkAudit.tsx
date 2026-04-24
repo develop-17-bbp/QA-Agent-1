@@ -5,6 +5,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchBacklinkAudit } from "../api";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import CouncilSidecar from "../components/CouncilSidecar";
 const HEALTH_COLORS: Record<string, string> = { broken: "#e53e3e", "server-error": "#9b2c2c", "client-error": "#dd6b20", redirect: "#d69e2e" };
 
 export default function BacklinkAudit() {
@@ -73,6 +74,11 @@ export default function BacklinkAudit() {
                 ))}</tbody>
               </table>
             </div>
+          )}
+
+          {/* Embedded Council — analysts weigh in on the broken-link triage */}
+          {data?.hostname && (
+            <CouncilSidecar term={data.hostname} autoInvoke />
           )}
         </>
       )}

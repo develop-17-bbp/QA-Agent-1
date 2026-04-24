@@ -89,6 +89,19 @@ export interface HealthRunMeta {
     pageSpeedStrategies?: ("mobile" | "desktop")[];
     viewportCheck?: boolean;
   };
+  /** Aggregated agentic-mode summary across every site in the run. When
+   *  present, the dashboard renders a "🧠 Agentic plan" strip on /run/:id.
+   *  Absent when no site ran agentically (Ollama offline or kill-switched). */
+  agentic?: {
+    ranCount: number;        // sites where agentic brain fired
+    totalSites: number;      // total sites in the run
+    strategies: string[];    // union of strategies chosen across sites
+    prioritySections: string[]; // union of priority sections
+    focusKeywords: string[]; // union of focus keywords
+    replanCountTotal: number;
+    reorderedCountTotal: number;
+    plannerMsTotal: number;  // ms spent in LLM planner/prioritizer calls
+  };
 }
 
 export async function orchestrateHealthCheck(options: {
@@ -187,6 +200,10 @@ export async function orchestrateHealthCheck(options: {
     let crawl: import("./types.js").CrawlSiteResult;
     try {
       const enrichEnabled = options.enrich !== false;
+      // Agentic mode is ON by default — crawl-site falls back to pure BFS
+      // when Ollama isn't reachable, and respects QA_AGENT_NO_AGENTIC=1 as
+      // a universal kill-switch for operators who want deterministic crawls.
+      const agenticEnabled = process.env.QA_AGENT_NO_AGENTIC?.trim() !== "1";
       crawl = await crawlSite({
         startUrl,
         maxPages: options.maxPages,
@@ -194,6 +211,7 @@ export async function orchestrateHealthCheck(options: {
         requestTimeoutMs: options.requestTimeoutMs,
         fetchConcurrency: options.fetchConcurrency,
         retainBodies: enrichEnabled, // enrichers re-parse bodies; dropped before persist
+        agentic: agenticEnabled,
       });
 
       // ── Post-crawl steps run IN PARALLEL for speed ──────────────
@@ -509,6 +527,20 @@ export async function orchestrateHealthCheck(options: {
       pageSpeedStrategies: options.pageSpeed?.enabled ? options.pageSpeed.strategies : undefined,
       viewportCheck: options.viewportCheck?.enabled === true,
     },
+    agentic: (() => {
+      const metas = results.map((r) => r.crawl.agenticMeta).filter((m): m is NonNullable<typeof m> => !!m);
+      if (metas.length === 0) return undefined;
+      return {
+        ranCount: metas.length,
+        totalSites: results.length,
+        strategies: Array.from(new Set(metas.map((m) => m.strategy))),
+        prioritySections: Array.from(new Set(metas.flatMap((m) => m.prioritySections))).slice(0, 12),
+        focusKeywords: Array.from(new Set(metas.flatMap((m) => m.focusKeywords))).slice(0, 12),
+        replanCountTotal: metas.reduce((s, m) => s + m.replanCount, 0),
+        reorderedCountTotal: metas.reduce((s, m) => s + m.reorderedCount, 0),
+        plannerMsTotal: metas.reduce((s, m) => s + m.plannerMs, 0),
+      };
+    })(),
   };
   await writeFile(path.join(runDir, "run-meta.json"), JSON.stringify(runMeta, null, 2), "utf8");
 

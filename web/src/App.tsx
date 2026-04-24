@@ -51,6 +51,7 @@ const TermIntel = lazy(() => import("./pages/TermIntel"));
 const BulkKeywords = lazy(() => import("./pages/BulkKeywords"));
 const Schedules = lazy(() => import("./pages/Schedules"));
 const Alerts = lazy(() => import("./pages/Alerts"));
+const Forecast = lazy(() => import("./pages/Forecast"));
 
 function LazyFallback() {
   return (
@@ -141,6 +142,7 @@ export default function App() {
           <Route path="/bulk-keywords" element={<BulkKeywords />} />
           <Route path="/schedules" element={<Schedules />} />
           <Route path="/alerts" element={<Alerts />} />
+          <Route path="/forecast" element={<Forecast />} />
         </Route>
       </Routes>
     </Suspense>

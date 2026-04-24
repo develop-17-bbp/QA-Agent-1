@@ -3210,6 +3210,39 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Forecast — 30-day rank projection per tracked keyword + council synthesis ──
+      // POST /api/forecast
+      // Body: { domain: string, windowDays?: number, projectDays?: number,
+      //         riskThreshold?: number, breakoutThreshold?: number, includeLlm?: boolean }
+      if (req.method === "POST" && url.pathname === "/api/forecast") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { domain?: string; windowDays?: number; projectDays?: number; riskThreshold?: number; breakoutThreshold?: number; includeLlm?: boolean };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/forecast", { domain, windowDays: payload.windowDays, projectDays: payload.projectDays });
+          const { value: result, hit } = await cachedResponse(ck, 30 * 60_000, async () => {
+            const { buildForecast } = await import("./modules/forecast.js");
+            return await buildForecast({
+              domain,
+              windowDays: typeof payload.windowDays === "number" ? payload.windowDays : undefined,
+              projectDays: typeof payload.projectDays === "number" ? payload.projectDays : undefined,
+              riskThreshold: typeof payload.riskThreshold === "number" ? payload.riskThreshold : undefined,
+              breakoutThreshold: typeof payload.breakoutThreshold === "number" ? payload.breakoutThreshold : undefined,
+              includeLlm: payload.includeLlm !== false,
+            });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Term Intel — universal cross-source lookup for any term ─────────
       // POST /api/term-intel
       // Body: { term: string, region?: string, domain?: string, includeLlm?: boolean }

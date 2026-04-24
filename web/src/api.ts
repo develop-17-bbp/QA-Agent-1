@@ -81,6 +81,18 @@ export type HealthRunMeta = {
     viewportCheck?: boolean;
     seoAudit?: boolean;
   };
+  /** Populated when one or more sites in the run were crawled agentically
+   *  (LLM planner drove queue prioritization + mid-crawl replan). */
+  agentic?: {
+    ranCount: number;
+    totalSites: number;
+    strategies: string[];
+    prioritySections: string[];
+    focusKeywords: string[];
+    replanCountTotal: number;
+    reorderedCountTotal: number;
+    plannerMsTotal: number;
+  };
 };
 
 export type HistoryDay = { date: string; runs: HealthRunMeta[] };
@@ -731,6 +743,45 @@ export function runCouncilApi(
     competitors: extras?.competitors,
     urls: extras?.urls,
     runId: extras?.runId,
+    includeLlm: extras?.includeLlm !== false,
+  });
+}
+
+// ── Forecast — 30-day rank projections grounded in the operator's own history ──
+export interface KeywordForecast {
+  domain: string;
+  keyword: string;
+  latestRank: number | null;
+  projectedRank: number | null;
+  projectedDelta: number | null;
+  confidenceR2: number;
+  sampleCount: number;
+  confidenceBand: "high" | "medium" | "low";
+  windowDays: number;
+  slopePerDay: number | null;
+}
+export interface ForecastAggregate {
+  domain: string;
+  windowDays: number;
+  pairsTracked: number;
+  pairsForecastable: number;
+  atRiskKeywords: KeywordForecast[];
+  breakthroughKeywords: KeywordForecast[];
+  avgProjectedDelta: number;
+  medianConfidenceR2: number;
+  generatedAt: string;
+}
+export interface ForecastResponse {
+  aggregate: ForecastAggregate;
+  perKeyword: KeywordForecast[];
+  council: CouncilResult | null;
+  councilError?: string;
+}
+export function fetchForecastApi(domain: string, extras?: { windowDays?: number; projectDays?: number; includeLlm?: boolean }): Promise<ForecastResponse> {
+  return postApi<ForecastResponse>("/api/forecast", {
+    domain,
+    windowDays: extras?.windowDays,
+    projectDays: extras?.projectDays,
     includeLlm: extras?.includeLlm !== false,
   });
 }

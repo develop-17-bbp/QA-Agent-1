@@ -138,6 +138,46 @@ export default function RunDetail() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ marginTop: 20 }}>
           <JobCard run={run} titleNavigatesToRun={false} />
 
+          {run.agentic && run.agentic.ranCount > 0 && (
+            <div
+              className="qa-panel"
+              style={{
+                marginTop: 12,
+                padding: "10px 14px",
+                background: "var(--accent-light)",
+                border: "1px solid var(--accent-muted)",
+                display: "flex",
+                gap: 14,
+                flexWrap: "wrap",
+                alignItems: "center",
+                fontSize: 12.5,
+              }}
+            >
+              <span style={{ fontSize: 16 }} aria-hidden>🧠</span>
+              <span style={{ fontWeight: 700, color: "var(--accent-hover, #1d4ed8)" }}>Agentic crawl</span>
+              <span title="Strategy chosen by the LLM planner for this run">
+                strategy: <strong>{run.agentic.strategies.join(", ")}</strong>
+              </span>
+              <span title="Pages whose BFS position was moved by the LLM priority scorer">
+                reordered: <strong>{run.agentic.reorderedCountTotal}</strong>
+              </span>
+              <span title="Times the queue was re-prioritized mid-crawl">
+                replans: <strong>{run.agentic.replanCountTotal}</strong>
+              </span>
+              <span title="Wall-clock time in LLM planner + prioritizer calls">
+                LLM: <strong>{(run.agentic.plannerMsTotal / 1000).toFixed(1)}s</strong>
+              </span>
+              {run.agentic.prioritySections.length > 0 && (
+                <span style={{ color: "var(--muted)" }}>
+                  focus: {run.agentic.prioritySections.slice(0, 4).join(", ")}
+                </span>
+              )}
+              <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--muted)" }}>
+                {run.agentic.ranCount}/{run.agentic.totalSites} site{run.agentic.totalSites === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
+
           <SiteStatusEditor run={run} onSaved={() => setReportPreviewNonce((n) => n + 1)} />
 
           <motion.section

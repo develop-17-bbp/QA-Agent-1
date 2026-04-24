@@ -37,6 +37,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/bulk-keywords": "real",
   "/schedules": "real",
   "/alerts": "real",
+  "/forecast": "mixed",
 };
 const DOT_COLORS: Record<SourceClass, string> = { real: "#22c55e", "llm-safe": "#3b82f6", mixed: "#eab308" };
 
@@ -54,6 +55,7 @@ const GROUPS: NavGroup[] = [
       { label: "Import Data", path: "/upload" },
       { label: "Schedules", path: "/schedules", badge: "NEW" },
       { label: "Alerts", path: "/alerts", badge: "NEW" },
+      { label: "Forecast", path: "/forecast", badge: "NEW" },
     ],
   },
   {
