@@ -64,6 +64,7 @@ function buildPrompt(ctx: CouncilContext, picks: CouncilAgendaItem[]): string {
     `Rules:`,
     `- Each advisor verdict is a single sentence, max 25 words.`,
     `- Reference the metric numbers when they support a point — specificity beats generality.`,
+    `- Never provide a verdict without a metric. If a numeric source is missing, state the gap and recommend the integration that would fill it.`,
     `- Advisors should disagree or emphasize different angles when the data supports it. Don't echo.`,
     `- If an item is genuinely low-signal, an advisor may say so directly — do not fill with "needs more analysis".`,
     `- Use the exact item-id as the JSON key (same string, same quoting).`,

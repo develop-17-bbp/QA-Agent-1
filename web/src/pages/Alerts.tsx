@@ -4,6 +4,13 @@ import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 import { ErrorBanner } from "../components/UI";
 import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
 
+interface AlertAdvice {
+  synthesis: string;
+  verdicts: Record<string, string>;
+  model: string;
+  durationMs: number;
+}
+
 interface AlertRecord {
   id: string;
   kind: "rank-drop" | "rank-gain" | "backlink-drop" | "backlink-gain";
@@ -15,7 +22,15 @@ interface AlertRecord {
   after?: number;
   firedAt: string;
   webhookStatus?: "ok" | "skipped" | "failed";
+  advice?: AlertAdvice | null;
 }
+
+const ADVISOR_LABELS: Record<string, string> = {
+  content:     "Content",
+  technical:   "Technical",
+  competitive: "Competitive",
+  performance: "Performance",
+};
 
 const KIND_META: Record<AlertRecord["kind"], { icon: string; label: string; color: string }> = {
   "rank-drop":     { icon: "📉", label: "Rank drop",     color: "#dc2626" },
@@ -155,6 +170,49 @@ export default function Alerts() {
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
                 target: <code>{a.target}</code>
               </div>
+              {a.advice && (
+                <div
+                  className="qa-panel"
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    background: "var(--grad-agentic-soft)",
+                    borderColor: "var(--accent-muted)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "var(--accent)" }}>
+                      🧠 Council advice
+                    </span>
+                    <span style={{ fontSize: 10, color: "var(--muted)" }}>
+                      {a.advice.model} · {a.advice.durationMs}ms
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "var(--text)", lineHeight: 1.5, marginBottom: 8 }}>
+                    {a.advice.synthesis}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {Object.entries(a.advice.verdicts).map(([id, v]) => (
+                      <details
+                        key={id}
+                        style={{
+                          fontSize: 11,
+                          padding: "4px 10px",
+                          borderRadius: 12,
+                          background: "#fff",
+                          border: "1px solid var(--accent-muted)",
+                          color: "var(--text)",
+                        }}
+                      >
+                        <summary style={{ cursor: "pointer", fontWeight: 700, color: "var(--accent)" }}>
+                          {ADVISOR_LABELS[id] ?? id}
+                        </summary>
+                        <div style={{ fontSize: 11.5, marginTop: 4, color: "var(--text-secondary)", maxWidth: 360 }}>{v}</div>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
           );
         })}

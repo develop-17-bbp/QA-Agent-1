@@ -28,12 +28,30 @@ import path from "node:path";
 import { readHistory, loadTrackedPairs } from "../position-db.js";
 import { loadAwtBundle } from "../providers/ahrefs-webmaster-csv.js";
 import { resolveKey } from "./runtime-keys.js";
+import { runCouncil } from "./council-runner.js";
+import type { CouncilContext, CouncilAdvisor, CouncilVerdict } from "./council-types.js";
+
+const ALERT_ADVISORS: CouncilAdvisor[] = [
+  { id: "content",     name: "Content Strategist",   focus: "Whether content quality, freshness or intent shift caused this change" },
+  { id: "technical",   name: "Technical SEO",        focus: "Crawl, indexation, schema or vitals issues that could explain the move" },
+  { id: "competitive", name: "Competitive Analyst",  focus: "Competitor activity that likely triggered this signal" },
+  { id: "performance", name: "Performance Engineer", focus: "Concrete next action and rough effort/impact estimate" },
+];
 
 const ALERTS_LOG = path.resolve("artifacts", "alerts.jsonl");
 const STATE_FILE = path.resolve("data", "alerts-state.json");
 
 export type AlertSeverity = "info" | "warn" | "critical";
 export type AlertKind = "rank-drop" | "rank-gain" | "backlink-drop" | "backlink-gain";
+
+export interface AlertAdvice {
+  /** 2-3 sentence summary of "what likely happened and what to do". */
+  synthesis: string;
+  /** Per-advisor 1-sentence verdict, keyed by advisor.id. */
+  verdicts: CouncilVerdict;
+  model: string;
+  durationMs: number;
+}
 
 export interface AlertRecord {
   id: string;
@@ -46,6 +64,9 @@ export interface AlertRecord {
   after?: number;
   firedAt: string;          // ISO
   webhookStatus?: "ok" | "skipped" | "failed";
+  /** Council synthesis attached when Ollama is reachable at fire time.
+   *  Null if Ollama was unavailable or council failed — alert still fires. */
+  advice?: AlertAdvice | null;
 }
 
 interface AlertsState {
@@ -82,14 +103,112 @@ async function appendLog(alert: AlertRecord): Promise<void> {
   } catch { /* log failure is non-fatal */ }
 }
 
+/** Build a single-item CouncilContext for an alert and call the LLM panel.
+ *  Returns null when Ollama is unavailable or synthesis fails — alerts must
+ *  still fire deterministically when LLM is offline. */
+async function synthesizeAlertAdvice(alert: AlertRecord): Promise<AlertAdvice | null> {
+  try {
+    const isRank = alert.kind === "rank-drop" || alert.kind === "rank-gain";
+    const featureLabel = isRank ? "Rank-change Alert" : "Backlink-change Alert";
+    const tagline = isRank
+      ? `Single-pair rank alert for ${alert.target}. Advisors must explain WHY this happened and the single next action.`
+      : `Backlink-volume alert for ${alert.target}. Advisors must explain the likely cause and the single next action.`;
+    const ctx: CouncilContext = {
+      feature: "alert-synthesis",
+      featureLabel,
+      featureTagline: tagline,
+      target: alert.target,
+      sourcesQueried: [isRank ? "position-history" : "ahrefs-webmaster-csv"],
+      sourcesFailed: [],
+      tierTop: [{
+        id: alert.target,
+        label: alert.summary,
+        sublabel: typeof alert.before === "number" && typeof alert.after === "number"
+          ? `${alert.before} → ${alert.after} (Δ ${alert.delta > 0 ? "+" : ""}${alert.delta})`
+          : `Δ ${alert.delta > 0 ? "+" : ""}${alert.delta}`,
+        sources: [isRank ? "position-history" : "ahrefs-webmaster-csv"],
+        metrics: {
+          delta: alert.delta,
+          before: alert.before ?? "n/a",
+          after: alert.after ?? "n/a",
+          severity: alert.severity,
+        },
+        score: 100,
+      }],
+      tierMid: [],
+      tierBottom: [],
+      totalItems: 1,
+      collectedAt: alert.firedAt,
+      advisors: ALERT_ADVISORS,
+    };
+    const result = await runCouncil(ctx);
+    if (!result) return null;
+    const verdicts = result.verdicts[alert.target] ?? {};
+    return {
+      synthesis: result.synthesis,
+      verdicts,
+      model: result.model,
+      durationMs: result.durationMs,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isSlackUrl(u: string): boolean {
+  return /https?:\/\/hooks\.slack\.com\//i.test(u);
+}
+function isTeamsUrl(u: string): boolean {
+  return /https?:\/\/[^/]*webhook\.office\.com\//i.test(u) || /https?:\/\/outlook\.office\.com\//i.test(u);
+}
+
+/** Build a Slack/Teams-friendly envelope when the destination matches. Other
+ *  destinations get the raw alert JSON for maximum operator flexibility. */
+function buildWebhookBody(alert: AlertRecord, url: string): unknown {
+  if (isSlackUrl(url)) {
+    const blocks: unknown[] = [
+      { type: "section", text: { type: "mrkdwn", text: `*${alert.severity.toUpperCase()}* — ${alert.summary}` } },
+    ];
+    if (alert.advice?.synthesis) {
+      blocks.push({ type: "section", text: { type: "mrkdwn", text: alert.advice.synthesis } });
+    }
+    if (alert.advice?.verdicts) {
+      const lines = Object.entries(alert.advice.verdicts)
+        .map(([id, v]) => `• *${id}*: ${v}`)
+        .join("\n");
+      if (lines) blocks.push({ type: "section", text: { type: "mrkdwn", text: lines } });
+    }
+    return { text: alert.summary, blocks, attachments: [{ color: alert.severity === "critical" ? "#dc2626" : alert.severity === "warn" ? "#d97706" : "#2563eb", text: JSON.stringify({ kind: alert.kind, target: alert.target, delta: alert.delta }) }] };
+  }
+  if (isTeamsUrl(url)) {
+    const sections: unknown[] = [{ activityTitle: alert.summary }];
+    if (alert.advice?.synthesis) sections.push({ text: alert.advice.synthesis });
+    if (alert.advice?.verdicts) {
+      sections.push({
+        facts: Object.entries(alert.advice.verdicts).map(([id, v]) => ({ name: id, value: v })),
+      });
+    }
+    return {
+      "@type": "MessageCard",
+      "@context": "https://schema.org/extensions",
+      themeColor: alert.severity === "critical" ? "DC2626" : alert.severity === "warn" ? "D97706" : "2563EB",
+      summary: alert.summary,
+      sections,
+    };
+  }
+  // Default: raw alert JSON (already includes advice if present).
+  return alert;
+}
+
 async function fireWebhook(alert: AlertRecord): Promise<"ok" | "skipped" | "failed"> {
   const url = resolveKey("ALERT_WEBHOOK_URL");
   if (!url) return "skipped";
   try {
+    const body = buildWebhookBody(alert, url);
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(alert),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(10_000),
     });
     return res.ok ? "ok" : "failed";
@@ -167,6 +286,8 @@ export async function runAlertsCheck(options: RunAlertsOptions = {}): Promise<Ru
         after: latest.position,
         firedAt: new Date().toISOString(),
       };
+      // Council synthesis BEFORE webhook so the payload carries advice.
+      alert.advice = await synthesizeAlertAdvice(alert);
       alert.webhookStatus = await fireWebhook(alert);
       await appendLog(alert);
       state.lastFired[sig] = { firedAt: alert.firedAt, snapshot: latest.position };
@@ -212,6 +333,7 @@ export async function runAlertsCheck(options: RunAlertsOptions = {}): Promise<Ru
         after: current,
         firedAt: new Date().toISOString(),
       };
+      alert.advice = await synthesizeAlertAdvice(alert);
       alert.webhookStatus = await fireWebhook(alert);
       await appendLog(alert);
       state.lastFired[sig] = { firedAt: alert.firedAt, snapshot: current };
