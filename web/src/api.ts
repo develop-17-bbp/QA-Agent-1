@@ -786,6 +786,57 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Voice-of-SERP — top-10 SERP narrative synthesis ───────────────────────
+export interface VoiceOfSerpPage {
+  rank: number;
+  url: string;
+  domain: string;
+  title: string;
+  wordCount: number;
+  signals: {
+    hasH2List: boolean;
+    hasComparisonTable: boolean;
+    hasFaqStructured: boolean;
+    paragraphCount: number;
+  };
+  textSample: string;
+  fetchOk: boolean;
+  fetchError?: string;
+}
+export interface VoiceSynthesisResponse {
+  dominantTopics: string[];
+  formatProfile: string;
+  tone: string;
+  depthSignals: string[];
+  coverageGaps: string[];
+  whyTheyWin: string;
+  model: string;
+  durationMs: number;
+}
+export interface VoiceOfSerpResponse {
+  keyword: string;
+  region: string;
+  fetchedAt: string;
+  pages: VoiceOfSerpPage[];
+  aggregate: {
+    avgWordCount: number;
+    medianWordCount: number;
+    listLayoutPct: number;
+    comparisonTablePct: number;
+    faqPct: number;
+    successfulFetches: number;
+  };
+  voice: VoiceSynthesisResponse | null;
+  voiceError?: string;
+}
+export function fetchVoiceOfSerp(keyword: string, extras?: { region?: string; topN?: number }): Promise<VoiceOfSerpResponse> {
+  return postApi<VoiceOfSerpResponse>("/api/voice-of-serp", {
+    keyword,
+    region: extras?.region,
+    topN: extras?.topN,
+  });
+}
+
 // ── Bulk Keyword Analyzer — paste many keywords, get SEMrush-style table ──
 export interface BulkKeywordRow {
   keyword: string;

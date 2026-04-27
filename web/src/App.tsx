@@ -52,6 +52,7 @@ const BulkKeywords = lazy(() => import("./pages/BulkKeywords"));
 const Schedules = lazy(() => import("./pages/Schedules"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const Forecast = lazy(() => import("./pages/Forecast"));
+const VoiceOfSerp = lazy(() => import("./pages/VoiceOfSerp"));
 
 function LazyFallback() {
   return (
@@ -143,6 +144,7 @@ export default function App() {
           <Route path="/schedules" element={<Schedules />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/forecast" element={<Forecast />} />
+          <Route path="/voice-of-serp" element={<VoiceOfSerp />} />
         </Route>
       </Routes>
     </Suspense>

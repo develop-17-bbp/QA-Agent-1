@@ -29,6 +29,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/seo-content-template": "mixed", "/content-audit": "mixed", "/post-tracking": "real",
   "/backlinks": "real", "/referring-domains": "real", "/backlink-audit": "real",
   "/query-lab": "mixed", "/serp-analyzer": "real", "/agentic-crawl": "llm-safe",
+  "/voice-of-serp": "mixed",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
   "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
   "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
@@ -133,6 +134,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Query Lab", path: "/query-lab" },
       { label: "SERP Analyzer", path: "/serp-analyzer" },
+      { label: "Voice of SERP", path: "/voice-of-serp", badge: "NEW" },
       { label: "Agentic Crawl", path: "/agentic-crawl" },
     ],
   },

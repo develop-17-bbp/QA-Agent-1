@@ -3243,6 +3243,37 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Voice-of-SERP Analyzer ───────────────────────────────────────────
+      // POST /api/voice-of-serp
+      // Body: { keyword: string, region?: string, topN?: number }
+      // Returns VoiceOfSerpResult — SERP top-N pages + LLM-extracted "what's
+      // winning" synthesis. 60-min cache (SERP doesn't change minute-to-minute).
+      if (req.method === "POST" && url.pathname === "/api/voice-of-serp") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { keyword?: string; region?: string; topN?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const keyword = typeof payload.keyword === "string" ? payload.keyword.trim() : "";
+        if (!keyword) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keyword required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/voice-of-serp", { keyword, region: payload.region, topN: payload.topN });
+          const { value: result, hit } = await cachedResponse(ck, 60 * 60_000, async () => {
+            const { analyzeVoiceOfSerp } = await import("./modules/voice-of-serp.js");
+            return await analyzeVoiceOfSerp({
+              keyword,
+              region: payload.region,
+              topN: typeof payload.topN === "number" ? payload.topN : undefined,
+            });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Term Intel — universal cross-source lookup for any term ─────────
       // POST /api/term-intel
       // Body: { term: string, region?: string, domain?: string, includeLlm?: boolean }
