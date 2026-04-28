@@ -3243,6 +3243,34 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Narrative Diff Engine ────────────────────────────────────────────
+      // POST /api/narrative-diff
+      // Body: { runIdA: string, runIdB: string, includeLlm?: boolean }
+      // Returns NarrativeDiffResult — structural diff + council narration.
+      // 30-min cache (run reports are immutable once written).
+      if (req.method === "POST" && url.pathname === "/api/narrative-diff") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { runIdA?: string; runIdB?: string; includeLlm?: boolean };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const runIdA = typeof payload.runIdA === "string" ? payload.runIdA.trim() : "";
+        const runIdB = typeof payload.runIdB === "string" ? payload.runIdB.trim() : "";
+        if (!runIdA || !runIdB) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "runIdA + runIdB required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/narrative-diff", { runIdA, runIdB, includeLlm: payload.includeLlm });
+          const { value: result, hit } = await cachedResponse(ck, 30 * 60_000, async () => {
+            const { buildNarrativeDiff } = await import("./modules/narrative-diff.js");
+            return await buildNarrativeDiff({ runIdA, runIdB, outRoot, includeLlm: payload.includeLlm !== false });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Voice-of-SERP Analyzer ───────────────────────────────────────────
       // POST /api/voice-of-serp
       // Body: { keyword: string, region?: string, topN?: number }

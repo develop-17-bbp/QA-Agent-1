@@ -30,6 +30,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/backlinks": "real", "/referring-domains": "real", "/backlink-audit": "real",
   "/query-lab": "mixed", "/serp-analyzer": "real", "/agentic-crawl": "llm-safe",
   "/voice-of-serp": "mixed",
+  "/narrative-diff": "mixed",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
   "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
   "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
@@ -58,6 +59,7 @@ const GROUPS: NavGroup[] = [
       { label: "Schedules", path: "/schedules", badge: "NEW" },
       { label: "Alerts", path: "/alerts", badge: "NEW" },
       { label: "Forecast", path: "/forecast", badge: "NEW" },
+      { label: "Narrative Diff", path: "/narrative-diff", badge: "NEW" },
     ],
   },
   {

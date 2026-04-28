@@ -786,6 +786,44 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Narrative Diff — run-to-run comparison with LLM narration ─────────────
+export interface NarrativeSectionDelta {
+  section: string;
+  pagesA: number;
+  pagesB: number;
+  pagesDelta: number;
+  durationMsA: number | null;
+  durationMsB: number | null;
+  brokenLinksA: number;
+  brokenLinksB: number;
+}
+export interface NarrativeSiteDelta {
+  hostname: string;
+  startUrl: string;
+  pagesA: number;
+  pagesB: number;
+  brokenLinksA: number;
+  brokenLinksB: number;
+  sections: NarrativeSectionDelta[];
+  newlyBrokenUrls: string[];
+  fixedBrokenUrls: string[];
+}
+export interface NarrativeDiffResponse {
+  runIdA: string;
+  runIdB: string;
+  metaA: any | null;
+  metaB: any | null;
+  sites: NarrativeSiteDelta[];
+  sitesOnlyInA: string[];
+  sitesOnlyInB: string[];
+  council: CouncilResult | null;
+  councilError?: string;
+  generatedAt: string;
+}
+export function fetchNarrativeDiff(runIdA: string, runIdB: string, includeLlm = true): Promise<NarrativeDiffResponse> {
+  return postApi<NarrativeDiffResponse>("/api/narrative-diff", { runIdA, runIdB, includeLlm });
+}
+
 // ── Voice-of-SERP — top-10 SERP narrative synthesis ───────────────────────
 export interface VoiceOfSerpPage {
   rank: number;

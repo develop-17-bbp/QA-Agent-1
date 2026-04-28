@@ -53,6 +53,7 @@ const Schedules = lazy(() => import("./pages/Schedules"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const Forecast = lazy(() => import("./pages/Forecast"));
 const VoiceOfSerp = lazy(() => import("./pages/VoiceOfSerp"));
+const NarrativeDiff = lazy(() => import("./pages/NarrativeDiff"));
 
 function LazyFallback() {
   return (
@@ -145,6 +146,7 @@ export default function App() {
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/forecast" element={<Forecast />} />
           <Route path="/voice-of-serp" element={<VoiceOfSerp />} />
+          <Route path="/narrative-diff" element={<NarrativeDiff />} />
         </Route>
       </Routes>
     </Suspense>
