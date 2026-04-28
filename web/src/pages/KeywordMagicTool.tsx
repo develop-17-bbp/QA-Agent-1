@@ -196,6 +196,59 @@ export default function KeywordMagicTool() {
         </span>
       ),
     });
+    // ── AI enrichment columns (Gap 7) — populated when Ollama is reachable
+    cols.push({
+      key: "opportunityScore",
+      label: "AI Score",
+      accessor: (k) => typeof k.opportunityScore === "number" ? k.opportunityScore : -1,
+      filterType: "number",
+      width: 90,
+      render: (k) => {
+        if (typeof k.opportunityScore !== "number") return <span style={{ color: "var(--muted)" }}>—</span>;
+        const color = k.opportunityScore >= 70 ? "#16a34a" : k.opportunityScore >= 50 ? "#d97706" : "#94a3b8";
+        return (
+          <span title={k.aiReason ?? "Composite of volume × intent × winnability"} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: color + "20", color, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+            {k.opportunityScore}
+          </span>
+        );
+      },
+      headerStyle: { textAlign: "right" },
+      cellStyle: { textAlign: "right" },
+    });
+    cols.push({
+      key: "recommendedAction",
+      label: "Action",
+      accessor: (k) => k.recommendedAction ?? "",
+      filterType: "select",
+      width: 150,
+      render: (k) => {
+        if (!k.recommendedAction) return <span style={{ color: "var(--muted)", fontSize: 11 }}>—</span>;
+        const colorMap: Record<string, string> = {
+          "target-new-page":  "#16a34a",
+          "improve-existing": "#2563eb",
+          "consolidate-with": "#d97706",
+          "skip":             "#94a3b8",
+        };
+        const c = colorMap[k.recommendedAction] ?? "#64748b";
+        return (
+          <span title={k.aiReason ?? ""} style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 10, background: c + "18", color: c, fontWeight: 700, letterSpacing: 0.3 }}>
+            {k.recommendedAction.replace(/-/g, " ")}
+          </span>
+        );
+      },
+    });
+    cols.push({
+      key: "aiCluster",
+      label: "AI Cluster",
+      accessor: (k) => k.aiCluster ?? "",
+      filterType: "select",
+      width: 160,
+      render: (k) => k.aiCluster ? (
+        <span style={{ fontSize: 11, color: "var(--accent-hover)", padding: "2px 8px", borderRadius: 10, background: "var(--accent-light)", border: "1px solid var(--accent-muted)" }}>
+          {k.aiCluster}
+        </span>
+      ) : <span style={{ color: "var(--muted)", fontSize: 11 }}>—</span>,
+    });
     if (gscKwStats.size > 0) {
       cols.push(
         {

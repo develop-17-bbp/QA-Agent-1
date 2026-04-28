@@ -70,8 +70,20 @@ export interface MagicKeywordRow {
   /** Always empty string today — we don't have a free CPC provider. */
   cpc: string;
   trend: Trend;
-  /** Where this row came from: "seed", "google-suggest", or "google-suggest-question". */
+  /** Where this row came from: "seed", "google-suggest",
+   *  "google-suggest-question", "google-ads-ideas", or "ai-semantic". */
   source: string;
+  /** Gap 7 — AI enrichment fields. Populated when Ollama is reachable AT
+   *  research time. All fields are optional so deterministic-only runs
+   *  still produce a valid table. */
+  aiCluster?: string;
+  /** 0-100 — composite opportunity from volume × KD × intent × current
+   *  rank (when GSC connected) × site authority. Higher = better target. */
+  opportunityScore?: number;
+  /** What the operator should do with this keyword. */
+  recommendedAction?: "target-new-page" | "improve-existing" | "consolidate-with" | "skip";
+  /** One-line LLM rationale for the action. */
+  aiReason?: string;
 }
 
 export interface MagicKeywordCluster {
@@ -278,6 +290,101 @@ export async function generateMagicKeywords(seed: string, regionCode = "US"): Pr
       realDataFields.push("volume", "cpc", "difficulty");
     }
   }
+
+  // ── Gap 6 — Harvest Google Ads idea-expansion (new keywords beyond seed) ──
+  // KeywordPlanIdeaService returns 30-200 RELATED ideas in addition to the
+  // seeds we asked about. Surface them as fresh rows so the table includes
+  // first-party Google ideas (the same DB Semrush is trying to estimate).
+  if (isGoogleAdsConfigured()) {
+    try {
+      const { harvestAdsIdeas } = await import("./keyword-ai.js");
+      const existing = keywords.map((k) => k.keyword);
+      const harvested = await harvestAdsIdeas([clean, ...keywords.slice(1, 4).map((k) => k.keyword)], regionCode, existing, 60);
+      for (const idea of harvested) {
+        const intent = classifyIntent(idea.keyword);
+        const v = idea.avgMonthlySearches ?? 0;
+        const compIdx = idea.competitionIndex ?? 0;
+        const cpcMid = (typeof idea.cpcLowUsd === "number" && typeof idea.cpcHighUsd === "number" && idea.cpcHighUsd > 0)
+          ? (idea.cpcLowUsd + idea.cpcHighUsd) / 2 : null;
+        keywords.push({
+          keyword: idea.keyword,
+          volume: v.toLocaleString(),
+          volumeData: dp<number>(v, "google-ads", "high", 24 * 60 * 60 * 1000, "Google Ads idea expansion"),
+          difficulty: bucketDifficulty(compIdx),
+          difficultyData: dp<number>(compIdx, "google-ads", "high", 24 * 60 * 60 * 1000, "Competition index 0-100"),
+          intent,
+          intentData: dp<Intent>(intent, "heuristic-regex", "low", 86_400_000),
+          cpc: cpcMid != null ? `$${cpcMid.toFixed(2)}` : "",
+          trend: "Stable",
+          source: "google-ads-ideas",
+        });
+      }
+      if (harvested.length > 0) {
+        if (!providersHit.includes("google-ads")) providersHit.push("google-ads");
+        realDataFields.push("ideas-expansion");
+      }
+    } catch { /* harvest failure is non-fatal — keep what we have */ }
+  }
+
+  // ── Gap 7 — AI semantic expansion via Ollama (concepts Suggest/Trends miss) ──
+  // On-device Ollama call returns 12-18 semantic-concept variants — the
+  // aliases / industry-jargon / problem-statement reformulations Google
+  // Suggest can't surface because nobody has typed them yet. Skipped
+  // silently when Ollama is offline.
+  try {
+    const { expandWithAi } = await import("./keyword-ai.js");
+    const aiVariants = await expandWithAi(clean, { region: regionCode });
+    const existing = new Set(keywords.map((k) => k.keyword.toLowerCase()));
+    for (const v of aiVariants) {
+      if (existing.has(v)) continue;
+      existing.add(v);
+      const intent = classifyIntent(v);
+      keywords.push({
+        keyword: v,
+        volume: "—",
+        volumeData: dp<number>(0, "ollama", "low", 3_600_000, "AI-generated — volume unverified"),
+        difficulty: "Medium",
+        difficultyData: dp<number>(50, "ollama", "low", 3_600_000, "AI-generated — KD unverified"),
+        intent,
+        intentData: dp<Intent>(intent, "heuristic-regex", "low", 86_400_000),
+        cpc: "",
+        trend: "Stable",
+        source: "ai-semantic",
+      });
+    }
+    if (aiVariants.length > 0) {
+      if (!providersHit.includes("ollama")) providersHit.push("ollama");
+      realDataFields.push("ai-semantic-variants");
+    }
+  } catch { /* Ollama failure is non-fatal */ }
+
+  // ── Gap 7b — AI enrichment pass: cluster + opportunityScore + action ──
+  // Single batched LLM call enriches EVERY row with composite signals a
+  // deterministic heuristic can't compute. Failures are silent — rows
+  // without enrichment still render fine in the UI.
+  try {
+    const { enrichWithAi } = await import("./keyword-ai.js");
+    const enrichInputs = keywords.map((k) => ({
+      keyword: k.keyword,
+      volume: k.volume,
+      difficulty: k.difficulty,
+      intent: k.intent,
+    }));
+    const enrichments = await enrichWithAi(enrichInputs, {
+      // No domain/DA context yet at this layer — keyword-magic-tool is seed-only.
+      // The /keyword-overview pipeline can pass richer context later.
+    });
+    for (const e of enrichments) {
+      if (typeof e.index !== "number") continue;
+      const row = keywords[e.index];
+      if (!row) continue;
+      if (e.cluster) row.aiCluster = e.cluster;
+      if (typeof e.opportunityScore === "number") row.opportunityScore = e.opportunityScore;
+      if (e.recommendedAction) row.recommendedAction = e.recommendedAction;
+      if (e.reason) row.aiReason = e.reason;
+    }
+    if (enrichments.length > 0) realDataFields.push("ai-cluster", "ai-opportunity-score", "ai-action");
+  } catch { /* enrichment failure is non-fatal */ }
 
   const clusters: MagicKeywordCluster[] = research.clusters.map((c) => ({
     name: c.label,
