@@ -1221,6 +1221,14 @@ export async function runHealthDashboard(options: {
     void (async () => {
       const url = new URL(req.url ?? "/", `http://127.0.0.1:${options.port}`);
 
+      // ── Public OpenAPI doc — must be readable WITHOUT auth so external
+      // tools (Postman, Swagger UI, curl) can discover the spec.
+      if (req.method === "GET" && url.pathname === "/api/v1/openapi.json") {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=300" });
+        res.end(JSON.stringify(buildOpenApiDoc(options.port)));
+        return;
+      }
+
       // ── Public REST API wrapper (Tier-S #3) ─────────────────────────────
       // Routes under /api/v1/* require a valid API key (X-API-Key header or
       // ?api_key=… query). Token store: data/api-tokens.json. Rate limit:
@@ -1308,7 +1316,9 @@ export async function runHealthDashboard(options: {
         return;
       }
 
-      if (req.method === "GET" && !url.pathname.startsWith("/api") && !url.pathname.startsWith("/reports/")) {
+      // Match `/api/` (with trailing slash) NOT `/api`, so SPA routes like
+      // `/api-tokens` don't get caught by the API prefix guard.
+      if (req.method === "GET" && !url.pathname.startsWith("/api/") && url.pathname !== "/api" && !url.pathname.startsWith("/reports/")) {
         const dist = webDistRoot();
         let spaHtml: string | null = null;
         try {

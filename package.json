@@ -29,7 +29,10 @@
     "eval:brand-monitor": "tsx scripts/eval-brand-monitor.ts",
     "eval:all": "tsx scripts/eval-link-fix.ts && tsx scripts/eval-run-summary.ts && tsx scripts/eval-competitive-estimator.ts && tsx scripts/eval-brand-monitor.ts",
     "daily-report": "tsx scripts/daily-report.ts",
-    "setup-browsers": "playwright install chromium"
+    "setup-browsers": "playwright install chromium",
+    "smoke:routes": "node scripts/smoke-routes.mjs",
+    "smoke:api": "node scripts/smoke-api.mjs",
+    "smoke": "npm run smoke:routes && npm run smoke:api"
   },
   "engines": {
     "node": ">=20"
