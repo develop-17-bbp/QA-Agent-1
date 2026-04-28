@@ -73,32 +73,9 @@ export function SkeletonTable({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
 }
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
-export function EmptyState({
-  icon = "📭",
-  title = "No data yet",
-  description,
-  action,
-}: {
-  icon?: string;
-  title?: string;
-  description?: ReactNode;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="qa-empty" style={{ padding: "48px 24px" }}>
-      <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.6 }}>{icon}</div>
-      <div style={{ fontWeight: 700, color: "var(--text-secondary)", fontSize: 14, marginBottom: description ? 6 : 0 }}>
-        {title}
-      </div>
-      {description && (
-        <div style={{ color: "var(--muted)", fontSize: 13, maxWidth: 380, margin: "0 auto" }}>
-          {description}
-        </div>
-      )}
-      {action && <div style={{ marginTop: 16 }}>{action}</div>}
-    </div>
-  );
-}
+// Re-export from PageUI so legacy `import { EmptyState } from "../components/UI"`
+// keeps working. The canonical implementation now lives in PageUI.tsx.
+export { EmptyState } from "./PageUI";
 
 // ─── Error banner ─────────────────────────────────────────────────────────────
 export function ErrorBanner({ error, style }: { error: string; style?: CSSProperties }) {

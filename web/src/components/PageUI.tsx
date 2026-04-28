@@ -255,16 +255,26 @@ export function SectionCard({ title, subtitle, actions, style, bodyPadding = 14,
 // ─── EmptyState ──────────────────────────────────────────────────────────────
 
 export function EmptyState({
-  title,
+  title = "No data yet",
   hint,
+  /** Backwards-compat alias for `hint`. The original UI.tsx EmptyState
+   *  (now removed) used `description` — keep the prop accepted so legacy
+   *  call sites don't break. */
+  description,
   icon,
   action,
 }: {
-  title: string;
+  title?: string;
   hint?: ReactNode;
+  description?: ReactNode;
   icon?: ReactNode;
   action?: ReactNode;
 }) {
+  const body = hint ?? description;
+  // Strings render with the soft icon style; ReactNodes render as-is.
+  const iconNode = typeof icon === "string"
+    ? <div style={{ fontSize: 32, opacity: 0.6 }}>{icon}</div>
+    : icon ? <div style={{ fontSize: 32, color: "var(--muted-light)" }}>{icon}</div> : null;
   return (
     <div
       className="qa-panel"
@@ -277,9 +287,9 @@ export function EmptyState({
         gap: 10,
       }}
     >
-      {icon && <div style={{ fontSize: 32, color: "var(--muted-light)" }}>{icon}</div>}
+      {iconNode}
       <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{title}</div>
-      {hint && <div style={{ fontSize: 12.5, color: "var(--muted)", maxWidth: 420 }}>{hint}</div>}
+      {body && <div style={{ fontSize: 12.5, color: "var(--muted)", maxWidth: 420 }}>{body}</div>}
       {action && <div style={{ marginTop: 6 }}>{action}</div>}
     </div>
   );
