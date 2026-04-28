@@ -29,6 +29,10 @@ export interface PageHeroKpi {
   caption?: string;
 }
 
+export type PageHeroCategory =
+  | "workspace" | "council" | "audit" | "keywords" | "competitive"
+  | "content" | "links" | "monitoring" | "ai" | "integrations";
+
 export interface PageHeroProps {
   icon?: IconName;
   /** Small uppercase label above the title (e.g. "Predictive", "Intelligence"). */
@@ -41,6 +45,9 @@ export interface PageHeroProps {
   actions?: ReactNode;
   /** Show a subtle accent gradient stripe on the top edge. */
   accent?: boolean;
+  /** Per-category accent. Drives the icon-box color + accent stripe. When
+   *  unset, falls back to the default agentic gradient. */
+  category?: PageHeroCategory;
 }
 
 const TONE_COLORS: Record<NonNullable<PageHeroKpi["tone"]>, string> = {
@@ -51,7 +58,9 @@ const TONE_COLORS: Record<NonNullable<PageHeroKpi["tone"]>, string> = {
   accent:  "var(--accent)",
 };
 
-export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent }: PageHeroProps) {
+export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent, category }: PageHeroProps) {
+  const catColor = category ? `var(--cat-${category})` : null;
+  const accentStripe = catColor ?? "var(--grad-agentic)";
   return (
     <div
       className="qa-page-hero"
@@ -66,14 +75,16 @@ export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent
         overflow: "hidden",
       }}
     >
-      {/* Soft agentic gradient wash behind the content. */}
+      {/* Soft category-tinted (or agentic) gradient wash behind the content. */}
       <div
         aria-hidden
         style={{
           position: "absolute",
           inset: 0,
-          background: "var(--grad-agentic-soft)",
-          opacity: 0.5,
+          background: catColor
+            ? `linear-gradient(135deg, color-mix(in oklab, ${catColor} 18%, transparent) 0%, transparent 60%)`
+            : "var(--grad-agentic-soft)",
+          opacity: catColor ? 1 : 0.5,
           pointerEvents: "none",
         }}
       />
@@ -84,7 +95,7 @@ export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent
             position: "absolute",
             inset: "0 0 auto 0",
             height: 3,
-            background: "var(--grad-agentic)",
+            background: accentStripe,
             boxShadow: "var(--glow-accent)",
           }}
         />
@@ -101,10 +112,14 @@ export function PageHero({ icon, eyebrow, title, subtitle, kpis, actions, accent
                 width: 48,
                 height: 48,
                 borderRadius: 12,
-                background: "var(--grad-agentic)",
+                background: catColor
+                  ? `linear-gradient(135deg, ${catColor} 0%, color-mix(in oklab, ${catColor} 65%, #000 0%) 100%)`
+                  : "var(--grad-agentic)",
                 color: "#fff",
                 flexShrink: 0,
-                boxShadow: "var(--glow-accent)",
+                boxShadow: catColor
+                  ? `0 0 0 1px color-mix(in oklab, ${catColor} 25%, transparent), 0 8px 32px -8px color-mix(in oklab, ${catColor} 45%, transparent)`
+                  : "var(--glow-accent)",
               }}
               aria-hidden
             >

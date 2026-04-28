@@ -56,11 +56,11 @@ const DOT_COLORS: Record<SourceClass, string> = { real: "#22c55e", "llm-safe": "
 
 // ─── Structure ───────────────────────────────────────────────────────────────
 interface NavItem { label: string; path: string; badge?: string }
-interface NavGroup { id: string; label: string; icon: IconName; items: NavItem[] }
+interface NavGroup { id: string; label: string; icon: IconName; items: NavItem[]; /** CSS color from --cat-* token. */ accent: string }
 
 const GROUPS: NavGroup[] = [
   {
-    id: "workspace", label: "Workspace", icon: "home",
+    id: "workspace", label: "Workspace", icon: "home", accent: "var(--cat-workspace)",
     items: [
       { label: "Dashboard", path: "/" },
       { label: "Run History", path: "/history" },
@@ -73,14 +73,14 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "council", label: "Council", icon: "compass",
+    id: "council", label: "Council", icon: "compass", accent: "var(--cat-council)",
     items: [
       { label: "Council — 6 AI panels", path: "/council", badge: "NEW" },
       { label: "Term Intel — every source", path: "/term-intel", badge: "NEW" },
     ],
   },
   {
-    id: "audit", label: "Audit", icon: "search",
+    id: "audit", label: "Audit", icon: "search", accent: "var(--cat-audit)",
     items: [
       { label: "Site Audit", path: "/site-audit" },
       { label: "On-Page Checker", path: "/onpage-seo-checker" },
@@ -90,7 +90,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "keywords", label: "Keywords", icon: "target",
+    id: "keywords", label: "Keywords", icon: "target", accent: "var(--cat-keywords)",
     items: [
       { label: "Keyword Overview", path: "/keyword-overview" },
       { label: "Magic Tool", path: "/keyword-magic-tool" },
@@ -101,7 +101,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "competitive", label: "Competitive", icon: "bar-chart",
+    id: "competitive", label: "Competitive", icon: "bar-chart", accent: "var(--cat-competitive)",
     items: [
       { label: "Domain Overview", path: "/domain-overview" },
       { label: "Compare Domains", path: "/compare-domains" },
@@ -117,7 +117,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "links", label: "Links", icon: "link",
+    id: "links", label: "Links", icon: "link", accent: "var(--cat-links)",
     items: [
       { label: "Backlinks", path: "/backlinks" },
       { label: "Referring Domains", path: "/referring-domains" },
@@ -127,7 +127,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "content", label: "Content", icon: "pen",
+    id: "content", label: "Content", icon: "pen", accent: "var(--cat-content)",
     items: [
       { label: "Writing Assistant", path: "/seo-writing-assistant" },
       { label: "Topic Research", path: "/topic-research" },
@@ -138,7 +138,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "monitoring", label: "Monitoring", icon: "eye",
+    id: "monitoring", label: "Monitoring", icon: "eye", accent: "var(--cat-monitoring)",
     items: [
       { label: "Brand Monitor", path: "/brand-monitoring" },
       { label: "Log File Analyzer", path: "/log-file-analyzer" },
@@ -148,7 +148,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "ai", label: "AI Tools", icon: "sparkles",
+    id: "ai", label: "AI Tools", icon: "sparkles", accent: "var(--cat-ai)",
     items: [
       { label: "Query Lab", path: "/query-lab" },
       { label: "SERP Analyzer", path: "/serp-analyzer" },
@@ -160,7 +160,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "integrations", label: "Integrations", icon: "plug",
+    id: "integrations", label: "Integrations", icon: "plug", accent: "var(--cat-integrations)",
     items: [
       { label: "Integrations Hub", path: "/integrations" },
       { label: "Google Connections", path: "/google-connections" },
@@ -278,11 +278,11 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
 
       {/* Groups */}
       <nav style={{ flex: 1, padding: "8px 0" }}>
-        {GROUPS.map((g) => {
+        {GROUPS.map((g, idx) => {
           const isClosed = closedGroups.has(g.id);
           const hasActive = g.items.some((i) => i.path === pathname);
           return (
-            <div key={g.id} style={{ marginBottom: 2 }}>
+            <div key={g.id} style={{ marginBottom: 2, borderTop: idx > 0 ? "1px solid var(--border)" : "none", paddingTop: idx > 0 ? 4 : 0 }}>
               <GroupHeader
                 group={g}
                 collapsed={collapsed}
@@ -293,7 +293,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
               {!isClosed && (
                 <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                   {g.items.map((item) => (
-                    <SidebarItem key={item.path} item={item} collapsed={collapsed} onNavigate={onNavigate} />
+                    <SidebarItem key={item.path} item={item} collapsed={collapsed} onNavigate={onNavigate} accent={g.accent} />
                   ))}
                 </ul>
               )}
@@ -331,8 +331,8 @@ function GroupHeader({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: hasActive ? "var(--accent)" : "var(--muted)",
-          borderLeft: hasActive ? "2px solid var(--accent)" : "2px solid transparent",
+          color: hasActive ? group.accent : "var(--muted)",
+          borderLeft: hasActive ? `2px solid ${group.accent}` : "2px solid transparent",
         }}
       >
         <Icon name={group.icon} size={18} />
@@ -352,22 +352,23 @@ function GroupHeader({
       }}
       className="qa-sidebar-group"
     >
-      <Icon name={group.icon} size={15} style={{ opacity: 0.9 }} />
+      <Icon name={group.icon} size={15} style={{ opacity: 0.9, color: group.accent }} />
       <span style={{ flex: 1 }}>{group.label}</span>
       <Icon name="chevron-down" size={12} style={{ opacity: 0.6, transform: isClosed ? "rotate(-90deg)" : "none", transition: "transform 0.15s" }} />
     </button>
   );
 }
 
-function SidebarItem({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate?: () => void }) {
+function SidebarItem({ item, collapsed, onNavigate, accent }: { item: NavItem; collapsed: boolean; onNavigate?: () => void; accent?: string }) {
   const dotSize = collapsed ? 5 : 7;
+  const tint = accent ?? "var(--accent)";
   return (
     <li>
       <NavLink
         to={item.path}
         end={item.path === "/"}
         onClick={onNavigate}
-        title={collapsed ? item.label : undefined}
+        title={collapsed ? item.label : item.label}
         className={({ isActive }) => `qa-sidebar-item${isActive ? " qa-sidebar-item--active" : ""}`}
         style={({ isActive }) => ({
           display: "flex",
@@ -376,10 +377,10 @@ function SidebarItem({ item, collapsed, onNavigate }: { item: NavItem; collapsed
           padding: collapsed ? "7px 0" : "7px 14px 7px 30px",
           justifyContent: collapsed ? "center" : "flex-start",
           fontSize: 13,
-          color: isActive ? "var(--accent)" : "var(--text-secondary)",
-          background: isActive ? "var(--accent-light)" : "transparent",
+          color: isActive ? tint : "var(--text-secondary)",
+          background: isActive ? `color-mix(in oklab, ${tint} 14%, transparent)` : "transparent",
           textDecoration: "none",
-          borderLeft: isActive ? "2px solid var(--accent)" : "2px solid transparent",
+          borderLeft: isActive ? `2px solid ${tint}` : "2px solid transparent",
           marginLeft: collapsed ? 0 : 0,
           fontWeight: isActive ? 600 : 500,
           transition: "background 0.1s, color 0.1s",
@@ -389,7 +390,7 @@ function SidebarItem({ item, collapsed, onNavigate }: { item: NavItem; collapsed
         <SourceDot path={item.path} size={dotSize} />
         {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
         {!collapsed && item.badge && (
-          <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 8, background: "var(--accent)", color: "#fff", fontWeight: 700, letterSpacing: 0.3 }}>
+          <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 8, background: tint, color: "#fff", fontWeight: 700, letterSpacing: 0.3 }}>
             {item.badge}
           </span>
         )}
