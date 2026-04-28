@@ -354,3 +354,130 @@ export async function fetchDfsBacklinksLive(domain: string, limit = 200): Promis
   cacheSet(cacheKey, out, TTL_MS);
   return out;
 }
+
+// ── Live Google SERP — device + location targeted ──────────────────────────
+
+export interface DfsSerpItem {
+  /** Position in the organic results (1-based). */
+  rank: number;
+  url: string;
+  title: string;
+  description: string;
+  domain: string;
+  /** Result item type — organic / featured_snippet / people_also_ask / video / images / local_pack / etc. */
+  itemType: string;
+  /** True for the featured-snippet box at the top. */
+  isFeaturedSnippet?: boolean;
+}
+
+export interface DfsLiveSerp {
+  keyword: string;
+  locationName: string;
+  device: "desktop" | "mobile";
+  searchEngine: "google";
+  /** Total estimated results count Google reports. */
+  totalResults: number | null;
+  items: DfsSerpItem[];
+  /** SERP-feature presence flags — useful for intent fingerprinting + KD heuristics. */
+  features: {
+    featuredSnippet: boolean;
+    peopleAlsoAsk: number;
+    videoCarousel: boolean;
+    images: boolean;
+    localPack: boolean;
+    knowledgeGraph: boolean;
+    shopping: boolean;
+  };
+  fetchedAt: string;
+}
+
+interface DfsLiveSerpResponse {
+  tasks?: Array<{
+    status_code?: number;
+    result?: Array<{
+      keyword?: string;
+      se_results_count?: number;
+      items?: Array<{
+        type?: string;
+        rank_absolute?: number;
+        rank_group?: number;
+        url?: string;
+        domain?: string;
+        title?: string;
+        description?: string;
+      }>;
+      item_types?: string[];
+    }>;
+  }>;
+}
+
+const SERP_TTL_MS = 60 * 60 * 1000; // 1h — SERPs do drift, but not minute-to-minute
+
+/** Live Google SERP for a single keyword. Real Google.com results
+ *  (not DDG/Brave/Startpage proxies). Supports mobile vs desktop and
+ *  any of DataForSEO's location_name strings ("United States", "Houston,Texas,United States", etc.). */
+export async function fetchDfsLiveSerp(
+  keyword: string,
+  opts: { locationName?: string; device?: "desktop" | "mobile"; depth?: number } = {},
+): Promise<DfsLiveSerp> {
+  if (!isDfsConfigured()) throw new ProviderError(PROVIDER, "DataForSEO not configured");
+  const kw = keyword.trim();
+  if (!kw) throw new ProviderError(PROVIDER, "Empty keyword");
+  const locationName = opts.locationName?.trim() || "United States";
+  const device = opts.device === "mobile" ? "mobile" : "desktop";
+  const depth = Math.max(10, Math.min(opts.depth ?? 20, 100));
+  const cacheKey = `${PROVIDER}:serp-live:${device}:${locationName}:${depth}:${kw.toLowerCase()}`;
+  const cached = cacheGet<DfsLiveSerp>(cacheKey);
+  if (cached) return cached;
+
+  const resp = await dfsPost<DfsLiveSerpResponse>(
+    "/serp/google/organic/live/advanced",
+    [{
+      keyword: kw,
+      language_code: "en",
+      location_name: locationName,
+      device,
+      depth,
+    }],
+  );
+  const result = resp.tasks?.[0]?.result?.[0];
+  const itemsRaw = result?.items ?? [];
+  const itemTypes = result?.item_types ?? [];
+
+  const items: DfsSerpItem[] = itemsRaw
+    .filter((it) => typeof it.url === "string")
+    .map((it) => ({
+      rank: typeof it.rank_group === "number" ? it.rank_group : (it.rank_absolute ?? 0),
+      url: it.url ?? "",
+      title: (it.title ?? "").slice(0, 240),
+      description: (it.description ?? "").slice(0, 320),
+      domain: it.domain ?? "",
+      itemType: it.type ?? "organic",
+      isFeaturedSnippet: it.type === "featured_snippet",
+    }))
+    .filter((it) => it.url && (it.itemType === "organic" || it.itemType === "featured_snippet"))
+    .sort((a, b) => a.rank - b.rank);
+
+  const features = {
+    featuredSnippet: itemTypes.includes("featured_snippet"),
+    peopleAlsoAsk: itemsRaw.filter((it) => it.type === "people_also_ask").length,
+    videoCarousel: itemTypes.includes("video"),
+    images: itemTypes.includes("images"),
+    localPack: itemTypes.includes("local_pack"),
+    knowledgeGraph: itemTypes.includes("knowledge_graph"),
+    shopping: itemTypes.includes("shopping"),
+  };
+
+  const out: DfsLiveSerp = {
+    keyword: kw,
+    locationName,
+    device,
+    searchEngine: "google",
+    totalResults: typeof result?.se_results_count === "number" ? result.se_results_count : null,
+    items: items.slice(0, depth),
+    features,
+    fetchedAt: new Date().toISOString(),
+  };
+  cacheSet(cacheKey, out, SERP_TTL_MS);
+  return out;
+}

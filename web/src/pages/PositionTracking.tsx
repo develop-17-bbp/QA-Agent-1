@@ -28,6 +28,7 @@ import {
   addTrackedPairApi,
   removeTrackedPairApi,
   fetchStartpageSerp,
+  fetchLiveSerp,
   type GscSite,
 } from "../api";
 import AskCouncilButton from "../components/AskCouncilButton";
@@ -93,8 +94,10 @@ export default function PositionTracking() {
   const [liveDomain, setLiveDomain] = useState("");
   const [liveKeywords, setLiveKeywords] = useState("");
   const [strictHost, setStrictHost] = useState(false);
-  const [serpSource, setSerpSource] = useState<"ddg" | "startpage">("ddg");
+  const [serpSource, setSerpSource] = useState<"ddg" | "startpage" | "google-live">("ddg");
   const [startpageRegion, setStartpageRegion] = useState("US");
+  const [googleLiveDevice, setGoogleLiveDevice] = useState<"desktop" | "mobile">("desktop");
+  const [googleLiveLocation, setGoogleLiveLocation] = useState("United States");
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState("");
   const [liveResults, setLiveResults] = useState<LiveResult[] | null>(null);
@@ -169,7 +172,30 @@ export default function PositionTracking() {
     setGscStats(new Map());
     setGscMatchedSite(null);
     try {
-      if (serpSource === "startpage") {
+      if (serpSource === "google-live") {
+        // Real Google SERP via DataForSEO BYOK — closes the "DDG/Brave are
+        // proxies" gap. Mobile vs desktop toggle, any DFS location.
+        const cleanDomain = dom.toLowerCase().replace(/^www\./, "");
+        const liveResultsArr: LiveResult[] = await Promise.all(
+          kws.map(async (kw) => {
+            try {
+              const serp = await fetchLiveSerp(kw, { device: googleLiveDevice, locationName: googleLiveLocation, depth: 30 });
+              const match = serp.items.find((r) => {
+                try {
+                  const h = new URL(r.url).hostname.toLowerCase().replace(/^www\./, "");
+                  return strictHost ? h === cleanDomain : (h === cleanDomain || h.endsWith("." + cleanDomain));
+                } catch { return false; }
+              });
+              const top = serp.items[0];
+              return { domain: dom, keyword: kw, position: match?.rank ?? null, url: match?.url ?? null, topUrl: top?.url ?? null };
+            } catch (e: any) {
+              return { domain: dom, keyword: kw, position: null, url: null, topUrl: null, error: e?.message ?? "google-live error" };
+            }
+          }),
+        );
+        setLiveResults(liveResultsArr);
+        setSampledAt(new Date().toISOString());
+      } else if (serpSource === "startpage") {
         // Startpage path — per-keyword Playwright sweep. No history write,
         // no tracked-pair registration (backend doesn't record Startpage
         // samples into the DB — this is a one-off rank check).
@@ -438,6 +464,10 @@ export default function PositionTracking() {
             <span>DuckDuckGo <span style={{ color: "var(--muted)", fontSize: 11 }}>(~0.7 corr · unlimited · history)</span></span>
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
+            <input type="radio" name="serp-source" value="google-live" checked={serpSource === "google-live"} onChange={() => setSerpSource("google-live")} />
+            Google live (DFS BYOK)
+          </label>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, marginRight: 12 }}>
             <input type="radio" name="serp-source" value="startpage" checked={serpSource === "startpage"} onChange={() => setSerpSource("startpage")} />
             <span>Startpage <span style={{ color: "var(--muted)", fontSize: 11 }}>(~0.9 corr · 60/hr · one-off)</span></span>
           </label>
@@ -456,6 +486,21 @@ export default function PositionTracking() {
                 <option value="BR">BR</option>
               </select>
             </label>
+          )}
+          {serpSource === "google-live" && (
+            <>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginLeft: 12 }}>
+                <span style={{ color: "var(--text-secondary)" }}>Device</span>
+                <select value={googleLiveDevice} onChange={(e) => setGoogleLiveDevice(e.target.value as "desktop" | "mobile")} style={{ fontSize: 12, padding: "2px 6px", border: "1px solid var(--border)", borderRadius: 4 }}>
+                  <option value="desktop">Desktop</option>
+                  <option value="mobile">Mobile</option>
+                </select>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                <span style={{ color: "var(--text-secondary)" }}>Location</span>
+                <input value={googleLiveLocation} onChange={(e) => setGoogleLiveLocation(e.target.value)} placeholder="United States" style={{ fontSize: 12, padding: "2px 6px", border: "1px solid var(--border)", borderRadius: 4, width: 200 }} />
+              </label>
+            </>
           )}
         </div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>

@@ -3248,6 +3248,36 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── DataForSEO live Google SERP (device + location targeted) ────────
+      // POST /api/serp-live   Body: { keyword, locationName?, device?, depth? }
+      // Real Google.com results — mobile or desktop, any DFS location.
+      // 60-min cache.
+      if (req.method === "POST" && url.pathname === "/api/serp-live") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const keyword = typeof payload?.keyword === "string" ? payload.keyword.trim() : "";
+        if (!keyword) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "keyword required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/serp-live", { keyword, locationName: payload.locationName, device: payload.device, depth: payload.depth });
+          const { value: result, hit } = await cachedResponse(ck, 60 * 60_000, async () => {
+            const { fetchDfsLiveSerp } = await import("./providers/dataforseo.js");
+            return await fetchDfsLiveSerp(keyword, {
+              locationName: payload.locationName,
+              device: payload.device === "mobile" ? "mobile" : "desktop",
+              depth: typeof payload.depth === "number" ? payload.depth : undefined,
+            });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Keyword Cannibalization Detector ────────────────────────────────
       // POST /api/cannibalization
       // Body: { siteUrl, windowDays?, minPages?, impressionsFloor?, clicksFloor?, limit? }

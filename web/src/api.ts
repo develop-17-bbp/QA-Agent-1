@@ -788,6 +788,38 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Live Google SERP (DataForSEO BYOK) ────────────────────────────────────
+export interface LiveSerpItem {
+  rank: number;
+  url: string;
+  title: string;
+  description: string;
+  domain: string;
+  itemType: string;
+  isFeaturedSnippet?: boolean;
+}
+export interface LiveSerpResponse {
+  keyword: string;
+  locationName: string;
+  device: "desktop" | "mobile";
+  searchEngine: "google";
+  totalResults: number | null;
+  items: LiveSerpItem[];
+  features: {
+    featuredSnippet: boolean;
+    peopleAlsoAsk: number;
+    videoCarousel: boolean;
+    images: boolean;
+    localPack: boolean;
+    knowledgeGraph: boolean;
+    shopping: boolean;
+  };
+  fetchedAt: string;
+}
+export function fetchLiveSerp(keyword: string, opts?: { locationName?: string; device?: "desktop" | "mobile"; depth?: number }): Promise<LiveSerpResponse> {
+  return postApi<LiveSerpResponse>("/api/serp-live", { keyword, ...opts });
+}
+
 // ── Keyword Cannibalization — pages competing for same query ─────────────
 export interface CannibalCandidate {
   query: string;
