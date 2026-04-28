@@ -37,6 +37,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/ai-search-visibility": "real",
   "/api-tokens": "real",
   "/aeo": "mixed",
+  "/topical-authority": "real",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
   "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
   "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
@@ -109,6 +110,7 @@ const GROUPS: NavGroup[] = [
       { label: "Competitive Estimator", path: "/competitive-estimator" },
       { label: "Rank Tracker", path: "/competitor-rank-tracker" },
       { label: "Intent Fingerprint", path: "/intent-fingerprint", badge: "NEW" },
+      { label: "Topical Authority", path: "/topical-authority", badge: "NEW" },
     ],
   },
   {

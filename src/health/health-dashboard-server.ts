@@ -3370,6 +3370,32 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Topical Authority scoring — per-section authority on the run ────
+      // POST /api/topical-authority   Body: { runId, gscSiteUrl? }
+      if (req.method === "POST" && url.pathname === "/api/topical-authority") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const runIdParam = typeof payload?.runId === "string" ? payload.runId : "";
+        if (!runIdParam || !isSafeRunIdSegment(runIdParam)) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "valid runId required" })); return; }
+        try {
+          const raw = await loadRawReportsForRun(outRoot, runIdParam);
+          if (!raw) { res.writeHead(404, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Run not found" })); return; }
+          const { analyzeTopicalAuthority } = await import("./modules/topical-authority.js");
+          const result = await analyzeTopicalAuthority({
+            reports: raw.reports,
+            gscSiteUrl: typeof payload.gscSiteUrl === "string" ? payload.gscSiteUrl.trim() : undefined,
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=120" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── AEO content optimizer — score page AI-citation-readiness ────────
       // POST /api/aeo  Body: { url }
       if (req.method === "POST" && url.pathname === "/api/aeo") {

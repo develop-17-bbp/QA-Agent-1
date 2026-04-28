@@ -788,6 +788,30 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Topical Authority — per-section authority score ─────────────────────
+export interface TopicalAuthorityRow {
+  section: string;
+  label: string;
+  pageCount: number;
+  avgWordCount: number;
+  avgGscImpressions: number | null;
+  avgGscPosition: number | null;
+  externalCitationsPerPage: number;
+  internalLinksPerPage: number;
+  authorityScore: number;
+  tier: "authoritative" | "established" | "emerging" | "thin";
+}
+export interface TopicalAuthorityResponse {
+  hostname: string;
+  totalPages: number;
+  totalSections: number;
+  rows: TopicalAuthorityRow[];
+  generatedAt: string;
+}
+export function fetchTopicalAuthority(runId: string, gscSiteUrl?: string): Promise<TopicalAuthorityResponse> {
+  return postApi<TopicalAuthorityResponse>("/api/topical-authority", { runId, gscSiteUrl });
+}
+
 // ── AEO Content Optimizer — score page AI-citation-readiness ─────────────
 export type AeoSignalKey = "clear-lead" | "structured-qa" | "comparison-table" | "external-citations" | "author-and-date" | "heading-hierarchy" | "structured-data" | "factual-stats";
 export interface AeoSignal { key: AeoSignalKey; label: string; passed: boolean; weight: number; evidence: string }
