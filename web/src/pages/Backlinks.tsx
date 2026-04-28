@@ -6,6 +6,7 @@ import { FilterableTable, type FilterableColumn } from "../components/Filterable
 import { PageShell } from "../components/PageUI";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import { ChartSkeleton, TableSkeleton } from "../components/Skeletons";
 import AskCouncilButton from "../components/AskCouncilButton";
 import CouncilSidecar from "../components/CouncilSidecar";
 
@@ -227,7 +228,12 @@ export default function Backlinks() {
     >
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <LoadingPanel message="Analyzing backlinks…" />}
+      {loading && (
+        <div style={{ marginTop: 14 }}>
+          <ChartSkeleton height={200} />
+          <div style={{ marginTop: 14 }}><TableSkeleton rows={6} cols={4} /></div>
+        </div>
+      )}
       {error && <ErrorBanner error={error} />}
 
       {data && !loading && (

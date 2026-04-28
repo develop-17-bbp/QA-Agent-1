@@ -2,8 +2,9 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
 import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
-import { ErrorBanner, LoadingPanel } from "../components/UI";
+import { ErrorBanner } from "../components/UI";
 import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
+import { ChartSkeleton, TableSkeleton } from "../components/Skeletons";
 import AskCouncilButton from "../components/AskCouncilButton";
 import {
   fetchForecastApi,
@@ -127,7 +128,8 @@ export default function Forecast() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 14 }}>
             <MetricCardSkeleton /><MetricCardSkeleton /><MetricCardSkeleton /><MetricCardSkeleton />
           </div>
-          <LoadingPanel message="Running linear regression per keyword + asking 4 advisors for narrative synthesis…" />
+          <ChartSkeleton height={260} />
+          <div style={{ marginTop: 14 }}><TableSkeleton rows={5} cols={5} /></div>
         </>
       )}
 

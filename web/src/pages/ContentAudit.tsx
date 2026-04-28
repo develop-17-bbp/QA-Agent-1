@@ -10,8 +10,9 @@ import {
 } from "../api";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
+import { HeroSkeleton, TableSkeleton } from "../components/Skeletons";
 
-import { LoadingPanel, ErrorBanner } from "../components/UI";
+import { ErrorBanner } from "../components/UI";
 import CouncilSidecar from "../components/CouncilSidecar";
 const CLASS_COLORS: Record<string, string> = { good: "#38a169", "needs-improvement": "#dd6b20", poor: "#e53e3e" };
 
@@ -177,7 +178,12 @@ export default function ContentAudit() {
         </div>
       )}
 
-      {loading && <LoadingPanel message="Auditing content…" />}
+      {loading && (
+        <div style={{ marginTop: 14 }}>
+          <HeroSkeleton showAccent={false} />
+          <TableSkeleton rows={6} cols={5} />
+        </div>
+      )}
       {error && <ErrorBanner error={error} />}
 
       {data && !loading && (
