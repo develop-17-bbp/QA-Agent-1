@@ -59,6 +59,7 @@ const LinkProspector = lazy(() => import("./pages/LinkProspector"));
 const Cannibalization = lazy(() => import("./pages/Cannibalization"));
 const AiSearchVisibility = lazy(() => import("./pages/AiSearchVisibility"));
 const ApiTokens = lazy(() => import("./pages/ApiTokens"));
+const AeoOptimizer = lazy(() => import("./pages/AeoOptimizer"));
 
 function LazyFallback() {
   return (
@@ -157,6 +158,7 @@ export default function App() {
           <Route path="/cannibalization" element={<Cannibalization />} />
           <Route path="/ai-search-visibility" element={<AiSearchVisibility />} />
           <Route path="/api-tokens" element={<ApiTokens />} />
+          <Route path="/aeo" element={<AeoOptimizer />} />
         </Route>
       </Routes>
     </Suspense>

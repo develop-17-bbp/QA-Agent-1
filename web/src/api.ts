@@ -788,6 +788,24 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── AEO Content Optimizer — score page AI-citation-readiness ─────────────
+export type AeoSignalKey = "clear-lead" | "structured-qa" | "comparison-table" | "external-citations" | "author-and-date" | "heading-hierarchy" | "structured-data" | "factual-stats";
+export interface AeoSignal { key: AeoSignalKey; label: string; passed: boolean; weight: number; evidence: string }
+export interface AeoFix { signal: AeoSignalKey; recommendation: string; effort: "easy" | "medium" | "hard" }
+export interface AeoResponse {
+  url: string;
+  fetchedAt: string;
+  score: number;
+  signals: AeoSignal[];
+  fixes: AeoFix[];
+  fixesError?: string;
+  wordCount: number;
+  lead: string;
+}
+export function fetchAeo(url: string): Promise<AeoResponse> {
+  return postApi<AeoResponse>("/api/aeo", { url });
+}
+
 // ── Local Rank Tracker — Google Map Pack + citation consistency ──────────
 export interface MapPackEntry {
   position: number;

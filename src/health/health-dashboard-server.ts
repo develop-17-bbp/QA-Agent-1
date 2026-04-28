@@ -3370,6 +3370,30 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── AEO content optimizer — score page AI-citation-readiness ────────
+      // POST /api/aeo  Body: { url }
+      if (req.method === "POST" && url.pathname === "/api/aeo") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const target = typeof payload?.url === "string" ? payload.url.trim() : "";
+        if (!target) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "url required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/aeo", { url: target });
+          const { value: result, hit } = await cachedResponse(ck, 60 * 60_000, async () => {
+            const { analyzeAeo } = await import("./modules/aeo-optimizer.js");
+            return await analyzeAeo(target);
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Local Rank Tracker — Map-pack rank + citation consistency ──────
       // POST /api/local-map-pack   Body: { query, operatorName, location?, operatorDomain? }
       if (req.method === "POST" && url.pathname === "/api/local-map-pack") {
