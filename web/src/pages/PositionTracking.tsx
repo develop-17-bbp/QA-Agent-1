@@ -329,10 +329,10 @@ export default function PositionTracking() {
                   <tr key={`${s.domain}::${s.keyword}`} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={{ padding: "7px 10px", fontWeight: 500 }}>{s.domain}</td>
                     <td style={{ padding: "7px 10px" }}>{s.keyword}</td>
-                    <td style={{ padding: "7px 10px", fontWeight: 700, color: s.latest?.position !== null ? (s.latest.position <= 3 ? "#38a169" : s.latest.position <= 10 ? "#dd6b20" : "var(--muted)") : "var(--muted)" }}>
-                      {s.latest?.position !== null ? `#${s.latest.position}` : "—"}
+                    <td style={{ padding: "7px 10px", fontWeight: 700, color: typeof s.latest?.position === "number" ? (s.latest.position <= 3 ? "#38a169" : s.latest.position <= 10 ? "#dd6b20" : "var(--muted)") : "var(--muted)" }}>
+                      {typeof s.latest?.position === "number" ? `#${s.latest.position}` : "—"}
                     </td>
-                    <td style={{ padding: "7px 10px", color: "#38a169" }}>{s.best !== null ? `#${s.best}` : "—"}</td>
+                    <td style={{ padding: "7px 10px", color: "#38a169" }}>{typeof s.best === "number" ? `#${s.best}` : "—"}</td>
                     <td style={{ padding: "7px 10px", fontWeight: 600, color: s.trend === "rising" ? "#38a169" : s.trend === "falling" ? "#e53e3e" : "var(--muted)" }}>
                       {s.trend === "rising" ? "↑ Rising" : s.trend === "falling" ? "↓ Falling" : s.trend === "stable" ? "→ Stable" : "New"}
                     </td>
