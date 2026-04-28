@@ -38,6 +38,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/api-tokens": "real",
   "/aeo": "mixed",
   "/topical-authority": "real",
+  "/link-equity": "real",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
   "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
   "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
@@ -120,6 +121,7 @@ const GROUPS: NavGroup[] = [
       { label: "Referring Domains", path: "/referring-domains" },
       { label: "Backlink Audit", path: "/backlink-audit" },
       { label: "Link Prospector", path: "/link-prospector", badge: "NEW" },
+      { label: "Internal Equity", path: "/link-equity", badge: "NEW" },
     ],
   },
   {

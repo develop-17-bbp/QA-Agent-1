@@ -61,6 +61,7 @@ const AiSearchVisibility = lazy(() => import("./pages/AiSearchVisibility"));
 const ApiTokens = lazy(() => import("./pages/ApiTokens"));
 const AeoOptimizer = lazy(() => import("./pages/AeoOptimizer"));
 const TopicalAuthority = lazy(() => import("./pages/TopicalAuthority"));
+const LinkEquity = lazy(() => import("./pages/LinkEquity"));
 
 function LazyFallback() {
   return (
@@ -161,6 +162,7 @@ export default function App() {
           <Route path="/api-tokens" element={<ApiTokens />} />
           <Route path="/aeo" element={<AeoOptimizer />} />
           <Route path="/topical-authority" element={<TopicalAuthority />} />
+          <Route path="/link-equity" element={<LinkEquity />} />
         </Route>
       </Routes>
     </Suspense>

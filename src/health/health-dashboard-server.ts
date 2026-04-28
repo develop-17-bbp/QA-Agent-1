@@ -3370,6 +3370,32 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Internal Link Equity Flow — PageRank over the crawled graph ─────
+      // POST /api/link-equity   Body: { runId }
+      if (req.method === "POST" && url.pathname === "/api/link-equity") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const runIdParam = typeof payload?.runId === "string" ? payload.runId : "";
+        if (!runIdParam || !isSafeRunIdSegment(runIdParam)) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "valid runId required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/link-equity", { runId: runIdParam });
+          const { value: result, hit } = await cachedResponse(ck, 30 * 60_000, async () => {
+            const raw = await loadRawReportsForRun(outRoot, runIdParam);
+            if (!raw) throw new Error("Run not found");
+            const { analyzeLinkEquity } = await import("./modules/link-equity.js");
+            return await analyzeLinkEquity(raw.reports);
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Topical Authority scoring — per-section authority on the run ────
       // POST /api/topical-authority   Body: { runId, gscSiteUrl? }
       if (req.method === "POST" && url.pathname === "/api/topical-authority") {

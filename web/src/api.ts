@@ -788,6 +788,30 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Internal Link Equity — PageRank over crawled graph ──────────────────
+export interface LinkEquityNode {
+  url: string;
+  pageRank: number;
+  inboundCount: number;
+  outboundCount: number;
+  netEdge: number;
+}
+export interface LinkEquityResponse {
+  hostname: string;
+  pagesAnalyzed: number;
+  pagesSkipped: number;
+  totalEdges: number;
+  nodes: LinkEquityNode[];
+  topAuthority: LinkEquityNode[];
+  orphans: LinkEquityNode[];
+  leaky: LinkEquityNode[];
+  hoarders: LinkEquityNode[];
+  generatedAt: string;
+}
+export function fetchLinkEquity(runId: string): Promise<LinkEquityResponse> {
+  return postApi<LinkEquityResponse>("/api/link-equity", { runId });
+}
+
 // ── Topical Authority — per-section authority score ─────────────────────
 export interface TopicalAuthorityRow {
   section: string;
