@@ -460,6 +460,11 @@ export async function crawlSite(options: {
    *  from orchestrate-health, which defaults it to true unless the env
    *  has QA_AGENT_NO_AGENTIC=1. */
   agentic?: boolean;
+  /** Re-render pages that come back as empty SPA shells using a real
+   *  Chromium browser (Playwright). Closes the "we miss content on
+   *  React/Next/Vue/Angular sites" gap. Off by default — opt in per-run
+   *  or via env QA_AGENT_HEADLESS_FALLBACK=1. */
+  headlessFallback?: boolean;
 }): Promise<CrawlSiteResult> {
   const started = Date.now();
   let base = new URL(options.startUrl);
@@ -604,12 +609,30 @@ export async function crawlSite(options: {
 
   let outstanding = 0;
 
+  // SPA fallback flag — opt-in via option OR env. Resolved once per run.
+  const headlessFallbackEnabled = options.headlessFallback === true || process.env.QA_AGENT_HEADLESS_FALLBACK?.trim() === "1";
+  let spaRenderedCount = 0;
+
   async function processPage(pageUrl: string): Promise<void> {
-    const { status, body, error, durationMs, contentType, bodyBytes, redirected, finalUrl } = await fetchPage(
+    const { status, body: staticBody, error, durationMs, contentType, bodyBytes, redirected, finalUrl } = await fetchPage(
       pageUrl,
       options.requestTimeoutMs,
     );
     const ok = status >= 200 && status < 400;
+    // SPA fallback: when the static fetch returned an empty hydration shell
+    // AND the operator opted in, re-render with Chromium and use that body
+    // for downstream parsing. Failure falls back to the static body silently.
+    let body = staticBody;
+    if (ok && body && headlessFallbackEnabled && /text\/html/i.test(contentType ?? "")) {
+      try {
+        const { renderIfShell } = await import("./spa-render.js");
+        const upgraded = await renderIfShell(pageUrl, body, true);
+        if (upgraded.rendered) {
+          body = upgraded.html;
+          spaRenderedCount++;
+        }
+      } catch { /* fallback below */ }
+    }
     let $: CheerioAPI | null = null;
     let docSignals: Partial<
       Pick<PageFetchRecord, "documentTitle" | "metaDescriptionLength" | "h1Count" | "documentLang" | "canonicalUrl">
@@ -887,6 +910,9 @@ export async function crawlSite(options: {
   }
 
   const durationMs = Date.now() - started;
+  if (headlessFallbackEnabled && spaRenderedCount > 0) {
+    console.log(`[crawl/spa-fallback] ${hostname}: re-rendered ${spaRenderedCount} SPA shell page${spaRenderedCount === 1 ? "" : "s"} via Chromium`);
+  }
   return {
     startUrl: options.startUrl,
     siteId,
@@ -898,5 +924,6 @@ export async function crawlSite(options: {
     linkChecks,
     durationMs,
     agenticMeta,
+    spaRenderedCount: headlessFallbackEnabled ? spaRenderedCount : undefined,
   };
 }

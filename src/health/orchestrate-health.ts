@@ -212,6 +212,9 @@ export async function orchestrateHealthCheck(options: {
         fetchConcurrency: options.fetchConcurrency,
         retainBodies: enrichEnabled, // enrichers re-parse bodies; dropped before persist
         agentic: agenticEnabled,
+        // Phase G: SPA-render fallback. Off by default — opt in per-run via
+        // env QA_AGENT_HEADLESS_FALLBACK=1 when crawling React/Next/Vue/etc.
+        headlessFallback: process.env.QA_AGENT_HEADLESS_FALLBACK?.trim() === "1",
       });
 
       // Self-Improving Crawl Memory — refresh per-domain SiteProfile after

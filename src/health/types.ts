@@ -176,6 +176,9 @@ export interface CrawlSiteResult {
   agenticMeta?: CrawlAgenticMeta;
   /** Discovered internal URLs checked with HEAD/GET (not crawled as full pages). Omitted in older report.json files. */
   linkChecks?: LinkCheckRecord[];
+  /** Count of pages that came back as SPA shells and were re-rendered via
+   *  Chromium (headlessFallback option). Absent when fallback wasn't enabled. */
+  spaRenderedCount?: number;
   /** Set when PageSpeed Insights was run for this crawl. */
   pageSpeedInsightsMeta?: {
     strategies: ("mobile" | "desktop")[];
