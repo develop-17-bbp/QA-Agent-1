@@ -788,6 +788,67 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Disavow generator + Schema preview + Snippet ownership ──────────────
+export interface ToxicLink {
+  domain: string;
+  exampleSourceUrl: string;
+  domainRank: number | null;
+  linksFromThisDomain: number;
+  topAnchor: string;
+  toxicityScore: number;
+  reasons: string[];
+}
+export interface DisavowResponse {
+  target: string;
+  totalLinksScanned: number;
+  toxicLinks: ToxicLink[];
+  disavowFileContent: string;
+  generatedAt: string;
+}
+export function fetchDisavow(domain: string, threshold?: number): Promise<DisavowResponse> {
+  return postApi<DisavowResponse>("/api/disavow", { domain, threshold });
+}
+
+export type RichResultType = "article" | "faq" | "howto" | "recipe" | "product" | "review" | "video" | "event" | "organization" | "breadcrumb" | "local-business" | "none";
+export interface SchemaPreviewItem {
+  schemaType: string;
+  richResult: RichResultType;
+  isValid: boolean;
+  missingRequired: string[];
+  preview: string;
+  raw: Record<string, unknown>;
+}
+export interface SchemaPreviewResponse {
+  url: string;
+  fetchedAt: string;
+  blocksFound: number;
+  items: SchemaPreviewItem[];
+}
+export function fetchSchemaPreview(url: string): Promise<SchemaPreviewResponse> {
+  return postApi<SchemaPreviewResponse>("/api/schema-preview", { url });
+}
+
+export interface SnippetRow {
+  keyword: string;
+  hasSnippet: boolean;
+  ownerDomain: string | null;
+  operatorOwns: boolean;
+  operatorPosition: number;
+  preview: string | null;
+  ownerUrl: string | null;
+}
+export interface SnippetOwnershipResponse {
+  operatorDomain: string;
+  region: string;
+  device: "desktop" | "mobile";
+  rows: SnippetRow[];
+  summary: { totalKeywords: number; snippetsAvailable: number; operatorOwned: number; competitorOwned: number; stealOpportunities: number };
+  generatedAt: string;
+}
+export function fetchSnippetOwnership(input: { operatorDomain: string; keywords: string[]; region?: string; device?: "desktop" | "mobile" }): Promise<SnippetOwnershipResponse> {
+  return postApi<SnippetOwnershipResponse>("/api/snippet-ownership", input);
+}
+
 // ── Internal Link Equity — PageRank over crawled graph ──────────────────
 export interface LinkEquityNode {
   url: string;

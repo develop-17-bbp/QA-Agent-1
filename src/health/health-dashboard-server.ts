@@ -3370,6 +3370,82 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Disavow file generator — toxic-link detector + Google-format export
+      // POST /api/disavow   Body: { domain, threshold? }
+      if (req.method === "POST" && url.pathname === "/api/disavow") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload?.domain === "string" ? payload.domain.trim() : "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/disavow", { domain, threshold: payload.threshold });
+          const { value: result, hit } = await cachedResponse(ck, 30 * 60_000, async () => {
+            const { fetchDfsBacklinksLive } = await import("./providers/dataforseo.js");
+            const { generateDisavow } = await import("./modules/disavow-generator.js");
+            const live = await fetchDfsBacklinksLive(domain, 500);
+            return generateDisavow(domain, live, typeof payload.threshold === "number" ? payload.threshold : undefined);
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+      // ── Schema rich-result preview — POST /api/schema-preview Body: { url }
+      if (req.method === "POST" && url.pathname === "/api/schema-preview") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const target = typeof payload?.url === "string" ? payload.url.trim() : "";
+        if (!target) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "url required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/schema-preview", { url: target });
+          const { value: result, hit } = await cachedResponse(ck, 60 * 60_000, async () => {
+            const { previewSchema } = await import("./modules/schema-preview.js");
+            return await previewSchema(target);
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+      // ── Featured snippet ownership — POST /api/snippet-ownership
+      if (req.method === "POST" && url.pathname === "/api/snippet-ownership") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload?.operatorDomain === "string" ? payload.operatorDomain.trim() : "";
+        const keywords = Array.isArray(payload?.keywords) ? payload.keywords : [];
+        if (!domain || keywords.length === 0) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "operatorDomain + keywords[] required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/snippet-ownership", { domain, keywords, region: payload.region, device: payload.device });
+          const { value: result, hit } = await cachedResponse(ck, 60 * 60_000, async () => {
+            const { trackSnippetOwnership } = await import("./modules/snippet-ownership.js");
+            return await trackSnippetOwnership({
+              operatorDomain: domain,
+              keywords,
+              region: payload.region,
+              device: payload.device,
+            });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Internal Link Equity Flow — PageRank over the crawled graph ─────
       // POST /api/link-equity   Body: { runId }
       if (req.method === "POST" && url.pathname === "/api/link-equity") {
