@@ -76,13 +76,26 @@ function StatusBar() {
   const [ollamaReady, setOllamaReady] = useState<boolean | null>(null);
   const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; configured: boolean } | null>(null);
 
+  // Real-time: re-probe Ollama + Google connection every 30 s.
   useEffect(() => {
-    fetchLlmStats()
-      .then((s: any) => setOllamaReady(!!s.ollama?.available))
-      .catch(() => setOllamaReady(false));
-    fetchGoogleAuthStatus()
-      .then((s) => setGoogleStatus({ connected: s.connected, configured: s.configured }))
-      .catch(() => setGoogleStatus({ connected: false, configured: false }));
+    let cancelled = false;
+    const probe = async () => {
+      try {
+        const s: any = await fetchLlmStats();
+        if (!cancelled) setOllamaReady(!!s.ollama?.available);
+      } catch {
+        if (!cancelled) setOllamaReady(false);
+      }
+      try {
+        const g = await fetchGoogleAuthStatus();
+        if (!cancelled) setGoogleStatus({ connected: g.connected, configured: g.configured });
+      } catch {
+        if (!cancelled) setGoogleStatus({ connected: false, configured: false });
+      }
+    };
+    void probe();
+    const t = setInterval(() => { if (!document.hidden) void probe(); }, 30_000);
+    return () => { cancelled = true; clearInterval(t); };
   }, []);
 
   return (

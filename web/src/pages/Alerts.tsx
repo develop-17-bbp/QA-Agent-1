@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 import { ErrorBanner } from "../components/UI";
 import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
+import { useAutoRefresh, formatAgo } from "../hooks/useAutoRefresh";
 
 interface AlertAdvice {
   synthesis: string;
@@ -81,7 +82,8 @@ export default function Alerts() {
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  // Real-time: poll /api/alerts every 30s. Pauses on hidden tabs.
+  const { lastUpdated, secondsAgo, refreshNow, paused } = useAutoRefresh(load, 30_000, []);
 
   const counts = {
     critical: alerts.filter((a) => a.severity === "critical").length,
@@ -97,9 +99,26 @@ export default function Alerts() {
       purpose="I want to know when a tracked keyword drops 5+ positions overnight, or when a domain loses a chunk of referring domains — without manually checking the dashboard."
       sources={["Position DB history", "Ahrefs WMT CSV", "Background ticker (every 15 min)"]}
       actions={
-        <button onClick={runCheck} disabled={running} className="qa-btn-primary" style={{ padding: "8px 18px", fontWeight: 700 }}>
-          {running ? "Checking…" : "Run check now"}
-        </button>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span
+            title={paused ? "Auto-refresh paused while this tab is hidden" : `Auto-refresh every 30 s. Last fetch ${secondsAgo}s ago.`}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              fontSize: 11, padding: "4px 10px", borderRadius: 999,
+              background: paused ? "#f1f5f9" : "var(--grad-agentic-soft)",
+              color: paused ? "#64748b" : "var(--accent-hover)",
+              border: paused ? "1px solid var(--border)" : "1px solid var(--accent-muted)",
+              fontWeight: 700,
+            }}
+          >
+            <span aria-hidden className={paused ? undefined : "qa-live-dot"} style={{ width: 8, height: 8, borderRadius: "50%", background: paused ? "#94a3b8" : undefined }} />
+            {paused ? "paused" : "live"} · {lastUpdated ? formatAgo(secondsAgo) : "fetching…"}
+          </span>
+          <button onClick={refreshNow} className="qa-btn-default" style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600 }} title="Refresh now">↻</button>
+          <button onClick={runCheck} disabled={running} className="qa-btn-primary" style={{ padding: "8px 18px", fontWeight: 700 }}>
+            {running ? "Checking…" : "Run check now"}
+          </button>
+        </div>
       }
     >
       {error && <ErrorBanner error={error} />}
