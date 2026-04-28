@@ -32,6 +32,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/voice-of-serp": "mixed",
   "/narrative-diff": "mixed",
   "/intent-fingerprint": "mixed",
+  "/link-prospector": "mixed",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
   "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
   "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
@@ -112,6 +113,7 @@ const GROUPS: NavGroup[] = [
       { label: "Backlinks", path: "/backlinks" },
       { label: "Referring Domains", path: "/referring-domains" },
       { label: "Backlink Audit", path: "/backlink-audit" },
+      { label: "Link Prospector", path: "/link-prospector", badge: "NEW" },
     ],
   },
   {

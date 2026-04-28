@@ -788,6 +788,38 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Zero-Budget Link Prospector — SERP-derived outreach drafts ────────────
+export interface OutreachEmail {
+  subject: string;
+  body: string;
+  cta: string;
+}
+export interface LinkProspect {
+  rank: number;
+  domain: string;
+  url: string;
+  title: string;
+  tone?: string;
+  textSample?: string;
+  fetchOk: boolean;
+  fetchError?: string;
+  email?: OutreachEmail;
+  emailError?: string;
+}
+export interface LinkProspectorResponse {
+  targetDomain: string;
+  topicQuery: string;
+  region: string;
+  fetchedAt: string;
+  prospects: LinkProspect[];
+  excluded: string[];
+  draftingError?: string;
+  privacyMode: "local-only";
+}
+export function fetchLinkProspects(input: { targetDomain: string; topicQuery: string; competitorDomains?: string[]; region?: string; topN?: number }): Promise<LinkProspectorResponse> {
+  return postApi<LinkProspectorResponse>("/api/link-prospector", input);
+}
+
 // ── Competitive Intent Fingerprint — SERP-intent shift detection ──────────
 export interface IntentShift {
   domain: string;

@@ -3248,6 +3248,40 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Zero-Budget Link Prospector ─────────────────────────────────────
+      // POST /api/link-prospector
+      // Body: { targetDomain, competitorDomains?, topicQuery, region?, topN? }
+      // Returns LinkProspectorResult — SERP-derived prospects + LLM-drafted
+      // personalized outreach emails. 15-min cache.
+      if (req.method === "POST" && url.pathname === "/api/link-prospector") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { targetDomain?: string; competitorDomains?: string[]; topicQuery?: string; region?: string; topN?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const targetDomain = typeof payload.targetDomain === "string" ? payload.targetDomain.trim() : "";
+        const topicQuery = typeof payload.topicQuery === "string" ? payload.topicQuery.trim() : "";
+        if (!targetDomain || !topicQuery) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "targetDomain + topicQuery required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/link-prospector", { targetDomain, topicQuery, region: payload.region, topN: payload.topN, competitorDomains: payload.competitorDomains });
+          const { value: result, hit } = await cachedResponse(ck, 15 * 60_000, async () => {
+            const { findLinkProspects } = await import("./modules/link-prospector.js");
+            return await findLinkProspects({
+              targetDomain,
+              topicQuery,
+              competitorDomains: Array.isArray(payload.competitorDomains) ? payload.competitorDomains.filter((c) => typeof c === "string") : undefined,
+              region: payload.region,
+              topN: typeof payload.topN === "number" ? payload.topN : undefined,
+            });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Competitive Intent Fingerprinting ────────────────────────────────
       // POST /api/intent-shifts
       // Body: { domain: string, minDistance?: number, windowDays?: number, includeLlm?: boolean }

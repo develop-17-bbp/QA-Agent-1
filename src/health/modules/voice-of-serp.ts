@@ -124,7 +124,7 @@ async function fetchHtml(url: string): Promise<{ ok: true; html: string } | { ok
 /** Cheerio-based article extractor — strips nav/footer/script/aside,
  *  prefers <main>/<article>, falls back to longest <div> text cluster.
  *  Returns trimmed plain text + structural signals. */
-function extractArticle(html: string): { text: string; signals: SerpPageSummary["signals"]; wordCount: number } {
+export function extractArticle(html: string): { text: string; signals: SerpPageSummary["signals"]; wordCount: number } {
   const $ = load(html);
   // Strip noise once.
   $("script, style, noscript, nav, footer, aside, header, form, iframe").remove();
