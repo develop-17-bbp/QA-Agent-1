@@ -14,6 +14,7 @@ import {
 import { useRegion } from "../components/RegionPicker";
 import { ErrorBanner } from "../components/UI";
 import AskCouncilButton from "../components/AskCouncilButton";
+import { PageHero } from "../components/PageHero";
 import CouncilSidecar from "../components/CouncilSidecar";
 
 function rankLabel(n: number | null | undefined): string {
@@ -131,12 +132,14 @@ export default function CompetitorRankTracker() {
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="qa-page-title">Competitor Rank Tracker</h1>
-        <p className="qa-page-desc" style={{ marginBottom: 8 }}>
-          Track any competitor's ranking on any keyword using DuckDuckGo + Brave Search (both free).
-          When Brave is configured (<code>BRAVE_SEARCH_API_KEY</code>), we cross-check the two and
-          flag discrepancies &gt; 10 positions.
-        </p>
+        <PageHero
+          icon="bar-chart"
+          category="competitive"
+          eyebrow="Competitor Rank Tracker"
+          title="Track any competitor on any keyword"
+          subtitle="DuckDuckGo + Brave Search (both free). When Brave is configured, we cross-check the two and flag discrepancies > 10 positions."
+          accent
+        />
         <div className="qa-panel" style={{ padding: 12, marginBottom: 18, background: "#fef3c7", borderColor: "#d97706", fontSize: 12, color: "#92400e" }}>
           Honest framing: DDG + Brave ranks correlate ~0.7 with Google's SERP. Use for <strong>trend and delta</strong>, not absolute "rank on Google".
         </div>

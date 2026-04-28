@@ -6,6 +6,7 @@ import { fetchBacklinkAudit } from "../api";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
 import CouncilSidecar from "../components/CouncilSidecar";
+import { PageHero } from "../components/PageHero";
 const HEALTH_COLORS: Record<string, string> = { broken: "#e53e3e", "server-error": "#9b2c2c", "client-error": "#dd6b20", redirect: "#d69e2e" };
 
 export default function BacklinkAudit() {
@@ -25,8 +26,14 @@ export default function BacklinkAudit() {
 
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
-      <h1 className="qa-page-title">Backlink Audit</h1>
-      <p className="qa-page-desc">Audit your link profile health and identify toxic or broken links.</p>
+      <PageHero
+        icon="link"
+        category="links"
+        eyebrow="Backlink Audit"
+        title="Audit link health"
+        subtitle="Audit your link profile health and identify toxic or broken links."
+        accent
+      />
       <RunSelector value={runId} onChange={load} label="Select run" />
 
       {loading && <LoadingPanel message="Auditing backlinks…" />}

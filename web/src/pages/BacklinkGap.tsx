@@ -4,6 +4,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchBacklinkGap } from "../api";
 
 import { LoadingPanel } from "../components/UI";
+import { PageHero } from "../components/PageHero";
 type SortField = "url" | "count";
 type SortDir = "asc" | "desc";
 
@@ -135,11 +136,14 @@ export default function BacklinkGap() {
       animate={{ opacity: 1 }}
       style={{ padding: 32 }}
     >
-      <h1 className="qa-page-title">Backlink Gap</h1>
-      <p className="qa-page-desc">
-        Compare link profiles between two runs to discover link-building
-        opportunities.
-      </p>
+      <PageHero
+        icon="link"
+        category="links"
+        eyebrow="Backlink Gap"
+        title="Find link-building targets"
+        subtitle="Compare link profiles between two runs to discover link-building opportunities."
+        accent
+      />
 
       {/* Run selectors */}
       <div

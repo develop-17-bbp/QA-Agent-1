@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
 import { fetchKeywordGap } from "../api";
+import { PageHero } from "../components/PageHero";
 
 type SortField = "keyword" | "score";
 type SortDir = "asc" | "desc";
@@ -108,11 +109,14 @@ export default function KeywordGap() {
       animate={{ opacity: 1 }}
       style={{ padding: 32 }}
     >
-      <h1 className="qa-page-title">Keyword Gap</h1>
-      <p className="qa-page-desc" style={{ marginBottom: 16 }}>
-        Compare title-derived keywords between two runs to find content gaps and
-        opportunities.
-      </p>
+      <PageHero
+        icon="target"
+        category="competitive"
+        eyebrow="Keyword Gap"
+        title="Find content gaps"
+        subtitle="Compare title-derived keywords between two runs to find content gaps and opportunities."
+        accent
+      />
 
       {/* Run selectors */}
       <div

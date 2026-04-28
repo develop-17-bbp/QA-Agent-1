@@ -4,6 +4,7 @@ import RunSelector from "../components/RunSelector";
 import { fetchBrandMonitoring, fetchBrandMentionsAggregated, type BrandMentionRow, type BrandMentionsBundle } from "../api";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
+import { PageHero } from "../components/PageHero";
 
 const RSS_SOURCE_COLORS: Record<string, string> = {
   "google-news": "#4285f4",
@@ -99,13 +100,14 @@ export default function BrandMonitoring() {
 
   return (
     <motion.div className="qa-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 32 }}>
-      <h1 className="qa-page-title">Brand Monitoring</h1>
-      <p className="qa-page-desc">
-        Mentions come from <strong>real sources only</strong>: your run's crawl pages, DuckDuckGo SERP,
-        Common Crawl CDX index, and URLScan. No sentiment scores, visibility percentages, or "brand
-        strength" metrics — those were LLM fabrications. The LLM is restricted to a 2-sentence qualitative
-        summary of the real findings.
-      </p>
+      <PageHero
+        icon="eye"
+        category="monitoring"
+        eyebrow="Brand Monitoring"
+        title="Real-source mentions only"
+        subtitle="Mentions come from real sources only: your run's crawl pages, DuckDuckGo SERP, Common Crawl CDX index, and URLScan. No sentiment scores, visibility percentages, or 'brand strength' metrics — those were LLM fabrications. The LLM is restricted to a 2-sentence qualitative summary of the real findings."
+        accent
+      />
 
       {/* ── Brand radar — free RSS / API aggregator (no runId needed) ─────────── */}
       <div className="qa-panel" style={{ padding: 16, marginBottom: 16, border: "1px solid var(--accent-muted)", background: "var(--accent-light, #eff6ff)" }}>

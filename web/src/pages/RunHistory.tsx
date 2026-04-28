@@ -5,6 +5,7 @@ import JobCard from "../components/JobCard";
 import type { HealthSsePayload } from "../types/healthSse";
 
 import { ErrorBanner } from "../components/UI";
+import { PageHero } from "../components/PageHero";
 export default function RunHistory() {
   const [days, setDays] = useState<{ date: string; runs: HealthRunMeta[] }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,13 +45,14 @@ export default function RunHistory() {
 
   return (
     <div>
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <h1 className="qa-page-title">Run history</h1>
-        <p className="qa-page-desc">
-          Every completed run lists start/end times, wall duration, and per-site stats. Expand a row for report links, PDF downloads,
-          and the full workspace.
-        </p>
-      </motion.div>
+      <PageHero
+        icon="history"
+        category="workspace"
+        eyebrow="Run history"
+        title={`${totalRuns} run${totalRuns === 1 ? "" : "s"}`}
+        subtitle="Every completed run lists start/end times, wall duration, and per-site stats. Expand a row for report links, PDF downloads, and the full workspace."
+        accent
+      />
 
       {err ? <ErrorBanner error={err} /> : null}
 

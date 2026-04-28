@@ -6,6 +6,7 @@ import { useGoogleOverlay } from "../lib/google-overlay";
 import { useRegion } from "../components/RegionPicker";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
+import { PageHero } from "../components/PageHero";
 import CouncilSidecar from "../components/CouncilSidecar";
 import { ProvenanceBadge } from "../components/ProvenanceDot";
 
@@ -156,12 +157,14 @@ export default function KeywordOverview() {
 
   return (
     <div>
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 24 }}>
-        <h1 className="qa-page-title">Keyword Overview</h1>
-        <p className="qa-page-desc">
-          Real keyword data from Google Trends, Google Suggest, Wikipedia, and DuckDuckGo SERP — no paid APIs.
-        </p>
-      </motion.div>
+      <PageHero
+        icon="search"
+        category="keywords"
+        eyebrow="Keyword Overview"
+        title="Real keyword data, no paid APIs"
+        subtitle="Real keyword data from Google Trends, Google Suggest, Wikipedia, and DuckDuckGo SERP — no paid APIs."
+        accent
+      />
 
       {/* Search Bar */}
       <div className="qa-panel" style={{ padding: 16, marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>

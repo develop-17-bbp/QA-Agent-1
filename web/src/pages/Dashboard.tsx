@@ -7,6 +7,7 @@ import OptionWithTooltip from "../components/OptionWithTooltip";
 import RunProgressBanner, { type RunBannerState } from "../components/RunProgressBanner";
 import { DataSourceLegend } from "../components/AppLayout";
 import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
+import { PageHero } from "../components/PageHero";
 
 export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
   const [urlsText, setUrlsText] = useState(initialUrls ?? "");
@@ -137,45 +138,24 @@ export default function Dashboard({ initialUrls }: { initialUrls?: string }) {
 
   return (
     <div>
-      {/* Hero header */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        style={{ marginBottom: 28 }}
-      >
-        <div style={{
-          background: "linear-gradient(135deg, var(--accent-light) 0%, #f0f9ff 100%)",
-          border: "1px solid var(--accent-muted)",
-          borderRadius: "var(--radius-lg)",
-          padding: "28px 32px",
-          marginBottom: 4,
-        }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--accent)", background: "var(--accent-light)", border: "1px solid var(--accent-muted)", borderRadius: 99, padding: "2px 10px" }}>
-                  SEO Intelligence
-                </span>
-              </div>
-              <h1 style={{ fontSize: "1.75rem", fontWeight: 800, letterSpacing: "-0.03em", margin: "0 0 8px", color: "var(--text)" }}>
-                Start a New Crawl
-              </h1>
-              <p style={{ color: "var(--muted)", fontSize: 14, margin: 0, maxWidth: 540, lineHeight: 1.6 }}>
-                Enter any website URL to crawl, audit, and analyze. Data flows automatically through site audit, keyword research, backlinks, and SEO checks.
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-              <Link to="/url-report" className="qa-btn-default" style={{ gap: 6 }}>
-                ⚡ URL Report
-              </Link>
-              <Link to="/history" className="qa-btn-default" style={{ gap: 6 }}>
-                📋 Run History
-              </Link>
-            </div>
-          </div>
-        </div>
-      </motion.div>
+      <PageHero
+        icon="home"
+        category="workspace"
+        eyebrow="SEO Intelligence"
+        title="Start a New Crawl"
+        subtitle="Enter any website URL to crawl, audit, and analyze. Data flows automatically through site audit, keyword research, backlinks, and SEO checks."
+        actions={
+          <>
+            <Link to="/url-report" className="qa-btn-default" style={{ gap: 6 }}>
+              ⚡ URL Report
+            </Link>
+            <Link to="/history" className="qa-btn-default" style={{ gap: 6 }}>
+              📋 Run History
+            </Link>
+          </>
+        }
+        accent
+      />
 
       {/* ── Data-source legend (always visible so SEO teammates know what the nav dots mean) ──────── */}
       <motion.div
