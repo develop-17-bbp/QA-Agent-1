@@ -49,12 +49,14 @@ export async function planCrawl(
   startUrl: string,
   discoveredUrls: string[],
   pageData: { url: string; title: string; status: number; contentType?: string }[],
+  memoryHint?: string,
 ): Promise<CrawlPlan> {
   const sampleUrls = discoveredUrls.slice(0, 50).join("\n");
   const pageSummary = pageData.slice(0, 20).map(p =>
     `${p.url} | ${p.title} | ${p.status} | ${p.contentType ?? "html"}`,
   ).join("\n");
 
+  const memoryBlock = memoryHint ? `\nPRIOR MEMORY (use to bias the strategy — but reflect new evidence too):\n${memoryHint}\n` : "";
   const prompt = `You are an expert SEO crawler planner. Analyze this website and create an optimal crawl strategy.
 
 Start URL: ${startUrl}
@@ -63,7 +65,7 @@ ${sampleUrls}
 
 Pages crawled so far:
 ${pageSummary}
-
+${memoryBlock}
 Return a JSON crawl plan with these fields:
 {
   "strategy": "breadth-first" | "depth-first" | "priority-guided" | "sitemap-first",

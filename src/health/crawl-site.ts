@@ -524,7 +524,11 @@ export async function crawlSite(options: {
       const { checkOllamaAvailable } = await import("./agentic/llm-router.js");
       if (await checkOllamaAvailable()) {
         const { planCrawl, prioritizeUrls } = await import("./agentic/crawl-planner.js");
-        const plan = await planCrawl(base.href, queue, []);
+        // Self-Improving Crawl Memory — load prior profile to bias the planner.
+        const { loadSiteProfile, condenseProfileForPlanner } = await import("./modules/site-memory.js");
+        const priorProfile = await loadSiteProfile(hostname);
+        const memoryHint = priorProfile ? condenseProfileForPlanner(priorProfile) : undefined;
+        const plan = await planCrawl(base.href, queue, [], memoryHint);
         // Apply extra skip patterns from the planner (additive to default SKIP_PATTERNS).
         const extraSkipRegexes = (plan.skipPatterns ?? [])
           .filter((p) => typeof p === "string" && p.trim())
@@ -564,8 +568,16 @@ export async function crawlSite(options: {
           plannerMs: Date.now() - plannerStart,
           reorderedCount: reordered,
           extraSkipPatterns: plan.skipPatterns ?? [],
+          memoryUsed: !!priorProfile,
+          memorySnapshot: priorProfile ? {
+            observedRuns: priorProfile.observedRuns,
+            cms: priorProfile.cms,
+            priorityPatterns: priorProfile.priorityPatterns.slice(0, 6),
+            slowSections: priorProfile.slowSections.slice(0, 4),
+            topClusters: priorProfile.contentClusters.slice(0, 5).map((c) => ({ path: c.path, label: c.label, pageCount: c.pageCount })),
+          } : undefined,
         };
-        console.log(`[crawl/agentic] ${hostname}: strategy=${plan.strategy} reordered=${reordered} sections=${plan.prioritySections.join(",") || "(none)"} in ${agenticMeta.plannerMs}ms`);
+        console.log(`[crawl/agentic] ${hostname}: strategy=${plan.strategy} reordered=${reordered} sections=${plan.prioritySections.join(",") || "(none)"} memoryUsed=${!!priorProfile} in ${agenticMeta.plannerMs}ms`);
       }
     } catch (e) {
       console.log(`[crawl/agentic] ${hostname}: planner failed, falling back to BFS — ${e instanceof Error ? e.message : String(e)}`);

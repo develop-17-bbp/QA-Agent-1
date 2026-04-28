@@ -214,6 +214,19 @@ export async function orchestrateHealthCheck(options: {
         agentic: agenticEnabled,
       });
 
+      // Self-Improving Crawl Memory — refresh per-domain SiteProfile after
+      // each crawl. Future crawls of this hostname will read it back and
+      // bias the planner. Errors are non-fatal — crawl results are already
+      // saved by this point.
+      if (agenticEnabled && crawl?.hostname) {
+        try {
+          const { loadSiteProfile, saveSiteProfile, updateSiteProfile } = await import("./modules/site-memory.js");
+          const prevProfile = await loadSiteProfile(crawl.hostname);
+          const nextProfile = updateSiteProfile(crawl, prevProfile);
+          await saveSiteProfile(nextProfile);
+        } catch { /* non-fatal */ }
+      }
+
       // ── Post-crawl steps run IN PARALLEL for speed ──────────────
       const siteDirEarly = path.join(runDir, outputDirName);
       const parallelTasks: Promise<void>[] = [];

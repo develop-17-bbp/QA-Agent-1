@@ -178,6 +178,23 @@ export default function RunDetail() {
             </div>
           )}
 
+          {/* Phase D — quick link to compare this run to its predecessor. */}
+          {run.runId && (
+            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 11.5 }}>
+              <a
+                href={`/narrative-diff?b=${encodeURIComponent(run.runId)}`}
+                className="qa-btn-default"
+                style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+                title="Open the Narrative Diff page with this run pre-filled as the newer side"
+              >
+                ↔ Compare to a previous run
+              </a>
+              <span style={{ color: "var(--muted)" }}>
+                Get a plain-English narration of what changed since any prior run.
+              </span>
+            </div>
+          )}
+
           <SiteStatusEditor run={run} onSaved={() => setReportPreviewNonce((n) => n + 1)} />
 
           <motion.section

@@ -149,6 +149,19 @@ export interface CrawlAgenticMeta {
   reorderedCount: number;
   /** Skipped-by-LLM patterns (beyond the default skip list). */
   extraSkipPatterns: string[];
+  /** True when this run's planner was biased by a prior SiteProfile loaded
+   *  from data/site-profiles/<hostname>.json (Self-Improving Crawl Memory). */
+  memoryUsed?: boolean;
+  /** Snapshot of the prior profile that biased this plan, for audit + UI.
+   *  Absent on first crawl of a domain. Stored for transparency only —
+   *  the live profile on disk is always authoritative. */
+  memorySnapshot?: {
+    observedRuns: number;
+    cms?: string;
+    priorityPatterns: string[];
+    slowSections: string[];
+    topClusters: { path: string; label: string; pageCount: number }[];
+  };
 }
 
 export interface CrawlSiteResult {
