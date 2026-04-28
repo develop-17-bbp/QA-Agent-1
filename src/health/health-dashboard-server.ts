@@ -161,6 +161,41 @@ function isAllowedReportHtmlRel(rel: string): boolean {
   return true;
 }
 
+// ── OpenAPI doc generator for /api/v1/* (Tier-S #3) ─────────────────────
+function buildOpenApiDoc(port: number): unknown {
+  return {
+    openapi: "3.1.0",
+    info: {
+      title: "QA-Agent Public API",
+      version: "1.0.0",
+      description: "Read-only API for external tools (Looker Studio, Zapier, agency dashboards). Auth: X-API-Key header, token format `qa_<hex>`. Rate limit: 60 req/min per token.",
+    },
+    servers: [{ url: `http://127.0.0.1:${port}/api/v1` }],
+    components: {
+      securitySchemes: {
+        ApiKeyAuth: { type: "apiKey", in: "header", name: "X-API-Key" },
+      },
+    },
+    security: [{ ApiKeyAuth: [] }],
+    paths: {
+      "/forecast":            { post: { summary: "30-day rank forecast for a tracked domain" } },
+      "/voice-of-serp":       { post: { summary: "Top-10 SERP narrative synthesis for a keyword" } },
+      "/bulk-keywords":       { post: { summary: "Bulk volume + KD + intent for up to 1000 keywords" } },
+      "/narrative-diff":      { post: { summary: "Run-to-run plain-English diff between two run IDs" } },
+      "/intent-shifts":       { post: { summary: "SERP intent fingerprint shifts for a domain" } },
+      "/cannibalization":     { post: { summary: "Pages competing for the same query (GSC-driven)" } },
+      "/serp-live":           { post: { summary: "Live Google SERP via DataForSEO (device-targeted)" } },
+      "/backlinks-live":      { post: { summary: "Per-link backlink rows with anchor + DR + first-seen" } },
+      "/ai-search-visibility":{ post: { summary: "Citation tracking across ChatGPT/Perplexity/Gemini/AI Overviews" } },
+      "/local-map-pack":      { post: { summary: "Google Map Pack 3-pack rank for a query + location" } },
+      "/citation-audit":      { post: { summary: "NAP consistency across 6 directory sites" } },
+      "/alerts":              { get:  { summary: "Recent alerts (last 100)" } },
+      "/runs":                { get:  { summary: "Crawl-run history list" } },
+      "/llm-stats":           { get:  { summary: "Ollama availability + telemetry counters" } },
+    },
+  };
+}
+
 async function readBody(req: http.IncomingMessage, maxBytes: number): Promise<string> {
   return await new Promise((resolve, reject) => {
     let total = 0;
@@ -1185,6 +1220,93 @@ export async function runHealthDashboard(options: {
   const server = http.createServer((req, res) => {
     void (async () => {
       const url = new URL(req.url ?? "/", `http://127.0.0.1:${options.port}`);
+
+      // ── Public REST API wrapper (Tier-S #3) ─────────────────────────────
+      // Routes under /api/v1/* require a valid API key (X-API-Key header or
+      // ?api_key=… query). Token store: data/api-tokens.json. Rate limit:
+      // 60 req/min per token. The dashboard's own /api/* routes remain
+      // open (intended for localhost-only — the operator's browser).
+      if (url.pathname.startsWith("/api/v1/")) {
+        try {
+          const { authenticateApiRequest } = await import("./modules/api-tokens.js");
+          const headerKey = req.headers["x-api-key"];
+          const headerVal = Array.isArray(headerKey) ? headerKey[0] : headerKey;
+          const auth = await authenticateApiRequest(headerVal ?? null, url.searchParams.get("api_key"));
+          if (!auth.ok) {
+            res.writeHead(auth.status, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ error: auth.error }));
+            return;
+          }
+          // Strip the /v1 prefix so the existing handlers below match.
+          // We rewrite req.url for downstream handlers.
+          const stripped = url.pathname.replace(/^\/api\/v1/, "/api");
+          (req as any).url = stripped + (url.search || "");
+          // Continue into the normal handler chain below — the rewritten URL
+          // is what the rest of the function reads.
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "auth middleware failed" }));
+          return;
+        }
+        // Re-parse url with the rewritten path.
+        // (The handlers below read `url`, so update it.)
+      }
+      const url2 = new URL(req.url ?? "/", `http://127.0.0.1:${options.port}`);
+      if (url2.pathname !== url.pathname) {
+        // re-bind url so subsequent handlers see the rewritten path
+        // (TypeScript-friendly — we just reassign the local `url`).
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        Object.assign(url, url2);
+      }
+
+      // ── Internal token-CRUD endpoints (NOT under /api/v1, NOT auth-gated;
+      //    they're for the local dashboard operator). ─────────────────────
+      if (url.pathname === "/api/tokens") {
+        if (req.method === "GET") {
+          const { listTokens } = await import("./modules/api-tokens.js");
+          const tokens = await listTokens();
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ tokens }));
+          return;
+        }
+        if (req.method === "POST") {
+          let body: string;
+          try { body = await readBody(req, 2_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+          let payload: any;
+          try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+          if (!payload?.label) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "label required" })); return; }
+          try {
+            const { createToken } = await import("./modules/api-tokens.js");
+            const created = await createToken(payload.label, Array.isArray(payload.scopes) ? payload.scopes : ["read"]);
+            res.writeHead(201, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify(created));
+          } catch (e) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+          }
+          return;
+        }
+      }
+      if (req.method === "DELETE" && url.pathname.startsWith("/api/tokens/")) {
+        const id = url.pathname.split("/")[3] ?? "";
+        if (!id) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "token id required" })); return; }
+        try {
+          const { deleteToken } = await import("./modules/api-tokens.js");
+          const ok = await deleteToken(id);
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ deleted: ok }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+        return;
+      }
+      // OpenAPI doc — public, no auth.
+      if (req.method === "GET" && url.pathname === "/api/v1/openapi.json") {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify(buildOpenApiDoc(options.port)));
+        return;
+      }
 
       if (req.method === "GET" && !url.pathname.startsWith("/api") && !url.pathname.startsWith("/reports/")) {
         const dist = webDistRoot();

@@ -58,6 +58,7 @@ const IntentFingerprint = lazy(() => import("./pages/IntentFingerprint"));
 const LinkProspector = lazy(() => import("./pages/LinkProspector"));
 const Cannibalization = lazy(() => import("./pages/Cannibalization"));
 const AiSearchVisibility = lazy(() => import("./pages/AiSearchVisibility"));
+const ApiTokens = lazy(() => import("./pages/ApiTokens"));
 
 function LazyFallback() {
   return (
@@ -155,6 +156,7 @@ export default function App() {
           <Route path="/link-prospector" element={<LinkProspector />} />
           <Route path="/cannibalization" element={<Cannibalization />} />
           <Route path="/ai-search-visibility" element={<AiSearchVisibility />} />
+          <Route path="/api-tokens" element={<ApiTokens />} />
         </Route>
       </Routes>
     </Suspense>

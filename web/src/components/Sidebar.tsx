@@ -35,6 +35,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/link-prospector": "mixed",
   "/cannibalization": "real",
   "/ai-search-visibility": "real",
+  "/api-tokens": "real",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
   "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
   "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
@@ -153,6 +154,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Integrations Hub", path: "/integrations" },
       { label: "Google Connections", path: "/google-connections" },
+      { label: "API Tokens", path: "/api-tokens", badge: "NEW" },
     ],
   },
 ];
