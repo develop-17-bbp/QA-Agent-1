@@ -47,6 +47,15 @@ type LiveResult = {
   error?: string;
 };
 
+type DeviceCompareRow = {
+  keyword: string;
+  desktop: number | null;
+  mobile: number | null;
+  delta: number | null;
+  desktopUrl: string | null;
+  mobileUrl: string | null;
+};
+
 type HistoryPoint = { at: string; position: number | null };
 type HistorySeries = { key: string; label: string; points: HistoryPoint[] };
 
@@ -98,6 +107,45 @@ export default function PositionTracking() {
   const [startpageRegion, setStartpageRegion] = useState("US");
   const [googleLiveDevice, setGoogleLiveDevice] = useState<"desktop" | "mobile">("desktop");
   const [googleLiveLocation, setGoogleLiveLocation] = useState("United States");
+  const [deviceCompareResults, setDeviceCompareResults] = useState<DeviceCompareRow[] | null>(null);
+  const [deviceCompareLoading, setDeviceCompareLoading] = useState(false);
+  const [deviceCompareError, setDeviceCompareError] = useState("");
+
+  const runDeviceCompare = async () => {
+    const dom = liveDomain.trim();
+    const kws = liveKeywords.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+    if (!dom || kws.length === 0) { setDeviceCompareError("enter domain + keywords"); return; }
+    setDeviceCompareLoading(true); setDeviceCompareError(""); setDeviceCompareResults(null);
+    const cleanDomain = dom.toLowerCase().replace(/^www\./, "");
+    const findRank = (items: { rank: number; url: string }[]): { rank: number | null; url: string | null } => {
+      const m = items.find((r) => {
+        try {
+          const h = new URL(r.url).hostname.toLowerCase().replace(/^www\./, "");
+          return strictHost ? h === cleanDomain : (h === cleanDomain || h.endsWith("." + cleanDomain));
+        } catch { return false; }
+      });
+      return { rank: m?.rank ?? null, url: m?.url ?? null };
+    };
+    try {
+      const rows: DeviceCompareRow[] = await Promise.all(
+        kws.map(async (kw) => {
+          const [desktop, mobile] = await Promise.all([
+            fetchLiveSerp(kw, { device: "desktop", locationName: googleLiveLocation, depth: 30 }).catch(() => null),
+            fetchLiveSerp(kw, { device: "mobile", locationName: googleLiveLocation, depth: 30 }).catch(() => null),
+          ]);
+          const d = desktop ? findRank(desktop.items) : { rank: null, url: null };
+          const m = mobile ? findRank(mobile.items) : { rank: null, url: null };
+          const delta = d.rank != null && m.rank != null ? m.rank - d.rank : null;
+          return { keyword: kw, desktop: d.rank, mobile: m.rank, delta, desktopUrl: d.url, mobileUrl: m.url };
+        }),
+      );
+      setDeviceCompareResults(rows);
+    } catch (e: any) {
+      setDeviceCompareError(e?.message ?? String(e));
+    } finally {
+      setDeviceCompareLoading(false);
+    }
+  };
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState("");
   const [liveResults, setLiveResults] = useState<LiveResult[] | null>(null);
@@ -553,9 +601,66 @@ export default function PositionTracking() {
             />
           )}
           {sampledAt && <span style={{ fontSize: 11, color: "var(--muted)" }}>Last sampled: {sampledAt.slice(0, 19).replace("T", " ")} UTC</span>}
+          {/* Phase G: device-comparison shortcut. Always visible — uses Google
+              live SERP via DataForSEO BYOK, runs desktop + mobile in parallel. */}
+          <button
+            onClick={runDeviceCompare}
+            disabled={deviceCompareLoading || !liveDomain.trim() || !liveKeywords.trim()}
+            className="qa-btn-default"
+            style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600 }}
+            title="Run desktop + mobile Google SERP in parallel via DataForSEO and show the rank delta per keyword"
+          >
+            {deviceCompareLoading ? "Comparing…" : "↔ Compare desktop vs mobile"}
+          </button>
         </div>
 
         {liveError && <ErrorBanner error={liveError} />}
+        {deviceCompareError && <ErrorBanner error={deviceCompareError} />}
+
+        {deviceCompareResults && deviceCompareResults.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div className="qa-panel" style={{ padding: 12 }}>
+              <div className="qa-panel-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                Desktop vs Mobile rank
+                <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "var(--accent-light)", color: "var(--accent-hover)", fontWeight: 700, letterSpacing: 0.4, border: "1px solid var(--accent-muted)" }}>
+                  DFS BYOK · {googleLiveLocation}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, marginBottom: 8 }}>
+                Positive delta = mobile rank is worse (e.g. desktop #3, mobile #7 → delta +4). Mobile-vs-desktop divergence ≥ 5 is a UX or speed-on-mobile signal.
+              </div>
+              <table className="qa-table" style={{ width: "100%", fontSize: 12 }}>
+                <thead><tr><th>Keyword</th><th>Desktop</th><th>Mobile</th><th>Δ</th><th>Desktop URL</th><th>Mobile URL</th></tr></thead>
+                <tbody>
+                  {deviceCompareResults.map((r) => {
+                    const big = r.delta != null && Math.abs(r.delta) >= 5;
+                    return (
+                      <tr key={r.keyword}>
+                        <td style={{ fontWeight: 500 }}>{r.keyword}</td>
+                        <td style={{ fontWeight: 700, color: r.desktop != null && r.desktop <= 3 ? "#16a34a" : r.desktop != null && r.desktop <= 10 ? "#d97706" : "var(--muted)" }}>
+                          {r.desktop != null ? `#${r.desktop}` : "—"}
+                        </td>
+                        <td style={{ fontWeight: 700, color: r.mobile != null && r.mobile <= 3 ? "#16a34a" : r.mobile != null && r.mobile <= 10 ? "#d97706" : "var(--muted)" }}>
+                          {r.mobile != null ? `#${r.mobile}` : "—"}
+                        </td>
+                        <td style={{ fontWeight: 700, color: r.delta == null ? "var(--muted)" : r.delta > 0 ? "#dc2626" : r.delta < 0 ? "#16a34a" : "var(--muted)", background: big ? "rgba(220,38,38,0.08)" : undefined }}>
+                          {r.delta == null ? "—" : r.delta === 0 ? "0" : r.delta > 0 ? `+${r.delta}` : `${r.delta}`}
+                          {big && <span style={{ fontSize: 9.5, marginLeft: 4 }}>⚠</span>}
+                        </td>
+                        <td style={{ fontSize: 11, color: "var(--muted)" }}>
+                          {r.desktopUrl ? <a href={r.desktopUrl} target="_blank" rel="noreferrer" style={{ wordBreak: "break-all", color: "inherit" }}>{r.desktopUrl}</a> : "—"}
+                        </td>
+                        <td style={{ fontSize: 11, color: "var(--muted)" }}>
+                          {r.mobileUrl ? <a href={r.mobileUrl} target="_blank" rel="noreferrer" style={{ wordBreak: "break-all", color: "inherit" }}>{r.mobileUrl}</a> : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {liveResults && liveResults.length > 0 && (
           <div style={{ marginTop: 14 }}>
