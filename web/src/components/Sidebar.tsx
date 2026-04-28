@@ -33,6 +33,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/narrative-diff": "mixed",
   "/intent-fingerprint": "mixed",
   "/link-prospector": "mixed",
+  "/cannibalization": "real",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
   "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
   "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
@@ -124,6 +125,7 @@ const GROUPS: NavGroup[] = [
       { label: "Content Template", path: "/seo-content-template" },
       { label: "Content Audit", path: "/content-audit" },
       { label: "Post Tracking", path: "/post-tracking" },
+      { label: "Cannibalization", path: "/cannibalization", badge: "NEW" },
     ],
   },
   {

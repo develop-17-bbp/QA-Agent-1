@@ -56,6 +56,7 @@ const VoiceOfSerp = lazy(() => import("./pages/VoiceOfSerp"));
 const NarrativeDiff = lazy(() => import("./pages/NarrativeDiff"));
 const IntentFingerprint = lazy(() => import("./pages/IntentFingerprint"));
 const LinkProspector = lazy(() => import("./pages/LinkProspector"));
+const Cannibalization = lazy(() => import("./pages/Cannibalization"));
 
 function LazyFallback() {
   return (
@@ -151,6 +152,7 @@ export default function App() {
           <Route path="/narrative-diff" element={<NarrativeDiff />} />
           <Route path="/intent-fingerprint" element={<IntentFingerprint />} />
           <Route path="/link-prospector" element={<LinkProspector />} />
+          <Route path="/cannibalization" element={<Cannibalization />} />
         </Route>
       </Routes>
     </Suspense>

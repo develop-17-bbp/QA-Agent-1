@@ -3248,6 +3248,40 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Keyword Cannibalization Detector ────────────────────────────────
+      // POST /api/cannibalization
+      // Body: { siteUrl, windowDays?, minPages?, impressionsFloor?, clicksFloor?, limit? }
+      // Returns CannibalizationResult — pages competing for the same query.
+      // 60-min cache (GSC data is 2-3 day delayed anyway).
+      if (req.method === "POST" && url.pathname === "/api/cannibalization") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const siteUrl = typeof payload?.siteUrl === "string" ? payload.siteUrl.trim() : "";
+        if (!siteUrl) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "siteUrl required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/cannibalization", { siteUrl, windowDays: payload.windowDays, minPages: payload.minPages, impressionsFloor: payload.impressionsFloor });
+          const { value: result, hit } = await cachedResponse(ck, 60 * 60_000, async () => {
+            const { detectCannibalization } = await import("./modules/cannibalization.js");
+            return await detectCannibalization({
+              siteUrl,
+              windowDays: payload.windowDays,
+              minPages: payload.minPages,
+              impressionsFloor: payload.impressionsFloor,
+              clicksFloor: payload.clicksFloor,
+              limit: payload.limit,
+            });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── DataForSEO live backlinks (per-link rows) ───────────────────────
       // POST /api/backlinks-live  Body: { domain: string, limit?: number }
       // Returns DfsBacklinksLive — per-link rows with anchor + DR + dates.

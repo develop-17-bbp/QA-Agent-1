@@ -788,6 +788,30 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Keyword Cannibalization — pages competing for same query ─────────────
+export interface CannibalCandidate {
+  query: string;
+  pages: { url: string; clicks: number; impressions: number; avgPosition: number; ctr: number }[];
+  winner: string;
+  losers: string[];
+  combinedImpressions: number;
+  combinedClicks: number;
+  severity: "low" | "medium" | "high";
+}
+export interface CannibalizationResponse {
+  siteUrl: string;
+  startDate: string;
+  endDate: string;
+  totalQueries: number;
+  totalConflicts: number;
+  candidates: CannibalCandidate[];
+  totalImpressionsAtRisk: number;
+  generatedAt: string;
+}
+export function fetchCannibalization(siteUrl: string, opts?: { windowDays?: number; minPages?: number; impressionsFloor?: number; limit?: number }): Promise<CannibalizationResponse> {
+  return postApi<CannibalizationResponse>("/api/cannibalization", { siteUrl, ...opts });
+}
+
 // ── DataForSEO live backlinks — per-link rows ─────────────────────────────
 export interface BacklinkRow {
   pageFrom: string;
