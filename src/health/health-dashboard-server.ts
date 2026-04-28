@@ -3248,6 +3248,59 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── AI Search Visibility — track citations in ChatGPT/Perplexity/Gemini/AI Overviews ──
+      // POST /api/ai-search-visibility   Body: { domain, brandName, queries[], competitors?, engines? }
+      // Returns AiVisibilityResult — per-engine metrics + per-query results.
+      // Cached 30 min (running this is expensive — costs OpenAI/Perplexity API credits).
+      if (req.method === "POST" && url.pathname === "/api/ai-search-visibility") {
+        let body: string;
+        try { body = await readBody(req, 12_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload?.domain === "string" ? payload.domain.trim() : "";
+        const brandName = typeof payload?.brandName === "string" ? payload.brandName.trim() : "";
+        const queries = Array.isArray(payload?.queries) ? payload.queries.filter((q: unknown) => typeof q === "string" && q.trim()) : [];
+        if (!domain || !brandName || queries.length === 0) {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "domain, brandName, and queries[] required" }));
+          return;
+        }
+        try {
+          const ck = buildCacheKey("/api/ai-search-visibility", { domain, brandName, queries, engines: payload.engines });
+          const { value: result, hit } = await cachedResponse(ck, 30 * 60_000, async () => {
+            const { trackAiSearchVisibility } = await import("./modules/ai-search-visibility.js");
+            return await trackAiSearchVisibility({
+              domain,
+              brandName,
+              queries: queries.slice(0, 30),
+              competitors: Array.isArray(payload.competitors) ? payload.competitors.filter((c: unknown) => typeof c === "string") : [],
+              engines: Array.isArray(payload.engines) ? payload.engines : undefined,
+            });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+      // GET /api/ai-search-visibility/history?domain=foo  — last 60 snapshots
+      if (req.method === "GET" && url.pathname === "/api/ai-search-visibility/history") {
+        const domain = url.searchParams.get("domain")?.trim() ?? "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const { readAiVisibilityHistory } = await import("./modules/ai-search-visibility.js");
+          const history = await readAiVisibilityHistory(domain);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ domain, snapshots: history }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+        return;
+      }
+
       // ── DataForSEO live Google SERP (device + location targeted) ────────
       // POST /api/serp-live   Body: { keyword, locationName?, device?, depth? }
       // Real Google.com results — mobile or desktop, any DFS location.

@@ -788,6 +788,52 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── AI Search Visibility — track citations across ChatGPT/Perplexity/Gemini/AI Overviews ──
+export type AiEngine = "chatgpt" | "perplexity" | "gemini" | "ai-overviews";
+export interface AiCitation { position: number; url: string; domain: string; title?: string }
+export interface AiQueryResult {
+  query: string;
+  engine: AiEngine;
+  answerText: string;
+  citations: AiCitation[];
+  brandMentioned: boolean;
+  domainCited: boolean;
+  operatorPosition: number;
+  sentiment: "positive" | "neutral" | "negative";
+  fetchedAt: string;
+  error?: string;
+}
+export interface AiVisibilityMetrics {
+  engine: AiEngine;
+  queriesRan: number;
+  queriesFailed: number;
+  mentionRate: number;
+  citationRate: number;
+  shareOfVoice: number;
+  averagePosition: number | null;
+  sentimentBreakdown: { positive: number; neutral: number; negative: number };
+  topCompetitors: { domain: string; citationCount: number }[];
+}
+export interface AiVisibilityResponse {
+  domain: string;
+  brandName: string;
+  competitors: string[];
+  queries: string[];
+  perEngine: AiVisibilityMetrics[];
+  perQuery: AiQueryResult[];
+  enginesAttempted: AiEngine[];
+  enginesSkipped: { engine: AiEngine; reason: string }[];
+  generatedAt: string;
+}
+export function fetchAiSearchVisibility(input: { domain: string; brandName: string; queries: string[]; competitors?: string[]; engines?: AiEngine[] }): Promise<AiVisibilityResponse> {
+  return postApi<AiVisibilityResponse>("/api/ai-search-visibility", input);
+}
+export async function fetchAiVisibilityHistory(domain: string): Promise<{ domain: string; snapshots: AiVisibilityResponse[] }> {
+  const res = await fetch(`/api/ai-search-visibility/history?domain=${encodeURIComponent(domain)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // ── Live Google SERP (DataForSEO BYOK) ────────────────────────────────────
 export interface LiveSerpItem {
   rank: number;
