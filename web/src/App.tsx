@@ -54,6 +54,7 @@ const Alerts = lazy(() => import("./pages/Alerts"));
 const Forecast = lazy(() => import("./pages/Forecast"));
 const VoiceOfSerp = lazy(() => import("./pages/VoiceOfSerp"));
 const NarrativeDiff = lazy(() => import("./pages/NarrativeDiff"));
+const IntentFingerprint = lazy(() => import("./pages/IntentFingerprint"));
 
 function LazyFallback() {
   return (
@@ -147,6 +148,7 @@ export default function App() {
           <Route path="/forecast" element={<Forecast />} />
           <Route path="/voice-of-serp" element={<VoiceOfSerp />} />
           <Route path="/narrative-diff" element={<NarrativeDiff />} />
+          <Route path="/intent-fingerprint" element={<IntentFingerprint />} />
         </Route>
       </Routes>
     </Suspense>

@@ -28,6 +28,11 @@ export interface PositionSnapshot {
   discrepancy?: boolean;
   /** ISO 2-letter country code used at snapshot time. */
   regionCode?: string;
+  /** Compact serialized SERP-layout fingerprint at snapshot time. Used by
+   *  Competitive Intent Fingerprinting (intent-fingerprint.ts) to detect
+   *  when the SERP intent shifts even before ranks themselves move.
+   *  Format: pipe-separated tokens, e.g. "informational|long-form|3-paa|featured-snippet|video-pack". */
+  intentSignature?: string;
 }
 
 export interface TrackedPair {

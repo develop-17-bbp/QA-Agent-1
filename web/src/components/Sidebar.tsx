@@ -31,6 +31,7 @@ const SOURCE_MAP: Record<string, SourceClass> = {
   "/query-lab": "mixed", "/serp-analyzer": "real", "/agentic-crawl": "llm-safe",
   "/voice-of-serp": "mixed",
   "/narrative-diff": "mixed",
+  "/intent-fingerprint": "mixed",
   "/brand-monitoring": "mixed", "/log-file-analyzer": "mixed", "/local-seo": "mixed",
   "/url-report": "mixed", "/form-tests": "real", "/keyword-impact": "mixed",
   "/competitive-estimator": "mixed", "/link-fix-advisor": "mixed",
@@ -102,6 +103,7 @@ const GROUPS: NavGroup[] = [
       { label: "Traffic Analytics", path: "/traffic-analytics" },
       { label: "Competitive Estimator", path: "/competitive-estimator" },
       { label: "Rank Tracker", path: "/competitor-rank-tracker" },
+      { label: "Intent Fingerprint", path: "/intent-fingerprint", badge: "NEW" },
     ],
   },
   {

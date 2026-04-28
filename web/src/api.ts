@@ -786,6 +786,35 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Competitive Intent Fingerprint — SERP-intent shift detection ──────────
+export interface IntentShift {
+  domain: string;
+  keyword: string;
+  fromAt: string;
+  toAt: string;
+  fromSignature: string;
+  toSignature: string;
+  distance: number;
+  added: string[];
+  removed: string[];
+}
+export interface IntentShiftsResponse {
+  domain: string;
+  windowDays: number;
+  pairsChecked: number;
+  pairsWithFingerprintHistory: number;
+  shifts: IntentShift[];
+  council: CouncilResult | null;
+  councilError?: string;
+  generatedAt: string;
+}
+export function fetchIntentShifts(domain: string, extras?: { minDistance?: number; windowDays?: number; includeLlm?: boolean }): Promise<IntentShiftsResponse> {
+  return postApi<IntentShiftsResponse>("/api/intent-shifts", { domain, ...extras });
+}
+export function snapshotIntentFingerprintsNow(domain: string, region?: string): Promise<{ domain: string; region: string; fingerprints: { keyword: string; signature: string; error?: string }[] }> {
+  return postApi("/api/intent-fingerprint-now", { domain, region });
+}
+
 // ── Narrative Diff — run-to-run comparison with LLM narration ─────────────
 export interface NarrativeSectionDelta {
   section: string;

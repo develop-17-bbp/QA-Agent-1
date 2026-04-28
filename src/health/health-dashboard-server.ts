@@ -3243,6 +3243,57 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Competitive Intent Fingerprinting ────────────────────────────────
+      // POST /api/intent-shifts
+      // Body: { domain: string, minDistance?: number, windowDays?: number, includeLlm?: boolean }
+      // Returns IntentShiftsResult — detected SERP-intent shifts + council narration.
+      // 60-min cache (intent moves on the days-to-weeks scale).
+      if (req.method === "POST" && url.pathname === "/api/intent-shifts") {
+        let body: string;
+        try { body = await readBody(req, 8_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { domain?: string; minDistance?: number; windowDays?: number; includeLlm?: boolean };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/intent-shifts", { domain, minDistance: payload.minDistance, windowDays: payload.windowDays });
+          const { value: result, hit } = await cachedResponse(ck, 60 * 60_000, async () => {
+            const { detectIntentShifts } = await import("./modules/intent-fingerprint.js");
+            return await detectIntentShifts({
+              domain,
+              minDistance: typeof payload.minDistance === "number" ? payload.minDistance : undefined,
+              windowDays: typeof payload.windowDays === "number" ? payload.windowDays : undefined,
+              includeLlm: payload.includeLlm !== false,
+            });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+      // POST /api/intent-fingerprint-now — seed fingerprints for all tracked pairs on a domain.
+      if (req.method === "POST" && url.pathname === "/api/intent-fingerprint-now") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { domain?: string; region?: string };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const { snapshotFingerprintsNow } = await import("./modules/intent-fingerprint.js");
+          const result = await snapshotFingerprintsNow(domain, payload.region || "us-en");
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(JSON.stringify({ domain, region: payload.region || "us-en", fingerprints: result }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Narrative Diff Engine ────────────────────────────────────────────
       // POST /api/narrative-diff
       // Body: { runIdA: string, runIdB: string, includeLlm?: boolean }
