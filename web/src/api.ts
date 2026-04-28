@@ -788,6 +788,46 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Local Rank Tracker — Google Map Pack + citation consistency ──────────
+export interface MapPackEntry {
+  position: number;
+  name: string;
+  rating: number | null;
+  reviewCount: number | null;
+  category: string;
+  url: string | null;
+  phone: string | null;
+}
+export interface MapPackResponse {
+  query: string;
+  location: string;
+  fetchedAt: string;
+  pack: MapPackEntry[];
+  operatorMatch: { name: string; position: number } | null;
+}
+export interface CitationCheckRow {
+  directory: string;
+  url: string;
+  found: boolean;
+  napMatch: boolean | null;
+  mismatches: string[];
+  fetchedAt: string;
+  error?: string;
+}
+export interface CitationAuditResponse {
+  businessName: string;
+  canonicalNap: { name: string; phone?: string; address?: string };
+  directories: CitationCheckRow[];
+  summary: { checked: number; listed: number; consistent: number; inconsistent: number; missing: number };
+  generatedAt: string;
+}
+export function fetchMapPack(input: { query: string; operatorName: string; location?: string; operatorDomain?: string }): Promise<MapPackResponse> {
+  return postApi<MapPackResponse>("/api/local-map-pack", input);
+}
+export function fetchCitationAudit(input: { businessName: string; canonicalNap: { name: string; phone?: string; address?: string } }): Promise<CitationAuditResponse> {
+  return postApi<CitationAuditResponse>("/api/citation-audit", input);
+}
+
 // ── AI Search Visibility — track citations across ChatGPT/Perplexity/Gemini/AI Overviews ──
 export type AiEngine = "chatgpt" | "perplexity" | "gemini" | "ai-overviews";
 export interface AiCitation { position: number; url: string; domain: string; title?: string }

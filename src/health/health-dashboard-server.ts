@@ -3248,6 +3248,54 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Local Rank Tracker — Map-pack rank + citation consistency ──────
+      // POST /api/local-map-pack   Body: { query, operatorName, location?, operatorDomain? }
+      if (req.method === "POST" && url.pathname === "/api/local-map-pack") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const query = typeof payload?.query === "string" ? payload.query.trim() : "";
+        const operatorName = typeof payload?.operatorName === "string" ? payload.operatorName.trim() : "";
+        if (!query || !operatorName) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "query + operatorName required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/local-map-pack", { query, operatorName, location: payload.location });
+          const { value: result, hit } = await cachedResponse(ck, 30 * 60_000, async () => {
+            const { trackMapPack } = await import("./modules/local-rank-tracker.js");
+            return await trackMapPack({ query, operatorName, location: payload.location }, payload.operatorDomain);
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+      // POST /api/citation-audit   Body: { businessName, canonicalNap: { name, phone?, address? } }
+      if (req.method === "POST" && url.pathname === "/api/citation-audit") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const businessName = typeof payload?.businessName === "string" ? payload.businessName.trim() : "";
+        const canonical = payload?.canonicalNap;
+        if (!businessName || !canonical?.name) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "businessName + canonicalNap.name required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/citation-audit", { businessName, canonical });
+          const { value: result, hit } = await cachedResponse(ck, 60 * 60_000, async () => {
+            const { auditCitationConsistency } = await import("./modules/local-rank-tracker.js");
+            return await auditCitationConsistency({ businessName, canonicalNap: canonical });
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── AI Search Visibility — track citations in ChatGPT/Perplexity/Gemini/AI Overviews ──
       // POST /api/ai-search-visibility   Body: { domain, brandName, queries[], competitors?, engines? }
       // Returns AiVisibilityResult — per-engine metrics + per-query results.

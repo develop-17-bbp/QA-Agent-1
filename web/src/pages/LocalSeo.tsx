@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
-import { fetchLocalSeo } from "../api";
+import { fetchLocalSeo, fetchMapPack, fetchCitationAudit, type MapPackResponse, type CitationAuditResponse } from "../api";
 
 import { LoadingPanel, ErrorBanner } from "../components/UI";
 import AskCouncilButton from "../components/AskCouncilButton";
@@ -22,6 +22,34 @@ export default function LocalSeo() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [openSuggestion, setOpenSuggestion] = useState<string | null>(null);
+  // Map-pack tracker state
+  const [mpQuery, setMpQuery] = useState("");
+  const [mpDomain, setMpDomain] = useState("");
+  const [mpData, setMpData] = useState<MapPackResponse | null>(null);
+  const [mpLoading, setMpLoading] = useState(false);
+  const [mpError, setMpError] = useState("");
+  // Citation audit state
+  const [napPhone, setNapPhone] = useState("");
+  const [napAddress, setNapAddress] = useState("");
+  const [citData, setCitData] = useState<CitationAuditResponse | null>(null);
+  const [citLoading, setCitLoading] = useState(false);
+  const [citError, setCitError] = useState("");
+
+  const runMapPack = async () => {
+    if (!mpQuery.trim() || !businessName.trim()) { setMpError("query + business name required"); return; }
+    setMpLoading(true); setMpError(""); setMpData(null);
+    try { setMpData(await fetchMapPack({ query: mpQuery.trim(), operatorName: businessName.trim(), location, operatorDomain: mpDomain.trim() || undefined })); }
+    catch (e: any) { setMpError(e?.message ?? String(e)); }
+    finally { setMpLoading(false); }
+  };
+
+  const runCitationAudit = async () => {
+    if (!businessName.trim()) { setCitError("business name required"); return; }
+    setCitLoading(true); setCitError(""); setCitData(null);
+    try { setCitData(await fetchCitationAudit({ businessName: businessName.trim(), canonicalNap: { name: businessName.trim(), phone: napPhone.trim() || undefined, address: napAddress.trim() || undefined } })); }
+    catch (e: any) { setCitError(e?.message ?? String(e)); }
+    finally { setCitLoading(false); }
+  };
 
   const analyze = async () => {
     if (!businessName.trim() || !location.trim() || !runId) return;
@@ -145,6 +173,95 @@ export default function LocalSeo() {
           ))}
         </>
       )}
+
+      {/* ── Map Pack Tracker (NEW) ─────────────────────────────────────── */}
+      <div className="qa-panel" style={{ padding: 16, marginTop: 24 }}>
+        <div className="qa-panel-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          📍 Google Map Pack Tracker
+          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "var(--accent-light)", color: "var(--accent-hover)", fontWeight: 700, letterSpacing: 0.4, border: "1px solid var(--accent-muted)" }}>NEW</span>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 10px" }}>
+          Captures the top-3 local pack box Google shows for "<i>{mpQuery || '<query> near me'}</i>" — tracks operator's position over time. Uses headless Chromium against google.com.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input className="qa-input" placeholder="Search query (e.g. plastic surgeon seattle)" value={mpQuery} onChange={(e) => setMpQuery(e.target.value)} style={{ flex: 1, minWidth: 240, padding: "8px 12px" }} />
+          <input className="qa-input" placeholder="Operator domain (optional, for history)" value={mpDomain} onChange={(e) => setMpDomain(e.target.value)} style={{ width: 240, padding: "8px 12px" }} />
+          <button className="qa-btn-primary" onClick={runMapPack} disabled={mpLoading || !mpQuery.trim() || !businessName.trim()} style={{ padding: "8px 18px" }}>
+            {mpLoading ? "Tracking…" : "Track map pack"}
+          </button>
+        </div>
+        {mpError && <div style={{ marginTop: 10 }}><ErrorBanner error={mpError} /></div>}
+        {mpData && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12, marginBottom: 8 }}>
+              Operator match: {mpData.operatorMatch ? <strong style={{ color: "#16a34a" }}>#{mpData.operatorMatch.position} ({mpData.operatorMatch.name})</strong> : <span style={{ color: "var(--bad)", fontWeight: 600 }}>Not in top-3</span>}
+            </div>
+            {mpData.pack.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>No local pack rendered for this query — Google may not show one for it.</div>
+            ) : (
+              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                <thead><tr style={{ borderBottom: "1px solid var(--border)" }}><th style={{ textAlign: "left", padding: "6px 8px" }}>#</th><th style={{ textAlign: "left", padding: "6px 8px" }}>Business</th><th style={{ textAlign: "left", padding: "6px 8px" }}>Rating</th><th style={{ textAlign: "left", padding: "6px 8px" }}>Reviews</th><th style={{ textAlign: "left", padding: "6px 8px" }}>Category</th></tr></thead>
+                <tbody>
+                  {mpData.pack.map((e) => {
+                    const isMe = mpData.operatorMatch?.position === e.position;
+                    return (
+                      <tr key={e.position} style={{ background: isMe ? "rgba(22,163,74,0.08)" : undefined, borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "6px 8px", fontWeight: 800, color: e.position <= 3 ? "#16a34a" : "var(--muted)" }}>{e.position}</td>
+                        <td style={{ padding: "6px 8px", fontWeight: 600 }}>{e.name}{isMe && <span style={{ fontSize: 9, marginLeft: 6, padding: "1px 6px", borderRadius: 8, background: "#dcfce7", color: "#166534", fontWeight: 700 }}>YOU</span>}</td>
+                        <td style={{ padding: "6px 8px" }}>{e.rating != null ? `★ ${e.rating}` : "—"}</td>
+                        <td style={{ padding: "6px 8px", color: "var(--muted)" }}>{e.reviewCount != null ? e.reviewCount.toLocaleString() : "—"}</td>
+                        <td style={{ padding: "6px 8px", fontSize: 11, color: "var(--muted)" }}>{e.category}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Citation Consistency (NEW) ─────────────────────────────────── */}
+      <div className="qa-panel" style={{ padding: 16, marginTop: 16 }}>
+        <div className="qa-panel-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          🔗 Citation Consistency
+          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "var(--accent-light)", color: "var(--accent-hover)", fontWeight: 700, letterSpacing: 0.4, border: "1px solid var(--accent-muted)" }}>NEW</span>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 10px" }}>
+          Checks whether the operator's NAP (name + phone) is listed consistently across Yelp, BBB, Yellow Pages, Manta, Foursquare, MapQuest. Inconsistent NAPs across directories tank local rank.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input className="qa-input" placeholder="Canonical phone (optional but recommended)" value={napPhone} onChange={(e) => setNapPhone(e.target.value)} style={{ width: 260, padding: "8px 12px" }} />
+          <input className="qa-input" placeholder="Canonical address (optional)" value={napAddress} onChange={(e) => setNapAddress(e.target.value)} style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
+          <button className="qa-btn-primary" onClick={runCitationAudit} disabled={citLoading || !businessName.trim()} style={{ padding: "8px 18px" }}>
+            {citLoading ? "Auditing…" : "Audit citations"}
+          </button>
+        </div>
+        {citError && <div style={{ marginTop: 10 }}><ErrorBanner error={citError} /></div>}
+        {citData && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", gap: 14, fontSize: 12, marginBottom: 10, flexWrap: "wrap" }}>
+              <span><strong>{citData.summary.checked}</strong> directories checked</span>
+              <span style={{ color: "#16a34a" }}><strong>{citData.summary.consistent}</strong> consistent</span>
+              <span style={{ color: "#dc2626" }}><strong>{citData.summary.inconsistent}</strong> inconsistent</span>
+              <span style={{ color: "var(--muted)" }}><strong>{citData.summary.missing}</strong> not listed</span>
+            </div>
+            <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+              <thead><tr style={{ borderBottom: "1px solid var(--border)" }}><th style={{ textAlign: "left", padding: "6px 8px" }}>Directory</th><th style={{ textAlign: "left", padding: "6px 8px" }}>Listed?</th><th style={{ textAlign: "left", padding: "6px 8px" }}>NAP match</th><th style={{ textAlign: "left", padding: "6px 8px" }}>Issues</th></tr></thead>
+              <tbody>
+                {citData.directories.map((r) => (
+                  <tr key={r.directory} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td style={{ padding: "6px 8px", fontWeight: 600 }}><a href={r.url} target="_blank" rel="noreferrer" style={{ color: "var(--text)" }}>{r.directory}</a></td>
+                    <td style={{ padding: "6px 8px" }}>{r.found ? <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ found</span> : <span style={{ color: "var(--bad)", fontWeight: 700 }}>✕ not listed</span>}</td>
+                    <td style={{ padding: "6px 8px" }}>{r.napMatch === true ? <span style={{ color: "#16a34a" }}>✓ match</span> : r.napMatch === false ? <span style={{ color: "#dc2626" }}>✕ mismatch</span> : "—"}</td>
+                    <td style={{ padding: "6px 8px", fontSize: 11, color: "var(--muted)" }}>{r.mismatches.join(", ") || (r.error ? `error: ${r.error}` : "—")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }
