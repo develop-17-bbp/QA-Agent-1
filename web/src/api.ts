@@ -1004,8 +1004,16 @@ export function fetchCitationAudit(input: { businessName: string; canonicalNap: 
   return postApi<CitationAuditResponse>("/api/citation-audit", input);
 }
 
-// ── AI Search Visibility — track citations across ChatGPT/Perplexity/Gemini/AI Overviews ──
-export type AiEngine = "chatgpt" | "perplexity" | "gemini" | "ai-overviews";
+// ── AI Search Visibility — track citations across AI Overviews/Bing Copilot/Local LLM (free) and optional paid engines ──
+export type AiEngine = "ai-overviews" | "bing-copilot" | "local-llm-baseline" | "chatgpt" | "perplexity" | "gemini";
+export const ENGINE_TIER: Record<AiEngine, "free" | "paid"> = {
+  "ai-overviews": "free",
+  "bing-copilot": "free",
+  "local-llm-baseline": "free",
+  "chatgpt": "paid",
+  "perplexity": "paid",
+  "gemini": "paid",
+};
 export interface AiCitation { position: number; url: string; domain: string; title?: string }
 export interface AiQueryResult {
   query: string;

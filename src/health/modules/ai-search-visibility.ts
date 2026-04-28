@@ -34,10 +34,43 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { resolveKey } from "./runtime-keys.js";
+import { generateText } from "../llm.js";
+import { withLlmTelemetry } from "../agentic/llm-telemetry.js";
+import { checkOllamaAvailable } from "../agentic/llm-router.js";
 
 const HISTORY_ROOT = path.join(process.cwd(), "data", "ai-citations");
 
-export type AiEngine = "chatgpt" | "perplexity" | "gemini" | "ai-overviews";
+/** Available AI engines, split by cost tier so the UI can show clear
+ *  free-vs-paid distinctions. */
+export type AiEngine =
+  /** Free — Playwright scrape of Google's AI Overview block when shown. */
+  | "ai-overviews"
+  /** Free — Playwright scrape of Bing Copilot's answer panel + citations. */
+  | "bing-copilot"
+  /** Free — local Ollama LLM. Useful as a baseline for "what does an
+   *  open-source LLM know about my brand without retrieval". */
+  | "local-llm-baseline"
+  /** Paid BYOK — OpenAI ChatGPT API. */
+  | "chatgpt"
+  /** Paid BYOK — Perplexity API. */
+  | "perplexity"
+  /** Paid BYOK — Google Gemini grounding API. (Has limited free tier.) */
+  | "gemini";
+
+/** Cost classification — drives UI free/paid badges and default selection. */
+export const ENGINE_TIER: Record<AiEngine, "free" | "paid"> = {
+  "ai-overviews":         "free",
+  "bing-copilot":         "free",
+  "local-llm-baseline":   "free",
+  "chatgpt":              "paid",
+  "perplexity":           "paid",
+  "gemini":               "paid",
+};
+
+/** Default engines when caller doesn't specify — FREE only. Operators
+ *  who configured paid BYOK keys can pass them in `engines:[]` explicitly. */
+export const DEFAULT_FREE_ENGINES: AiEngine[] = ["ai-overviews", "bing-copilot", "local-llm-baseline"];
+
 export type Sentiment = "positive" | "neutral" | "negative";
 
 export interface AiCitation {
@@ -255,6 +288,90 @@ function geminiAdapter(): EngineAdapter {
   };
 }
 
+/** Bing Copilot — Playwright scrape of bing.com/copilot. Free; no API
+ *  key needed. Bing's Copilot answer typically renders inline citations
+ *  in the answer panel which we extract directly. */
+function bingCopilotAdapter(): EngineAdapter {
+  return {
+    engine: "bing-copilot",
+    isConfigured: () => true, // Playwright already a project dep
+    run: async (query) => {
+      const { chromium } = await import("playwright");
+      const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+      try {
+        const context = await browser.newContext({
+          viewport: { width: 1280, height: 900 },
+          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        });
+        const page = await context.newPage();
+        await page.goto(`https://www.bing.com/search?q=${encodeURIComponent(query)}&form=QBLH&showconv=1`, { waitUntil: "domcontentloaded", timeout: 25_000 });
+        // Bing renders the answer either in a "Generative AI" panel or in the
+        // "rich answer" / "deep search" boxes — try several selectors.
+        const aiBox = page.locator(
+          'div[data-priority="generative-answer"], div.b_algo:has-text("AI"), div.b_searchboxForm + div.b_ans, div[id*="bnp_ans"]',
+        ).first();
+        let answerText = "";
+        const citations: AiCitation[] = [];
+        try {
+          await aiBox.waitFor({ timeout: 4_000 });
+          answerText = (await aiBox.innerText()).slice(0, 4_000);
+          const links = await aiBox.locator("a").all();
+          for (let i = 0; i < links.length && i < 15; i++) {
+            const href = await links[i]!.getAttribute("href");
+            const title = (await links[i]!.innerText().catch(() => "")).slice(0, 200);
+            if (href && /^https?:\/\//.test(href) && !/bing\.com\/(?:search|aclick|images|news|maps)/.test(href)) {
+              citations.push({ position: i + 1, url: href, domain: domainOf(href), title });
+            }
+          }
+        } catch {
+          // No AI panel rendered — fallback to the 1st classical organic result so
+          // the engine still returns something rather than failing silently.
+          try {
+            const firstResult = page.locator("li.b_algo h2 a").first();
+            const href = await firstResult.getAttribute("href");
+            if (href) {
+              answerText = (await firstResult.innerText().catch(() => "")).slice(0, 1000);
+              citations.push({ position: 1, url: href, domain: domainOf(href) });
+            }
+          } catch { /* nothing — empty result */ }
+        }
+        await context.close();
+        return { answerText, citations };
+      } finally {
+        await browser.close().catch(() => {});
+      }
+    },
+  };
+}
+
+/** Local-LLM baseline — Ollama answers the query without any retrieval.
+ *  This is NOT a real-world AI search engine ranking — it's a
+ *  "what does a generally-trained LLM know about your brand" baseline.
+ *  Useful for measuring brand authority in the broad open-source LLM
+ *  knowledge space. The LLM is instructed to cite sources from its
+ *  training memory (which the operator's domain may or may not appear in). */
+function localLlmBaselineAdapter(): EngineAdapter {
+  return {
+    engine: "local-llm-baseline",
+    isConfigured: () => true, // Resolved at run-time via checkOllamaAvailable.
+    run: async (query) => {
+      const ok = await checkOllamaAvailable();
+      if (!ok) throw new Error("Ollama not reachable — start `ollama serve`");
+      const model = process.env.OLLAMA_MODEL?.trim() || "llama3.2";
+      const prompt = `${query}\n\nAnswer concisely. List 3-5 specific source domains or sites you would attribute this knowledge to (just the domain, one per line under a "Sources:" heading).`;
+      const text = await withLlmTelemetry(
+        "ai-search-visibility-local",
+        model,
+        prompt,
+        () => generateText(prompt),
+      );
+      const answerText = (text ?? "").slice(0, 4_000);
+      const citations = parseCitationsFromText(answerText);
+      return { answerText, citations };
+    },
+  };
+}
+
 /** Google AI Overviews — scrape the AI-Overview block from a regular SERP
  *  page using Playwright. No API key needed; opt-in with a flag because
  *  Playwright is a heavy dependency. */
@@ -322,7 +439,12 @@ function parseCitationsFromText(text: string): AiCitation[] {
 
 // ── Main orchestrator ───────────────────────────────────────────────────
 
-const ALL_ADAPTERS = [chatGptAdapter, perplexityAdapter, geminiAdapter, aiOverviewsAdapter];
+const ALL_ADAPTERS = [
+  // Free engines first — these are the default selection.
+  aiOverviewsAdapter, bingCopilotAdapter, localLlmBaselineAdapter,
+  // Paid (BYOK) engines second — opt-in only.
+  chatGptAdapter, perplexityAdapter, geminiAdapter,
+];
 
 function aggregateMetrics(domain: string, brand: string, competitors: string[], results: AiQueryResult[]): AiVisibilityMetrics[] {
   const target = normalizeDomain(domain);
@@ -383,7 +505,9 @@ export async function trackAiSearchVisibility(input: AiVisibilityInput): Promise
   if (!input.brandName?.trim()) throw new Error("brandName is required");
   if (!input.queries || input.queries.length === 0) throw new Error("queries[] is required");
 
-  const wanted = new Set<AiEngine>(input.engines && input.engines.length > 0 ? input.engines : ["chatgpt", "perplexity", "gemini", "ai-overviews"]);
+  // Default to FREE engines only when the caller doesn't specify.
+  // Operators who want paid engines must opt in explicitly.
+  const wanted = new Set<AiEngine>(input.engines && input.engines.length > 0 ? input.engines : DEFAULT_FREE_ENGINES);
   const enginesAttempted: AiEngine[] = [];
   const enginesSkipped: { engine: AiEngine; reason: string }[] = [];
   const adapters: EngineAdapter[] = [];
@@ -461,10 +585,12 @@ export async function trackAiSearchVisibility(input: AiVisibilityInput): Promise
 
 function envForEngine(engine: AiEngine): string {
   switch (engine) {
-    case "chatgpt": return "OPENAI_API_KEY";
-    case "perplexity": return "PERPLEXITY_API_KEY";
-    case "gemini": return "GOOGLE_AI_API_KEY";
-    case "ai-overviews": return "(no key needed — uses Playwright)";
+    case "chatgpt": return "OPENAI_API_KEY (paid BYOK)";
+    case "perplexity": return "PERPLEXITY_API_KEY (paid BYOK)";
+    case "gemini": return "GOOGLE_AI_API_KEY (Google free tier OR paid BYOK)";
+    case "ai-overviews": return "(free — uses Playwright)";
+    case "bing-copilot": return "(free — uses Playwright)";
+    case "local-llm-baseline": return "(free — uses local Ollama; start with `ollama serve`)";
   }
 }
 

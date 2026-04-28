@@ -3,21 +3,28 @@ import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 import { ErrorBanner, LoadingPanel } from "../components/UI";
 import { MetricCard } from "../components/MetricCard";
 import { PageHero } from "../components/PageHero";
-import { fetchAiSearchVisibility, type AiVisibilityResponse, type AiEngine, type AiVisibilityMetrics } from "../api";
+import { fetchAiSearchVisibility, ENGINE_TIER, type AiVisibilityResponse, type AiEngine, type AiVisibilityMetrics } from "../api";
 
 const ENGINE_LABEL: Record<AiEngine, string> = {
-  "chatgpt": "ChatGPT",
-  "perplexity": "Perplexity",
-  "gemini": "Gemini",
-  "ai-overviews": "Google AI Overviews",
+  "ai-overviews":       "Google AI Overviews",
+  "bing-copilot":       "Bing Copilot",
+  "local-llm-baseline": "Local LLM (Ollama)",
+  "chatgpt":            "ChatGPT",
+  "perplexity":         "Perplexity",
+  "gemini":             "Gemini",
 };
 
 const ENGINE_COLOR: Record<AiEngine, string> = {
-  "chatgpt": "#10a37f",
-  "perplexity": "#1e3a8a",
-  "gemini": "#1a73e8",
-  "ai-overviews": "#ea4335",
+  "ai-overviews":       "#ea4335",
+  "bing-copilot":       "#0078d4",
+  "local-llm-baseline": "#7c3aed",
+  "chatgpt":            "#10a37f",
+  "perplexity":         "#1e3a8a",
+  "gemini":             "#1a73e8",
 };
+
+const FREE_ENGINES: AiEngine[] = ["ai-overviews", "bing-copilot", "local-llm-baseline"];
+const PAID_ENGINES: AiEngine[] = ["chatgpt", "perplexity", "gemini"];
 
 export default function AiSearchVisibility() {
   const [domain, setDomain] = useState("");
@@ -27,17 +34,29 @@ export default function AiSearchVisibility() {
   const [data, setData] = useState<AiVisibilityResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedEngines, setSelectedEngines] = useState<Set<AiEngine>>(new Set(FREE_ENGINES));
+
+  const toggleEngine = (e: AiEngine) => {
+    setSelectedEngines((prev) => {
+      const next = new Set(prev);
+      if (next.has(e)) next.delete(e); else next.add(e);
+      return next;
+    });
+  };
+
+  const usingPaid = [...selectedEngines].some((e) => ENGINE_TIER[e] === "paid");
 
   const run = async () => {
     if (!domain.trim() || !brandName.trim() || !queriesText.trim()) {
       setError("domain, brand name, and at least one query are required");
       return;
     }
+    if (selectedEngines.size === 0) { setError("pick at least one engine"); return; }
     setLoading(true); setError(""); setData(null);
     try {
       const queries = queriesText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
       const competitors = competitorsText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
-      setData(await fetchAiSearchVisibility({ domain: domain.trim(), brandName: brandName.trim(), queries, competitors }));
+      setData(await fetchAiSearchVisibility({ domain: domain.trim(), brandName: brandName.trim(), queries, competitors, engines: [...selectedEngines] }));
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -60,9 +79,15 @@ export default function AiSearchVisibility() {
         accent
       />
 
-      <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11.5, padding: "5px 12px", borderRadius: 999, background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", fontWeight: 700, marginBottom: 14 }}>
-        🌍 SENDS QUERIES EXTERNALLY — to OpenAI / Perplexity / Google. Your domain + queries reach those services. Configure each provider's BYOK key in <code>/integrations</code>; engines without a key are silently skipped.
-      </div>
+      {usingPaid ? (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11.5, padding: "5px 12px", borderRadius: 999, background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", fontWeight: 700, marginBottom: 14 }}>
+          🌍 PAID ENGINES SELECTED — your queries WILL reach OpenAI / Perplexity / Google. Each call is billed to your BYOK account (typically $0.001-0.01 each).
+        </div>
+      ) : (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11.5, padding: "5px 12px", borderRadius: 999, background: "#dcfce7", color: "#166534", border: "1px solid #86efac", fontWeight: 700, marginBottom: 14 }}>
+          ✅ FREE TIER — all selected engines are zero-cost (Playwright scrapes + local Ollama). Nothing reaches a paid API.
+        </div>
+      )}
 
       <SectionCard title="Configure">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -83,12 +108,41 @@ export default function AiSearchVisibility() {
           <div className="qa-kicker" style={{ marginBottom: 4 }}>Competitor domains (comma or newline separated, optional — used for Share-of-Voice)</div>
           <input className="qa-input" value={competitorsText} onChange={(e) => setCompetitorsText(e.target.value)} placeholder="competitor1.com, competitor2.com" style={{ width: "100%" }} />
         </label>
+        <div style={{ marginTop: 12 }}>
+          <div className="qa-kicker" style={{ marginBottom: 6 }}>AI engines to query</div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, color: "#16a34a", marginBottom: 4 }}>FREE</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {FREE_ENGINES.map((e) => (
+                  <label key={e} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, padding: "4px 10px", borderRadius: 12, background: selectedEngines.has(e) ? ENGINE_COLOR[e] + "20" : "var(--glass2)", color: selectedEngines.has(e) ? ENGINE_COLOR[e] : "var(--muted)", border: "1px solid " + (selectedEngines.has(e) ? ENGINE_COLOR[e] + "60" : "var(--border)"), fontWeight: 600, cursor: "pointer" }}>
+                    <input type="checkbox" checked={selectedEngines.has(e)} onChange={() => toggleEngine(e)} style={{ margin: 0 }} />
+                    {ENGINE_LABEL[e]}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, color: "#92400e", marginBottom: 4 }}>PAID (BYOK — opt in)</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {PAID_ENGINES.map((e) => (
+                  <label key={e} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, padding: "4px 10px", borderRadius: 12, background: selectedEngines.has(e) ? "#fef3c7" : "var(--glass2)", color: selectedEngines.has(e) ? "#92400e" : "var(--muted)", border: "1px solid " + (selectedEngines.has(e) ? "#fcd34d" : "var(--border)"), fontWeight: 600, cursor: "pointer" }}>
+                    <input type="checkbox" checked={selectedEngines.has(e)} onChange={() => toggleEngine(e)} style={{ margin: 0 }} />
+                    {ENGINE_LABEL[e]}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
         <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button onClick={run} disabled={loading} className="qa-btn-primary" style={{ padding: "10px 22px", fontWeight: 700 }}>
             {loading ? "Tracking…" : "Track AI search visibility"}
           </button>
           <span style={{ fontSize: 11, color: "var(--muted)" }}>
-            ChatGPT and Perplexity API calls are billed per query — about $0.001-0.01 each.
+            {usingPaid
+              ? "Some selected engines are paid — each query is billed to your BYOK account."
+              : "All selected engines are free — Playwright scrapes + local Ollama."}
           </span>
         </div>
         {error && <div style={{ marginTop: 10 }}><ErrorBanner error={error} /></div>}
