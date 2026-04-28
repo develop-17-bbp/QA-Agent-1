@@ -788,6 +788,55 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── Core Web Vitals history + regression detection ──────────────────────
+export type CwvFormFactor = "PHONE" | "DESKTOP" | "TABLET" | "ALL_FORM_FACTORS";
+export interface CwvSnapshot {
+  url: string;
+  formFactor: CwvFormFactor;
+  fetchedAt: string;
+  collectionFirstDate: string;
+  collectionLastDate: string;
+  lcpP75: number | null;
+  inpP75: number | null;
+  clsP75: number | null;
+  fcpP75: number | null;
+  ttfbP75: number | null;
+  ratings: {
+    lcp?: "good" | "needs-improvement" | "poor";
+    inp?: "good" | "needs-improvement" | "poor";
+    cls?: "good" | "needs-improvement" | "poor";
+    fcp?: "good" | "needs-improvement" | "poor";
+    ttfb?: "good" | "needs-improvement" | "poor";
+  };
+}
+export interface CwvRegression {
+  metric: "lcp" | "inp" | "cls" | "fcp" | "ttfb";
+  beforeMedian: number;
+  current: number;
+  delta: number;
+  crossedTier: boolean;
+  severity: "info" | "warn" | "critical";
+}
+export interface CwvRegressionResponse {
+  url: string;
+  current: CwvSnapshot | null;
+  baseline: { count: number; medianFetchedAt: string | null };
+  regressions: CwvRegression[];
+  improvements: CwvRegression[];
+  generatedAt: string;
+}
+export function snapshotCwv(url: string, formFactor: CwvFormFactor = "PHONE"): Promise<CwvSnapshot> {
+  return postApi<CwvSnapshot>("/api/cwv/snapshot", { url, formFactor });
+}
+export async function fetchCwvHistory(url: string, days = 90): Promise<{ url: string; snapshots: CwvSnapshot[] }> {
+  const res = await fetch(`/api/cwv/history?url=${encodeURIComponent(url)}&days=${days}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+export function detectCwvRegressions(url: string, formFactor: CwvFormFactor = "PHONE", refresh = true): Promise<CwvRegressionResponse> {
+  return postApi<CwvRegressionResponse>("/api/cwv/regressions", { url, formFactor, refresh });
+}
+
 // ── Disavow generator + Schema preview + Snippet ownership ──────────────
 export interface ToxicLink {
   domain: string;

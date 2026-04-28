@@ -63,6 +63,7 @@ const AeoOptimizer = lazy(() => import("./pages/AeoOptimizer"));
 const TopicalAuthority = lazy(() => import("./pages/TopicalAuthority"));
 const LinkEquity = lazy(() => import("./pages/LinkEquity"));
 const SeoToolsBundle = lazy(() => import("./pages/SeoToolsBundle"));
+const CwvHistory = lazy(() => import("./pages/CwvHistory"));
 
 function LazyFallback() {
   return (
@@ -165,6 +166,7 @@ export default function App() {
           <Route path="/topical-authority" element={<TopicalAuthority />} />
           <Route path="/link-equity" element={<LinkEquity />} />
           <Route path="/seo-tools" element={<SeoToolsBundle />} />
+          <Route path="/cwv-history" element={<CwvHistory />} />
         </Route>
       </Routes>
     </Suspense>

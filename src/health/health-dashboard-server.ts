@@ -3370,6 +3370,62 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── Core Web Vitals history + regression detection ──────────────────
+      // POST /api/cwv/snapshot   { url, formFactor? }
+      // GET  /api/cwv/history?url=…&days=90
+      // POST /api/cwv/regressions { url, formFactor?, refresh? }
+      if (req.method === "POST" && url.pathname === "/api/cwv/snapshot") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const target = typeof payload?.url === "string" ? payload.url.trim() : "";
+        if (!target) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "url required" })); return; }
+        try {
+          const { snapshotCwv } = await import("./modules/cwv-history.js");
+          const snap = await snapshotCwv(target, payload.formFactor || "PHONE");
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(snap));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/cwv/history") {
+        const target = url.searchParams.get("url") ?? "";
+        const days = Number(url.searchParams.get("days")) || 90;
+        if (!target) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "url required" })); return; }
+        try {
+          const { readCwvHistory } = await import("./modules/cwv-history.js");
+          const snapshots = await readCwvHistory(target, days);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ url: target, snapshots }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/cwv/regressions") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: any;
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const target = typeof payload?.url === "string" ? payload.url.trim() : "";
+        if (!target) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "url required" })); return; }
+        try {
+          const { detectCwvRegressions } = await import("./modules/cwv-history.js");
+          const result = await detectCwvRegressions({ url: target, formFactor: payload.formFactor || "PHONE", refresh: payload.refresh !== false });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Disavow file generator — toxic-link detector + Google-format export
       // POST /api/disavow   Body: { domain, threshold? }
       if (req.method === "POST" && url.pathname === "/api/disavow") {
