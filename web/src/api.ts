@@ -262,7 +262,9 @@ export function fetchKeywordMagic(seedKeyword: string, region = "US") { return p
 export function fetchSeoWritingAssistant(runId: string, url: string) { return postApi<any>("/api/seo-writing-assistant", { runId, url }); }
 export function fetchSeoContentTemplate(keyword: string) { return postApi<any>("/api/seo-content-template", { keyword }); }
 export function fetchTopicResearch(topic: string, runId?: string) { return postApi<any>("/api/topic-research", { topic, runId }); }
-export function fetchBrandMonitoring(brandName: string, runId: string) { return postApi<any>("/api/brand-monitor", { brandName, runId }); }
+export function fetchBrandMonitoring(brandName: string, runId: string, opts?: { withSentiment?: boolean; competitors?: string[] }) {
+  return postApi<any>("/api/brand-monitor", { brandName, runId, withSentiment: opts?.withSentiment === true, competitors: opts?.competitors });
+}
 export function fetchLogAnalysis(logContent: string) { return postApi<any>("/api/log-analyzer", { logContent }); }
 export function fetchLocalSeo(businessName: string, location: string, runId?: string) { return postApi<any>("/api/local-seo", { businessName, location, runId }); }
 

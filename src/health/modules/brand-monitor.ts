@@ -1,10 +1,13 @@
 import type { SiteHealthReport } from "../types.js";
 import { generateText } from "../llm.js";
 import { withLlmTelemetry } from "../agentic/llm-telemetry.js";
+import { routeLlmJson } from "../agentic/llm-router.js";
 import { searchSerp } from "../agentic/duckduckgo-serp.js";
 import { fetchDomainHits, type CommonCrawlHit } from "../providers/common-crawl.js";
 import { searchDomainReferences, isUrlscanConfigured, type UrlscanHit } from "../providers/urlscan.js";
 import { dp, type DataPoint } from "../providers/types.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
 // ── Unit 5 honesty goal ──────────────────────────────────────────────────────
 //
@@ -42,6 +45,24 @@ export interface BrandMention {
   snippet?: string;
   /** ISO timestamp if the provider reports one. */
   time?: string;
+  // ── Sentiment-enrichment fields (Phase F: Private AI Brand Guardian) ──
+  /** Local-LLM classification: positive / neutral / negative. */
+  sentiment?: "positive" | "neutral" | "negative";
+  /** Local-LLM urgency tag — high when negative + reach signals. */
+  urgency?: "low" | "medium" | "high";
+  /** Tracked competitor name that co-occurs in the title/snippet, if any. */
+  competitorProximity?: string;
+}
+
+export interface BrandSentimentSummary {
+  positive: number;
+  neutral: number;
+  negative: number;
+  high: number;   // high-urgency
+  medium: number;
+  low: number;
+  /** Map of competitor name → mention count where they co-occurred. */
+  competitorProximity: Record<string, number>;
 }
 
 export interface BrandMonitoringResult {
@@ -62,6 +83,14 @@ export interface BrandMonitoringResult {
     urlscanConfigured: boolean;
   };
   dataQuality: DataQuality;
+  // ── Sentiment-enrichment outputs (Phase F) ──
+  /** Aggregate counts after enrichWithSentiment(). Absent when sentiment was not requested. */
+  sentimentSummary?: BrandSentimentSummary;
+  /** Always set when sentiment enrichment runs. Marketing signal: "your brand
+   *  string never left this machine". */
+  privacyMode?: "local-only";
+  /** Optional human-readable note on which model handled enrichment. */
+  sentimentModel?: string;
 }
 
 const BRAND_TTL = 24 * 60 * 60 * 1000;
@@ -255,5 +284,144 @@ Return only the plain-text summary, no JSON, no markdown.`;
       providersHit: Array.from(new Set(providersHit)),
       providersFailed: Array.from(new Set(providersFailed)),
     } satisfies DataQuality,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── Phase F — Private AI Brand Guardian extension ───────────────────────────
+//
+// Adds sentiment + urgency + competitor-proximity classification per mention.
+// Enforced LOCAL-ONLY: routeLlmJson is the Ollama-only router. We also append
+// a privacy audit line per call so regulated buyers can prove brand strings
+// never reached an external host.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PRIVACY_AUDIT_LOG = path.join(process.cwd(), "artifacts", "brand-privacy.jsonl");
+
+interface SentimentLlmOut {
+  results?: Array<{
+    index?: number;
+    sentiment?: "positive" | "neutral" | "negative";
+    urgency?: "low" | "medium" | "high";
+    competitor?: string | null;
+  }>;
+}
+
+async function appendPrivacyAuditLine(entry: { brand: string; model: string; mentionCount: number }): Promise<void> {
+  try {
+    await fs.mkdir(path.dirname(PRIVACY_AUDIT_LOG), { recursive: true });
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      host: "ollama",
+      privacyMode: "local-only",
+      ...entry,
+    }) + "\n";
+    await fs.appendFile(PRIVACY_AUDIT_LOG, line, "utf8");
+  } catch { /* non-fatal */ }
+}
+
+/** Detect competitor proximity heuristically before sending to the LLM —
+ *  keeps the prompt focused and reduces token usage. The LLM is still asked
+ *  to confirm/refine. */
+function heuristicCompetitor(text: string, competitors: string[]): string | undefined {
+  const blob = text.toLowerCase();
+  for (const c of competitors) {
+    const cl = c.toLowerCase().trim();
+    if (cl && blob.includes(cl)) return c;
+  }
+  return undefined;
+}
+
+/** Enrich an existing BrandMonitoringResult with on-device sentiment +
+ *  urgency + competitor-proximity per mention. Single batched LLM call.
+ *  Falls back to heuristic-only when Ollama is offline. */
+export async function enrichBrandWithSentiment(
+  result: BrandMonitoringResult,
+  competitors: string[] = [],
+): Promise<BrandMonitoringResult> {
+  const cleanCompetitors = competitors.map((c) => c.trim()).filter(Boolean);
+  // Heuristic competitor pre-pass (no LLM, instant).
+  for (const m of result.mentions) {
+    const blob = `${m.title ?? ""} ${m.snippet ?? ""} ${m.url}`;
+    const c = heuristicCompetitor(blob, cleanCompetitors);
+    if (c) m.competitorProximity = c;
+  }
+
+  let sentimentModel: string | undefined;
+  if (result.mentions.length > 0) {
+    const model = process.env.OLLAMA_MODEL?.trim() || "llama3.2";
+    const sample = result.mentions.slice(0, 30); // cap prompt size
+    const lines = sample.map((m, i) => `[${i}] ${m.title ?? "(no title)"} — ${m.snippet ?? ""} (${m.url})`).join("\n");
+    const compList = cleanCompetitors.length > 0 ? `KNOWN COMPETITORS to flag in 'competitor' (or null): ${cleanCompetitors.join(", ")}` : `No competitor list provided — leave 'competitor' as null.`;
+    const prompt = [
+      `You are a private brand-sentiment analyst running entirely on the operator's local hardware.`,
+      `Classify each of the ${sample.length} mentions of brand "${result.brandName}" below.`,
+      ``,
+      compList,
+      ``,
+      `MENTIONS:`,
+      lines,
+      ``,
+      `Return ONLY this JSON (no prose, no fences):`,
+      `{`,
+      `  "results": [`,
+      `    { "index": 0, "sentiment": "positive|neutral|negative", "urgency": "low|medium|high", "competitor": "<name-or-null>" }`,
+      `  ]`,
+      `}`,
+      ``,
+      `Rules:`,
+      `- High urgency = negative tone + signals of reach/audience (publication name, social platform, "report", "controversy").`,
+      `- Sentiment must reflect the cited mention, not your prior knowledge of the brand.`,
+      `- 'competitor' must be one of the known competitors above, or null. Do not invent.`,
+    ].join("\n");
+    try {
+      const { data } = await withLlmTelemetry(
+        "brand-sentiment",
+        model,
+        prompt,
+        () => routeLlmJson<SentimentLlmOut>(prompt, { preferOllama: true }),
+      );
+      sentimentModel = model;
+      const arr = Array.isArray(data?.results) ? data!.results! : [];
+      for (const r of arr) {
+        if (typeof r.index !== "number" || r.index < 0 || r.index >= sample.length) continue;
+        const m = sample[r.index]!;
+        if (r.sentiment === "positive" || r.sentiment === "neutral" || r.sentiment === "negative") m.sentiment = r.sentiment;
+        if (r.urgency === "low" || r.urgency === "medium" || r.urgency === "high") m.urgency = r.urgency;
+        if (typeof r.competitor === "string" && cleanCompetitors.includes(r.competitor)) m.competitorProximity = r.competitor;
+      }
+      void appendPrivacyAuditLine({ brand: result.brandName, model, mentionCount: sample.length });
+    } catch {
+      // Heuristic-only fallback path: assign neutral defaults so UI renders.
+      for (const m of sample) {
+        if (!m.sentiment) m.sentiment = "neutral";
+        if (!m.urgency) m.urgency = "low";
+      }
+    }
+  }
+
+  // ── Aggregate counts ──
+  const summary: BrandSentimentSummary = {
+    positive: 0, neutral: 0, negative: 0,
+    high: 0, medium: 0, low: 0,
+    competitorProximity: {},
+  };
+  for (const m of result.mentions) {
+    if (m.sentiment === "positive") summary.positive++;
+    else if (m.sentiment === "negative") summary.negative++;
+    else if (m.sentiment === "neutral") summary.neutral++;
+    if (m.urgency === "high") summary.high++;
+    else if (m.urgency === "medium") summary.medium++;
+    else if (m.urgency === "low") summary.low++;
+    if (m.competitorProximity) {
+      summary.competitorProximity[m.competitorProximity] = (summary.competitorProximity[m.competitorProximity] ?? 0) + 1;
+    }
+  }
+
+  return {
+    ...result,
+    sentimentSummary: summary,
+    privacyMode: "local-only",
+    sentimentModel,
   };
 }

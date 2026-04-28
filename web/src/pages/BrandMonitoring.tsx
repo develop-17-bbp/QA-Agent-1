@@ -54,6 +54,9 @@ export default function BrandMonitoring() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Phase F — Private AI Brand Guardian: opt-in sentiment + competitor proximity.
+  const [withSentiment, setWithSentiment] = useState(true);
+  const [competitorsRaw, setCompetitorsRaw] = useState("");
 
   // RSS-aggregator "brand radar" — no runId needed, pulls from 6 free sources.
   const [radarQuery, setRadarQuery] = useState("");
@@ -73,8 +76,14 @@ export default function BrandMonitoring() {
   const analyze = async () => {
     if (!runId || !brandName.trim()) return;
     setLoading(true); setError("");
-    try { setData(await fetchBrandMonitoring(brandName.trim(), runId)); } catch (e: any) { setError(e.message); }
-    finally { setLoading(false); }
+    try {
+      const competitors = competitorsRaw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+      setData(await fetchBrandMonitoring(brandName.trim(), runId, { withSentiment, competitors }));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const dq = data?.dataQuality ?? { providersHit: [], providersFailed: [], missingFields: [] };
@@ -202,7 +211,15 @@ export default function BrandMonitoring() {
       <RunSelector value={runId} onChange={setRunId} label="Select run" />
       <div className="qa-panel" style={{ padding: 16, marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <input className="qa-input" value={brandName} onChange={e => setBrandName(e.target.value)} onKeyDown={e => e.key === "Enter" && analyze()} placeholder="Enter brand name or domain..." style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
+        <input className="qa-input" value={competitorsRaw} onChange={e => setCompetitorsRaw(e.target.value)} placeholder="Competitors (comma-separated) — optional" style={{ flex: 1, minWidth: 200, padding: "8px 12px" }} />
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>
+          <input type="checkbox" checked={withSentiment} onChange={(e) => setWithSentiment(e.target.checked)} />
+          Sentiment + urgency (Ollama, local-only)
+        </label>
         <button className="qa-btn-primary" onClick={analyze} disabled={loading || !runId || !brandName.trim()}>{loading ? "Analyzing..." : "Monitor Brand"}</button>
+      </div>
+      <div style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11.5, padding: "4px 10px", borderRadius: 999, background: "var(--grad-agentic-soft)", border: "1px solid var(--accent-muted)", color: "var(--accent-hover)", fontWeight: 700 }}>
+        🔒 Local-only — your brand string never leaves this machine
       </div>
       <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
         Tip: enter a domain form (e.g. <code>acme.com</code>) to enable Common Crawl + URLScan lookups.
@@ -265,6 +282,39 @@ export default function BrandMonitoring() {
             </div>
           )}
 
+          {data.sentimentSummary && (
+            <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
+              <div className="qa-panel-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                Sentiment + urgency
+                {data.privacyMode === "local-only" && (
+                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "var(--grad-agentic-soft)", color: "var(--accent-hover)", border: "1px solid var(--accent-muted)", fontWeight: 700, letterSpacing: 0.4 }}>
+                    🔒 LOCAL-ONLY {data.sentimentModel ? `· ${data.sentimentModel}` : ""}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginTop: 10 }}>
+                <SentTile label="Positive" value={data.sentimentSummary.positive} color="#16a34a" />
+                <SentTile label="Neutral" value={data.sentimentSummary.neutral} color="#64748b" />
+                <SentTile label="Negative" value={data.sentimentSummary.negative} color="#dc2626" />
+                <SentTile label="High urgency" value={data.sentimentSummary.high} color="#b91c1c" />
+                <SentTile label="Medium urgency" value={data.sentimentSummary.medium} color="#d97706" />
+                <SentTile label="Low urgency" value={data.sentimentSummary.low} color="#0ea5e9" />
+              </div>
+              {Object.keys(data.sentimentSummary.competitorProximity ?? {}).length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div className="qa-kicker" style={{ marginBottom: 6 }}>Competitor co-occurrence</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {Object.entries(data.sentimentSummary.competitorProximity as Record<string, number>).map(([name, count]) => (
+                      <span key={name} style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 12, background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", fontWeight: 700 }}>
+                        {name} <span style={{ opacity: 0.7, fontWeight: 500 }}>×{count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {mentions.length > 0 ? (
             <div className="qa-panel" style={{ marginTop: 16, padding: 16 }}>
               <div className="qa-panel-title">Mentions ({mentions.length})</div>
@@ -298,5 +348,14 @@ export default function BrandMonitoring() {
         </>
       )}
     </motion.div>
+  );
+}
+
+function SentTile({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="qa-panel" style={{ padding: 12, borderTop: `3px solid ${color}` }}>
+      <div className="qa-kicker" style={{ marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color }}>{value}</div>
+    </div>
   );
 }

@@ -1854,7 +1854,7 @@ export async function runHealthDashboard(options: {
       if (req.method === "POST" && url.pathname === "/api/brand-monitor") {
         let body: string;
         try { body = await readBody(req, 32_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
-        let payload: { brandName?: string; runId?: string };
+        let payload: { brandName?: string; runId?: string; withSentiment?: boolean; competitors?: string[] };
         try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
         const brand = typeof payload.brandName === "string" ? payload.brandName.trim() : "";
         const runIdP = typeof payload.runId === "string" ? payload.runId : "";
@@ -1862,7 +1862,12 @@ export async function runHealthDashboard(options: {
         try {
           const raw = await loadRawReportsForRun(outRoot, runIdP);
           if (!raw) { res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Run not found" })); return; }
-          const result = await analyzeBrandPresence(brand, raw.reports);
+          let result = await analyzeBrandPresence(brand, raw.reports);
+          if (payload.withSentiment === true) {
+            const { enrichBrandWithSentiment } = await import("./modules/brand-monitor.js");
+            const competitors = Array.isArray(payload.competitors) ? payload.competitors.filter((c) => typeof c === "string") : [];
+            result = await enrichBrandWithSentiment(result, competitors);
+          }
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
           res.end(JSON.stringify(result));
         } catch (e) { res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: String(e) })); }
