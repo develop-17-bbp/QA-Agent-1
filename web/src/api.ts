@@ -851,11 +851,12 @@ export interface DisavowResponse {
   target: string;
   totalLinksScanned: number;
   toxicLinks: ToxicLink[];
+  source: "ahrefs-webmaster-csv" | "bing-webmaster" | "dataforseo" | "merged";
   disavowFileContent: string;
   generatedAt: string;
 }
-export function fetchDisavow(domain: string, threshold?: number): Promise<DisavowResponse> {
-  return postApi<DisavowResponse>("/api/disavow", { domain, threshold });
+export function fetchDisavow(domain: string, opts?: { threshold?: number; useDfs?: boolean }): Promise<DisavowResponse> {
+  return postApi<DisavowResponse>("/api/disavow", { domain, ...opts });
 }
 
 export type RichResultType = "article" | "faq" | "howto" | "recipe" | "product" | "review" | "video" | "event" | "organization" | "breadcrumb" | "local-business" | "none";
@@ -894,7 +895,7 @@ export interface SnippetOwnershipResponse {
   summary: { totalKeywords: number; snippetsAvailable: number; operatorOwned: number; competitorOwned: number; stealOpportunities: number };
   generatedAt: string;
 }
-export function fetchSnippetOwnership(input: { operatorDomain: string; keywords: string[]; region?: string; device?: "desktop" | "mobile" }): Promise<SnippetOwnershipResponse> {
+export function fetchSnippetOwnership(input: { operatorDomain: string; keywords: string[]; region?: string; device?: "desktop" | "mobile"; useDfs?: boolean }): Promise<SnippetOwnershipResponse> {
   return postApi<SnippetOwnershipResponse>("/api/snippet-ownership", input);
 }
 

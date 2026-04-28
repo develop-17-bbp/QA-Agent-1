@@ -57,6 +57,7 @@ export default function SeoToolsBundle() {
 function DisavowTab() {
   const [domain, setDomain] = useState("");
   const [threshold, setThreshold] = useState(50);
+  const [useDfs, setUseDfs] = useState(false);
   const [data, setData] = useState<DisavowResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -64,21 +65,27 @@ function DisavowTab() {
   const run = async () => {
     if (!domain.trim()) { setError("domain required"); return; }
     setLoading(true); setError(""); setData(null);
-    try { setData(await fetchDisavow(domain.trim(), threshold)); }
+    try { setData(await fetchDisavow(domain.trim(), { threshold, useDfs })); }
     catch (e: any) { setError(e?.message ?? String(e)); }
     finally { setLoading(false); }
   };
 
   return (
     <SectionCard title="Toxic-link disavow generator">
-      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
-        Pulls live backlinks via DataForSEO (BYOK), flags toxic patterns (low DR, exact-match anchor flooding, sketchy TLDs, sitewide), and generates a Google-format <code>disavow.txt</code>. Review carefully before submitting — disavow is irreversible.
+      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
+        Pulls backlink data from <strong>free sources by default</strong> (AHREFS Webmaster Tools CSV imports + Bing Webmaster API), flags toxic patterns, and generates a Google-format <code>disavow.txt</code>. Review carefully — disavow is irreversible.
+      </div>
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11, padding: "3px 10px", borderRadius: 999, background: useDfs ? "#fef3c7" : "#dcfce7", color: useDfs ? "#92400e" : "#166534", border: "1px solid " + (useDfs ? "#fde68a" : "#86efac"), fontWeight: 700, margin: "4px 0 10px" }}>
+        {useDfs ? "🌍 PAID — DataForSEO BYOK" : "✅ FREE — AHREFS CSV + Bing WMT"}
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <input className="qa-input" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="your-domain.com" style={{ flex: 1, minWidth: 240, padding: "8px 12px" }} />
         <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
           Threshold:
           <input type="number" min={20} max={100} value={threshold} onChange={(e) => setThreshold(Number(e.target.value) || 50)} className="qa-input" style={{ width: 70, padding: "6px 8px" }} />
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-secondary)" }}>
+          <input type="checkbox" checked={useDfs} onChange={(e) => setUseDfs(e.target.checked)} /> Use DFS (paid, richer DR signal)
         </label>
         <button onClick={run} disabled={loading || !domain.trim()} className="qa-btn-primary" style={{ padding: "8px 18px" }}>
           {loading ? "Scanning…" : "Generate disavow"}
@@ -199,6 +206,7 @@ function SnippetsTab() {
   const [keywordsText, setKeywordsText] = useState("");
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [region, setRegion] = useState("United States");
+  const [useDfs, setUseDfs] = useState(false);
   const [data, setData] = useState<SnippetOwnershipResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -207,15 +215,18 @@ function SnippetsTab() {
     const keywords = keywordsText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
     if (!domain.trim() || keywords.length === 0) { setError("domain + at least one keyword required"); return; }
     setLoading(true); setError(""); setData(null);
-    try { setData(await fetchSnippetOwnership({ operatorDomain: domain.trim(), keywords, region, device })); }
+    try { setData(await fetchSnippetOwnership({ operatorDomain: domain.trim(), keywords, region, device, useDfs })); }
     catch (e: any) { setError(e?.message ?? String(e)); }
     finally { setLoading(false); }
   };
 
   return (
     <SectionCard title="Featured snippet ownership tracker">
-      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
-        For each tracked keyword, queries DataForSEO live SERP and reports whether the operator owns the position-zero featured snippet. Steal opportunities = you're top-5 organically but a competitor owns the snippet.
+      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
+        For each keyword, queries Google SERP and reports whether the operator owns the position-zero snippet. Steal opportunities = you're top-5 organically but a competitor owns the snippet.
+      </div>
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11, padding: "3px 10px", borderRadius: 999, background: useDfs ? "#fef3c7" : "#dcfce7", color: useDfs ? "#92400e" : "#166534", border: "1px solid " + (useDfs ? "#fde68a" : "#86efac"), fontWeight: 700, margin: "4px 0 10px" }}>
+        {useDfs ? "🌍 PAID — DataForSEO live SERP" : "✅ FREE — Playwright scrape of google.com"}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
         <input className="qa-input" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="your-domain.com" style={{ padding: "8px 12px" }} />
@@ -227,6 +238,9 @@ function SnippetsTab() {
           <option value="desktop">Desktop</option>
           <option value="mobile">Mobile</option>
         </select>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-secondary)" }}>
+          <input type="checkbox" checked={useDfs} onChange={(e) => setUseDfs(e.target.checked)} /> Use DFS (paid, faster at scale)
+        </label>
         <button onClick={run} disabled={loading || !domain.trim()} className="qa-btn-primary" style={{ padding: "8px 18px" }}>
           {loading ? "Scanning…" : "Check snippet ownership"}
         </button>

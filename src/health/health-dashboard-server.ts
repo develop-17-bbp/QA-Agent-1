@@ -3427,7 +3427,10 @@ export async function runHealthDashboard(options: {
       }
 
       // ── Disavow file generator — toxic-link detector + Google-format export
-      // POST /api/disavow   Body: { domain, threshold? }
+      // POST /api/disavow   Body: { domain, threshold?, useDfs? }
+      // Free by default — pulls from AHREFS WMT CSV + Bing Webmaster.
+      // useDfs=true (paid opt-in) uses DataForSEO live backlinks for richer
+      // DR-scored toxicity detection.
       if (req.method === "POST" && url.pathname === "/api/disavow") {
         let body: string;
         try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
@@ -3436,12 +3439,18 @@ export async function runHealthDashboard(options: {
         const domain = typeof payload?.domain === "string" ? payload.domain.trim() : "";
         if (!domain) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "domain required" })); return; }
         try {
-          const ck = buildCacheKey("/api/disavow", { domain, threshold: payload.threshold });
+          const ck = buildCacheKey("/api/disavow", { domain, threshold: payload.threshold, useDfs: payload.useDfs });
           const { value: result, hit } = await cachedResponse(ck, 30 * 60_000, async () => {
-            const { fetchDfsBacklinksLive } = await import("./providers/dataforseo.js");
-            const { generateDisavow } = await import("./modules/disavow-generator.js");
-            const live = await fetchDfsBacklinksLive(domain, 500);
-            return generateDisavow(domain, live, typeof payload.threshold === "number" ? payload.threshold : undefined);
+            const { generateDisavow, generateDisavowFree } = await import("./modules/disavow-generator.js");
+            const threshold = typeof payload.threshold === "number" ? payload.threshold : undefined;
+            if (payload.useDfs === true) {
+              const { fetchDfsBacklinksLive, isDfsConfigured } = await import("./providers/dataforseo.js");
+              if (!isDfsConfigured()) throw new Error("useDfs=true but DataForSEO is not configured. Either configure DFS in /integrations or remove useDfs to use the free path.");
+              const live = await fetchDfsBacklinksLive(domain, 500);
+              return generateDisavow(domain, live, threshold);
+            }
+            // Free path — AHREFS CSV + Bing WMT.
+            return await generateDisavowFree(domain, threshold);
           });
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
           res.end(JSON.stringify(result));
