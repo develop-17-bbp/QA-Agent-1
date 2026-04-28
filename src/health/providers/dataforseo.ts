@@ -229,3 +229,128 @@ export async function fetchDfsKeywordVolume(keywords: string[], region = "United
   cacheSet(cacheKey, out, TTL_MS);
   return out;
 }
+
+// ── Backlinks LIVE — per-link rows (anchor + DR + first-seen) ───────────────
+
+export interface DfsBacklinkRow {
+  /** Source URL where the link appears. */
+  pageFrom: string;
+  /** Target URL on the operator's domain. */
+  pageTo: string;
+  /** Anchor text (truncated). */
+  anchor: string;
+  /** Link kind — anchor / image / redirect / canonical / etc. */
+  itemType: string;
+  /** dofollow flag — false = nofollow / sponsored / ugc. */
+  dofollow: boolean;
+  /** DataForSEO's domain rank (0-100) for the source domain. */
+  domainRankFrom: number | null;
+  /** First time DataForSEO saw this backlink (ISO date). */
+  firstSeen: string | null;
+  /** Most recent crawl that confirmed it (ISO date). */
+  lastSeen: string | null;
+  /** True when the link still exists on the latest re-crawl. */
+  isLive: boolean;
+}
+
+export interface DfsBacklinksLive {
+  domain: string;
+  totalCount: number;
+  rows: DfsBacklinkRow[];
+  /** Top-level summary so callers don't need a second round-trip. */
+  summary: {
+    referringDomains: number | null;
+    backlinks: number | null;
+    dofollowPct: number | null;
+    averageDr: number | null;
+  };
+  fetchedAt: string;
+}
+
+interface DfsBacklinksLiveResponse {
+  tasks?: Array<{
+    status_code?: number;
+    result?: Array<{
+      total_count?: number;
+      items?: Array<{
+        type?: string;
+        domain_from?: string;
+        url_from?: string;
+        url_to?: string;
+        anchor?: string;
+        item_type?: string;
+        dofollow?: boolean;
+        rank?: number;
+        domain_from_rank?: number;
+        first_seen?: string;
+        last_seen?: string;
+        prev_seen?: string;
+        is_lost?: boolean;
+      }>;
+    }>;
+  }>;
+}
+
+/** Fetch the per-link backlink list for a domain. Caps at `limit` rows
+ *  (DataForSEO supports up to 1000 per call). Returns ranked by domain
+ *  rank descending so the highest-authority links appear first. */
+export async function fetchDfsBacklinksLive(domain: string, limit = 200): Promise<DfsBacklinksLive> {
+  if (!isDfsConfigured()) throw new ProviderError(PROVIDER, "DataForSEO not configured");
+  const target = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+  if (!target) throw new ProviderError(PROVIDER, "Empty domain");
+  const cap = Math.max(10, Math.min(limit, 1000));
+  const cacheKey = `${PROVIDER}:bl-live:${target}:${cap}`;
+  const cached = cacheGet<DfsBacklinksLive>(cacheKey);
+  if (cached) return cached;
+
+  const resp = await dfsPost<DfsBacklinksLiveResponse>(
+    "/backlinks/backlinks/live",
+    [{
+      target,
+      mode: "as_is",
+      filters: [["dofollow", "=", true]],   // overridden by include_subdomains below; we still want both
+      limit: cap,
+      order_by: ["domain_from_rank,desc"],
+      backlinks_status_type: "live",
+    }],
+  );
+
+  // Some plans error on the dofollow filter. If we got nothing, retry without filters.
+  let items = resp.tasks?.[0]?.result?.[0]?.items ?? [];
+  let totalCount = resp.tasks?.[0]?.result?.[0]?.total_count ?? items.length;
+  if (items.length === 0) {
+    const retry = await dfsPost<DfsBacklinksLiveResponse>(
+      "/backlinks/backlinks/live",
+      [{ target, mode: "as_is", limit: cap, order_by: ["domain_from_rank,desc"], backlinks_status_type: "live" }],
+    );
+    items = retry.tasks?.[0]?.result?.[0]?.items ?? [];
+    totalCount = retry.tasks?.[0]?.result?.[0]?.total_count ?? items.length;
+  }
+
+  const rows: DfsBacklinkRow[] = items.map((b) => ({
+    pageFrom: b.url_from ?? "",
+    pageTo: b.url_to ?? "",
+    anchor: (b.anchor ?? "").slice(0, 240),
+    itemType: b.item_type ?? "anchor",
+    dofollow: b.dofollow !== false,
+    domainRankFrom: typeof b.domain_from_rank === "number" ? b.domain_from_rank : null,
+    firstSeen: b.first_seen ?? null,
+    lastSeen: b.last_seen ?? b.prev_seen ?? null,
+    isLive: b.is_lost !== true,
+  }));
+
+  // Compute summary stats from what we got — saves a separate /summary call.
+  const dofollow = rows.filter((r) => r.dofollow).length;
+  const drValues = rows.map((r) => r.domainRankFrom).filter((v): v is number => typeof v === "number");
+  const referringDomains = new Set(rows.map((r) => { try { return new URL(r.pageFrom).hostname; } catch { return r.pageFrom; } })).size;
+  const summary = {
+    referringDomains,
+    backlinks: totalCount,
+    dofollowPct: rows.length > 0 ? Math.round((dofollow / rows.length) * 100) : null,
+    averageDr: drValues.length > 0 ? Math.round(drValues.reduce((a, b) => a + b, 0) / drValues.length) : null,
+  };
+
+  const out: DfsBacklinksLive = { domain: target, totalCount, rows, summary, fetchedAt: new Date().toISOString() };
+  cacheSet(cacheKey, out, TTL_MS);
+  return out;
+}

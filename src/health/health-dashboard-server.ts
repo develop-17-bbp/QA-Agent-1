@@ -3248,6 +3248,32 @@ export async function runHealthDashboard(options: {
         return;
       }
 
+      // ── DataForSEO live backlinks (per-link rows) ───────────────────────
+      // POST /api/backlinks-live  Body: { domain: string, limit?: number }
+      // Returns DfsBacklinksLive — per-link rows with anchor + DR + dates.
+      // 30-min cache. BYOK: requires DataForSEO credentials in /integrations.
+      if (req.method === "POST" && url.pathname === "/api/backlinks-live") {
+        let body: string;
+        try { body = await readBody(req, 4_000); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Bad request" })); return; }
+        let payload: { domain?: string; limit?: number };
+        try { payload = JSON.parse(body); } catch { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "Invalid JSON" })); return; }
+        const domain = typeof payload.domain === "string" ? payload.domain.trim() : "";
+        if (!domain) { res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify({ error: "domain required" })); return; }
+        try {
+          const ck = buildCacheKey("/api/backlinks-live", { domain, limit: payload.limit });
+          const { value: result, hit } = await cachedResponse(ck, 30 * 60_000, async () => {
+            const { fetchDfsBacklinksLive } = await import("./providers/dataforseo.js");
+            return await fetchDfsBacklinksLive(domain, typeof payload.limit === "number" ? payload.limit : undefined);
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Cache": hit ? "HIT" : "MISS" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+        }
+        return;
+      }
+
       // ── Zero-Budget Link Prospector ─────────────────────────────────────
       // POST /api/link-prospector
       // Body: { targetDomain, competitorDomains?, topicQuery, region?, topN? }

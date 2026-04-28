@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import RunSelector from "../components/RunSelector";
-import { fetchBacklinks, fetchExternalBacklinks, uploadGscLinksCsv, uploadAwtCsv, type AwtSummary } from "../api";
+import { fetchBacklinks, fetchExternalBacklinks, uploadGscLinksCsv, uploadAwtCsv, fetchBacklinksLive, type AwtSummary, type BacklinksLiveResponse } from "../api";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 import { PageShell } from "../components/PageUI";
 
@@ -154,6 +154,20 @@ export default function Backlinks() {
   const [extData, setExtData] = useState<any>(null);
   const [extLoading, setExtLoading] = useState(false);
   const [extError, setExtError] = useState("");
+  // DataForSEO live backlinks (per-link rows with anchor + DR + first-seen).
+  const [dfsLive, setDfsLive] = useState<BacklinksLiveResponse | null>(null);
+  const [dfsLoading, setDfsLoading] = useState(false);
+  const [dfsError, setDfsError] = useState("");
+  const [dfsLimit, setDfsLimit] = useState(200);
+
+  const loadDfsLive = async () => {
+    const dom = extDomain.trim();
+    if (!dom) { setDfsError("Enter a domain above first."); return; }
+    setDfsLoading(true); setDfsError(""); setDfsLive(null);
+    try { setDfsLive(await fetchBacklinksLive(dom, dfsLimit)); }
+    catch (e: any) { setDfsError(e?.message ?? String(e)); }
+    finally { setDfsLoading(false); }
+  };
 
   const load = async (rid: string) => { setRunId(rid); if (!rid) return; setLoading(true); setError(""); try { setData(await fetchBacklinks(rid)); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
 
@@ -508,6 +522,73 @@ export default function Backlinks() {
 
       {/* Embedded Council Sidecar — cross-source intel on the entered domain */}
       {extDomain.trim() && <CouncilSidecar term={extDomain.trim()} autoInvoke />}
+
+      {/* ── DataForSEO live backlinks (BYOK) ────────────────────────────── */}
+      <div className="qa-panel" style={{ padding: 16, marginTop: 24 }}>
+        <div className="qa-panel-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          🔗 DataForSEO live backlinks
+          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "var(--accent-light)", color: "var(--accent-hover)", fontWeight: 700, letterSpacing: 0.4, border: "1px solid var(--accent-muted)" }}>BYOK</span>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, marginBottom: 10 }}>
+          Per-link rows with anchor text, source DR, dofollow flag, and first-seen date — for ANY domain you choose, not just verified properties. Requires DataForSEO credentials in <code>/integrations</code>.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input className="qa-input" placeholder='Enter "External / 3rd-party Backlinks" domain above first' value={extDomain} onChange={(e) => setExtDomain(e.target.value)} style={{ flex: 1, minWidth: 240, padding: "8px 12px" }} />
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            Limit
+            <input className="qa-input" type="number" min={10} max={1000} value={dfsLimit} onChange={(e) => setDfsLimit(Number(e.target.value) || 200)} style={{ width: 90, padding: "6px 10px" }} />
+          </label>
+          <button className="qa-btn-primary" onClick={loadDfsLive} disabled={dfsLoading || !extDomain.trim()} style={{ padding: "8px 18px" }}>
+            {dfsLoading ? "Fetching…" : "Fetch live backlinks"}
+          </button>
+        </div>
+        {dfsError && <div style={{ marginTop: 10 }}><ErrorBanner error={dfsError} /></div>}
+        {dfsLive && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: 14 }}>
+              {[
+                { label: "Total backlinks", val: dfsLive.totalCount?.toLocaleString() ?? "—" },
+                { label: "Referring domains", val: dfsLive.summary.referringDomains ?? "—" },
+                { label: "Avg DR (source)", val: dfsLive.summary.averageDr ?? "—", color: "#2563eb" },
+                { label: "Dofollow %", val: dfsLive.summary.dofollowPct != null ? `${dfsLive.summary.dofollowPct}%` : "—", color: "#16a34a" },
+              ].map((s) => (
+                <div key={s.label} className="qa-panel" style={{ padding: 12, textAlign: "center" }}>
+                  <div className="qa-kicker">{s.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: (s as any).color ?? "var(--text)" }}>{s.val}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 14, overflowX: "auto" }}>
+              <table className="qa-table" style={{ minWidth: 760, fontSize: 12 }}>
+                <thead><tr><th>DR</th><th>Source page</th><th>Anchor</th><th>Target</th><th>Type</th><th>First seen</th></tr></thead>
+                <tbody>
+                  {dfsLive.rows.slice(0, 100).map((r, i) => (
+                    <tr key={`${r.pageFrom}-${i}`}>
+                      <td style={{ fontWeight: 700, color: r.domainRankFrom != null && r.domainRankFrom >= 60 ? "#16a34a" : r.domainRankFrom != null && r.domainRankFrom >= 30 ? "#d97706" : "var(--muted)" }}>
+                        {r.domainRankFrom ?? "—"}
+                      </td>
+                      <td><a href={r.pageFrom} target="_blank" rel="noreferrer" style={{ wordBreak: "break-all", color: "var(--text)" }}>{r.pageFrom}</a></td>
+                      <td style={{ fontStyle: r.anchor ? "normal" : "italic", color: r.anchor ? "var(--text)" : "var(--muted)" }}>{r.anchor || "(empty)"}</td>
+                      <td><a href={r.pageTo} target="_blank" rel="noreferrer" style={{ wordBreak: "break-all", color: "var(--accent)" }}>{r.pageTo}</a></td>
+                      <td>
+                        <span style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 10, background: r.dofollow ? "#dcfce7" : "#fef3c7", color: r.dofollow ? "#166534" : "#92400e", fontWeight: 700 }}>
+                          {r.dofollow ? "dofollow" : "nofollow"}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 11, color: "var(--muted)" }}>{r.firstSeen ? r.firstSeen.slice(0, 10) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {dfsLive.rows.length > 100 && (
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+                  Showing first 100 of {dfsLive.rows.length} fetched (total in DFS index: {dfsLive.totalCount.toLocaleString()}).
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </PageShell>
   );
 }

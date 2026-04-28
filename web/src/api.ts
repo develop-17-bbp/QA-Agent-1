@@ -788,6 +788,34 @@ export function fetchForecastApi(domain: string, extras?: { windowDays?: number;
   });
 }
 
+// ── DataForSEO live backlinks — per-link rows ─────────────────────────────
+export interface BacklinkRow {
+  pageFrom: string;
+  pageTo: string;
+  anchor: string;
+  itemType: string;
+  dofollow: boolean;
+  domainRankFrom: number | null;
+  firstSeen: string | null;
+  lastSeen: string | null;
+  isLive: boolean;
+}
+export interface BacklinksLiveResponse {
+  domain: string;
+  totalCount: number;
+  rows: BacklinkRow[];
+  summary: {
+    referringDomains: number | null;
+    backlinks: number | null;
+    dofollowPct: number | null;
+    averageDr: number | null;
+  };
+  fetchedAt: string;
+}
+export function fetchBacklinksLive(domain: string, limit = 200): Promise<BacklinksLiveResponse> {
+  return postApi<BacklinksLiveResponse>("/api/backlinks-live", { domain, limit });
+}
+
 // ── Zero-Budget Link Prospector — SERP-derived outreach drafts ────────────
 export interface OutreachEmail {
   subject: string;
