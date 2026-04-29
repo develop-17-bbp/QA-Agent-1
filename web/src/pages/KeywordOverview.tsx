@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
-import { BarChart, Bar, ResponsiveContainer } from "recharts";
+import { BarTrendChart } from "../components/Chart";
 import { fetchKeywordResearch, fetchKeywordSuggestions, fetchKeywordTrends, fetchGscKeywordStats, fetchBrandMentionsAggregated, type GscSite, type BrandMentionRow } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 import { useRegion } from "../components/RegionPicker";
@@ -420,11 +420,14 @@ export default function KeywordOverview() {
                 {(data.intent ?? "informational").charAt(0).toUpperCase() + (data.intent ?? "informational").slice(1)}
               </span>
               <div className="qa-kicker" style={{ marginTop: 16, marginBottom: 4 }}>Trend (12 months)</div>
-              <ResponsiveContainer width="100%" height={60}>
-                <BarChart data={trendData}>
-                  <Bar dataKey="volume" fill="var(--accent)" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <BarTrendChart
+                data={trendData as unknown as Record<string, unknown>[]}
+                xKey="month"
+                height={60}
+                hideLegend
+                series={[{ key: "volume", label: "Volume", color: "var(--accent)" }]}
+              />
+
             </div>
 
             {/* CPC + Competitive Density */}

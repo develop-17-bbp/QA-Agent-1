@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { BarTrendChart } from "../components/Chart";
 import RunSelector from "../components/RunSelector";
 import { fetchBacklinks, fetchExternalBacklinks, uploadGscLinksCsv, uploadAwtCsv, fetchBacklinksLive, type AwtSummary, type BacklinksLiveResponse } from "../api";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
@@ -261,9 +262,17 @@ export default function Backlinks() {
             {(data.topLinked ?? []).length > 0 && (
               <div className="qa-panel" style={{ padding: 16, flex: 1 }}>
                 <div className="qa-panel-title">Most Linked Pages</div>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={(data.topLinked ?? []).slice(0, 10)} layout="vertical"><XAxis type="number" fontSize={11} /><YAxis type="category" dataKey="url" width={180} fontSize={10} tickFormatter={(v: string) => v.length > 30 ? v.slice(0, 27) + "..." : v} /><Tooltip /><Bar dataKey="inboundLinks" fill="#111111" radius={[0,4,4,0]} /></BarChart>
-                </ResponsiveContainer>
+                <BarTrendChart
+                  data={(data.topLinked ?? []).slice(0, 10) as Record<string, unknown>[]}
+                  xKey="url"
+                  height={200}
+                  hideLegend
+                  series={[{ key: "inboundLinks", label: "Inbound links", color: "var(--cat-links, var(--accent))" }]}
+                  xTickFormatter={(v: unknown) => {
+                    const s = String(v ?? "");
+                    return s.length > 22 ? s.slice(0, 19) + "…" : s;
+                  }}
+                />
               </div>
             )}
           </div>

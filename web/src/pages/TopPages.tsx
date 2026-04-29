@@ -5,7 +5,8 @@ import { toPathname, useGoogleOverlay } from "../lib/google-overlay";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 import { PageShell, SectionCard, StatGrid, EmptyState } from "../components/PageUI";
 
-import { LoadingPanel, ErrorBanner } from "../components/UI";
+import { ErrorBanner } from "../components/UI";
+import { HeroSkeleton, TableSkeleton } from "../components/Skeletons";
 
 type GscPageStat = {
   page: string;
@@ -222,7 +223,12 @@ export default function TopPages() {
     >
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <LoadingPanel message="Analyzing…" />}
+      {loading && (
+        <div style={{ marginTop: 14 }}>
+          <HeroSkeleton showKpis />
+          <TableSkeleton rows={8} cols={5} />
+        </div>
+      )}
       {error && <ErrorBanner error={error} />}
 
       {data && !loading && (

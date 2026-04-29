@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
+import { LineTrendChart } from "../components/Chart";
 import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 import { ErrorBanner } from "../components/UI";
 import { MetricCard, MetricCardSkeleton } from "../components/MetricCard";
@@ -174,26 +174,18 @@ export default function Forecast() {
             <>
               {topChart.length > 1 && topKeywords.length > 0 && (
                 <SectionCard title={`Projected rank trajectory — top 5 keywords`}>
-                  <ResponsiveContainer width="100%" height={320}>
-                    <LineChart data={topChart} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                      <XAxis dataKey="label" fontSize={12} />
-                      <YAxis reversed domain={[1, "auto"]} fontSize={11} label={{ value: "Rank (lower is better)", angle: -90, position: "insideLeft", fontSize: 11 }} />
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <ReferenceLine x="+30d" stroke="var(--muted)" strokeDasharray="3 3" />
-                      {topKeywords.map((k, i) => (
-                        <Line
-                          key={k.keyword}
-                          type="monotone"
-                          dataKey={k.keyword}
-                          stroke={["#4f46e5", "#ef4444", "#16a34a", "#d97706", "#0ea5e9"][i % 5]}
-                          strokeWidth={2}
-                          dot={{ r: 4 }}
-                          connectNulls
-                        />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <LineTrendChart
+                    data={topChart as Record<string, unknown>[]}
+                    xKey="label"
+                    height={320}
+                    yReversed
+                    yDomain={[1, "auto"]}
+                    series={topKeywords.map((k, i) => ({
+                      key: k.keyword,
+                      label: k.keyword,
+                      color: ["#4f46e5", "#ef4444", "#16a34a", "#d97706", "#0ea5e9"][i % 5],
+                    }))}
+                  />
                   <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 6 }}>
                     Left = current rank · Right = projected +30d · lower is better
                   </div>

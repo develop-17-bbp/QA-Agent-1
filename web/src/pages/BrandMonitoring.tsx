@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import RunSelector from "../components/RunSelector";
 import { fetchBrandMonitoring, fetchBrandMentionsAggregated, type BrandMentionRow, type BrandMentionsBundle } from "../api";
 
-import { LoadingPanel, ErrorBanner } from "../components/UI";
+import { ErrorBanner } from "../components/UI";
+import { HeroSkeleton, TableSkeleton } from "../components/Skeletons";
 import { PageHero } from "../components/PageHero";
 
 const RSS_SOURCE_COLORS: Record<string, string> = {
@@ -228,7 +229,12 @@ export default function BrandMonitoring() {
       </div>
 
       {error && <ErrorBanner error={error} />}
-      {loading && <LoadingPanel message="Monitoring brand across real providers…" />}
+      {loading && (
+        <div style={{ marginTop: 14 }}>
+          <HeroSkeleton showKpis />
+          <TableSkeleton rows={8} cols={4} />
+        </div>
+      )}
 
       {data && !loading && (
         <>

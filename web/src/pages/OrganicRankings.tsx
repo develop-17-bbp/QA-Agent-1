@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarTrendChart } from "../components/Chart";
 import RunSelector from "../components/RunSelector";
 import { fetchOrganicRankings, fetchGscPagesBatch } from "../api";
 import { useGoogleOverlay } from "../lib/google-overlay";
 import { FilterableTable, type FilterableColumn } from "../components/FilterableTable";
 import { PageShell, SectionCard, EmptyState } from "../components/PageUI";
 
-import { LoadingPanel, ErrorBanner } from "../components/UI";
+import { ErrorBanner } from "../components/UI";
+import { HeroSkeleton, ChartSkeleton, TableSkeleton } from "../components/Skeletons";
 
 function getGsc(gscPages: Map<string, any>, url: string) {
   if (gscPages.has(url)) return gscPages.get(url);
@@ -157,7 +158,13 @@ export default function OrganicRankings() {
     >
       <RunSelector value={runId} onChange={load} label="Select run" />
 
-      {loading && <LoadingPanel message="Analyzing…" />}
+      {loading && (
+        <div style={{ marginTop: 14 }}>
+          <HeroSkeleton showKpis={false} />
+          <ChartSkeleton height={180} />
+          <div style={{ marginTop: 14 }}><TableSkeleton rows={6} cols={5} /></div>
+        </div>
+      )}
       {error && <ErrorBanner error={error} />}
 
       {overlay.connected && data && !loading && (
@@ -182,16 +189,13 @@ export default function OrganicRankings() {
       {data && !loading && (
         <>
           <SectionCard title="Score Distribution">
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={distData}>
-                <XAxis dataKey="name" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {distData.map((d, i) => <Bar key={i} dataKey="value" fill={d.fill} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <BarTrendChart
+              data={distData as unknown as Record<string, unknown>[]}
+              xKey="name"
+              height={180}
+              hideLegend
+              series={[{ key: "value", label: "Pages", color: "var(--cat-audit, var(--accent))" }]}
+            />
           </SectionCard>
 
           <SectionCard title={`Rankings (${rankings.length} pages)`}>
